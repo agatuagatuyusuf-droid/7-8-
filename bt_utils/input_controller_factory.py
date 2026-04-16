@@ -332,7 +332,7 @@ class InputController:
         if self._impl:
             self._impl.mouse_up(button)
     
-    def mouse_move(self, position: tuple, relative: bool = False, smooth: bool = False) -> None:
+    def mouse_move(self, position: tuple, relative: bool = False, smooth: bool = False, duration: float = 0.3) -> None:
         if self._impl:
             self._impl.mouse_move(position, relative)
     

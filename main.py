@@ -3,7 +3,14 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-VERSION = "V1.1.8"
+VERSION = "V1.2.0beta"
+
+from bt_utils.version_checker import BetaExpirationChecker
+
+beta_checker = BetaExpirationChecker()
+if beta_checker.check_expiration():
+    beta_checker.show_expiration_dialog()
+    sys.exit(0)
 
 import customtkinter as ctk
 from bt_gui.app import BehaviorTreeApp
@@ -94,7 +101,7 @@ def main():
     ensure_workspace_exists()
     
     initialize_ocr()
-    initialize_input()  # 预加载输入控制器
+    initialize_input()
     
     register_all_nodes()
     
@@ -102,6 +109,20 @@ def main():
     ctk.set_default_color_theme("blue")
 
     app = BehaviorTreeApp()
+    
+    from bt_utils.version_checker import VersionChecker
+    version_checker = VersionChecker(
+        app=app,
+        owner="wdhq4261761",
+        repo="autodoor_behavior_tree"
+    )
+    
+    app._version_checker = version_checker
+    
+    version_checker.check_force_update()
+    
+    version_checker.start_auto_check(app)
+    
     app.mainloop()
 
 

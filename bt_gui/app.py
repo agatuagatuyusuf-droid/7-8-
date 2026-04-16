@@ -84,38 +84,198 @@ class BehaviorTreeApp(ctk.CTk):
             print(f"[WARN] 设置图标失败: {e}")
     
     def _create_ui(self):
-        self._create_tabview()
+        self._create_main_container()
     
-    def _create_tabview(self):
-        self.main_tabview = ctk.CTkTabview(
+    def _create_main_container(self):
+        """创建主容器，包含顶部栏和内容区域"""
+        self.main_container = ctk.CTkFrame(
             self,
-            fg_color=self._dark_colors['bg_primary'],
-            segmented_button_fg_color=self._dark_colors['bg_secondary'],
-            segmented_button_selected_color=self._dark_colors['primary'],
-            segmented_button_selected_hover_color=self._dark_colors['primary_hover'],
-            segmented_button_unselected_color=self._dark_colors['bg_tertiary'],
-            segmented_button_unselected_hover_color=self._dark_colors['border']
+            fg_color=self._dark_colors['bg_primary']
         )
-        self.main_tabview.pack(fill="both", expand=True, padx=Theme.DIMENSIONS['spacing_sm'], pady=Theme.DIMENSIONS['spacing_sm'])
+        self.main_container.pack(fill='both', expand=True)
         
-        bt_tab = self.main_tabview.add("🌲 行为树编辑器")
-        script_tab = self.main_tabview.add("📝 脚本录制")
-        settings_tab = self.main_tabview.add("⚙ 设置")
+        self._create_top_bar()
+        self._create_content_area()
+    
+    def _create_top_bar(self):
+        """创建顶部栏（包含标题、Tab按钮、操作按钮）"""
+        self.top_bar = ctk.CTkFrame(
+            self.main_container,
+            height=Theme.DIMENSIONS['header_height'],
+            fg_color=self._dark_colors['bg_secondary'],
+            corner_radius=0
+        )
+        self.top_bar.pack(fill='x')
+        self.top_bar.pack_propagate(False)
         
-        self.behavior_tree = BehaviorTreeEditor(bt_tab, self)
-        self.behavior_tree.pack(fill="both", expand=True)
+        top_bar_content = ctk.CTkFrame(self.top_bar, fg_color='transparent')
+        top_bar_content.pack(fill='x', padx=Theme.DIMENSIONS['spacing_md'], 
+                            pady=Theme.DIMENSIONS['spacing_sm'])
         
-        self.script_editor = ScriptTab(script_tab, self)
-        self.script_editor.pack(fill="both", expand=True)
+        left_section = ctk.CTkFrame(top_bar_content, fg_color='transparent')
+        left_section.pack(side='left')
         
-        self.settings = SettingsTab(settings_tab, self)
-        self.settings.pack(fill="both", expand=True)
+        ctk.CTkLabel(
+            left_section,
+            text='◉',
+            font=Theme.get_font('xl'),
+            text_color=self._dark_colors['primary']
+        ).pack(side='left', padx=(0, Theme.DIMENSIONS['spacing_xs']))
+        
+        ctk.CTkLabel(
+            left_section,
+            text='AutoDoor Behavior Tree',
+            font=Theme.get_font('lg'),
+            text_color=self._dark_colors['text_primary']
+        ).pack(side='left')
+        
+        try:
+            from main import VERSION
+            ctk.CTkLabel(
+                left_section,
+                text=VERSION,
+                font=Theme.get_font('xs'),
+                text_color=self._dark_colors['primary'],
+                fg_color=self._dark_colors['info_light'],
+                corner_radius=4,
+                padx=6,
+                pady=1
+            ).pack(side='left', padx=Theme.DIMENSIONS['spacing_sm'])
+        except ImportError:
+            pass
+        
+        center_section = ctk.CTkFrame(top_bar_content, fg_color='transparent')
+        center_section.pack(side='left', expand=True)
+        
+        self.tab_buttons_frame = ctk.CTkFrame(
+            center_section,
+            fg_color=self._dark_colors['bg_tertiary'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius']
+        )
+        self.tab_buttons_frame.pack()
+        
+        self.tab_buttons = {}
+        tab_config = [
+            ('bt', '🌲 行为树编辑器'),
+            ('script', '📝 脚本录制'),
+            ('settings', '⚙ 设置')
+        ]
+        
+        for i, (tab_id, tab_text) in enumerate(tab_config):
+            btn = ctk.CTkButton(
+                self.tab_buttons_frame,
+                text=tab_text,
+                width=120,
+                height=32,
+                font=Theme.get_font('sm'),
+                fg_color=self._dark_colors['primary'] if i == 0 else 'transparent',
+                hover_color=self._dark_colors['primary_hover'] if i == 0 else self._dark_colors['border'],
+                text_color=self._dark_colors['text_primary'],
+                corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+                command=lambda tid=tab_id: self._switch_tab(tid)
+            )
+            btn.pack(side='left', padx=2, pady=2)
+            self.tab_buttons[tab_id] = btn
+        
+        right_section = ctk.CTkFrame(top_bar_content, fg_color='transparent')
+        right_section.pack(side='right')
+        
+        from bt_utils.version_checker import open_tool_intro
+        
+        self.check_update_btn = ctk.CTkButton(
+            right_section,
+            text='检查更新',
+            width=80,
+            height=35,
+            font=Theme.get_font('sm'),
+            fg_color=self._dark_colors['primary'],
+            hover_color=self._dark_colors['primary_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+            command=self._check_for_updates
+        )
+        self.check_update_btn.pack(side='left', padx=Theme.DIMENSIONS['spacing_xs'])
+        
+        self.tool_intro_btn = ctk.CTkButton(
+            right_section,
+            text='使用文档',
+            width=80,
+            height=35,
+            font=Theme.get_font('sm'),
+            fg_color=self._dark_colors['primary'],
+            hover_color=self._dark_colors['primary_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+            command=open_tool_intro
+        )
+        self.tool_intro_btn.pack(side='left', padx=Theme.DIMENSIONS['spacing_xs'])
+    
+    def _switch_tab(self, tab_id: str):
+        """切换Tab"""
+        for tid, btn in self.tab_buttons.items():
+            if tid == tab_id:
+                btn.configure(
+                    fg_color=self._dark_colors['primary'],
+                    hover_color=self._dark_colors['primary_hover']
+                )
+            else:
+                btn.configure(
+                    fg_color='transparent',
+                    hover_color=self._dark_colors['border']
+                )
+        
+        for tid, frame in self.tab_frames.items():
+            if tid == tab_id:
+                frame.pack(fill='both', expand=True)
+            else:
+                frame.pack_forget()
+    
+    def _create_content_area(self):
+        """创建内容区域"""
+        self.content_frame = ctk.CTkFrame(
+            self.main_container,
+            fg_color=self._dark_colors['bg_primary']
+        )
+        self.content_frame.pack(fill='both', expand=True, padx=Theme.DIMENSIONS['spacing_sm'], 
+                               pady=Theme.DIMENSIONS['spacing_sm'])
+        
+        self.tab_frames = {}
+        
+        bt_frame = ctk.CTkFrame(self.content_frame, fg_color='transparent')
+        script_frame = ctk.CTkFrame(self.content_frame, fg_color='transparent')
+        settings_frame = ctk.CTkFrame(self.content_frame, fg_color='transparent')
+        
+        self.tab_frames['bt'] = bt_frame
+        self.tab_frames['script'] = script_frame
+        self.tab_frames['settings'] = settings_frame
+        
+        self.behavior_tree = BehaviorTreeEditor(bt_frame, self)
+        self.behavior_tree.pack(fill='both', expand=True)
+        
+        self.script_editor = ScriptTab(script_frame, self)
+        self.script_editor.pack(fill='both', expand=True)
+        
+        self.settings = SettingsTab(settings_frame, self)
+        self.settings.pack(fill='both', expand=True)
         
         saved_settings = self._settings.get_all_settings()
         if saved_settings:
             self.settings.load_settings(saved_settings)
         
-        self.main_tabview.set("🌲 行为树编辑器")
+        bt_frame.pack(fill='both', expand=True)
+    
+    def _check_for_updates(self):
+        """检查更新"""
+        if hasattr(self, '_version_checker'):
+            self._version_checker.check_for_updates(manual=True)
+        else:
+            from tkinter import messagebox
+            messagebox.showinfo("检查更新", "版本检查器未初始化")
+    
+    def _get_current_tab(self) -> str:
+        """获取当前Tab ID"""
+        for tab_id, frame in self.tab_frames.items():
+            if frame.winfo_ismapped():
+                return tab_id
+        return 'bt'
     
     def _setup_shortcuts(self):
         shortcuts = [
@@ -151,29 +311,29 @@ class BehaviorTreeApp(ctk.CTk):
             self.behavior_tree.redo()
     
     def _save(self, save_as=False):
-        current_tab = self.main_tabview.get()
-        if "行为树" in current_tab:
+        current_tab = self._get_current_tab()
+        if current_tab == 'bt':
             if hasattr(self.behavior_tree, 'save_tree'):
                 self.behavior_tree.save_tree(save_as=save_as)
-        elif "脚本" in current_tab:
+        elif current_tab == 'script':
             if hasattr(self.script_editor, '_save_script'):
                 self.script_editor._save_script()
     
     def _open(self):
-        current_tab = self.main_tabview.get()
-        if "行为树" in current_tab:
+        current_tab = self._get_current_tab()
+        if current_tab == 'bt':
             if hasattr(self.behavior_tree, 'load_tree'):
                 self.behavior_tree.load_tree()
-        elif "脚本" in current_tab:
+        elif current_tab == 'script':
             if hasattr(self.script_editor, '_load_script'):
                 self.script_editor._load_script()
     
     def _new(self):
-        current_tab = self.main_tabview.get()
-        if "行为树" in current_tab:
+        current_tab = self._get_current_tab()
+        if current_tab == 'bt':
             if hasattr(self.behavior_tree, 'new_tree'):
                 self.behavior_tree.new_tree()
-        elif "脚本" in current_tab:
+        elif current_tab == 'script':
             if hasattr(self.script_editor, '_new_script'):
                 self.script_editor._new_script()
     
@@ -183,32 +343,32 @@ class BehaviorTreeApp(ctk.CTk):
             widget_type = str(type(focused).__name__)
             if widget_type in ("CTkEntry", "Entry", "CTkTextbox", "Text"):
                 return
-        current_tab = self.main_tabview.get()
-        if "行为树" in current_tab:
+        current_tab = self._get_current_tab()
+        if current_tab == 'bt':
             if hasattr(self.behavior_tree, '_delete_selected'):
                 self.behavior_tree._delete_selected()
     
     def _copy(self):
-        current_tab = self.main_tabview.get()
-        if "行为树" in current_tab:
+        current_tab = self._get_current_tab()
+        if current_tab == 'bt':
             if hasattr(self.behavior_tree, '_copy_selected'):
                 self.behavior_tree._copy_selected()
     
     def _paste(self):
-        current_tab = self.main_tabview.get()
-        if "行为树" in current_tab:
+        current_tab = self._get_current_tab()
+        if current_tab == 'bt':
             if hasattr(self.behavior_tree, '_paste_selected'):
                 self.behavior_tree._paste_selected()
     
     def _cut(self):
-        current_tab = self.main_tabview.get()
-        if "行为树" in current_tab:
+        current_tab = self._get_current_tab()
+        if current_tab == 'bt':
             if hasattr(self.behavior_tree, '_cut_selected'):
                 self.behavior_tree._cut_selected()
     
     def _duplicate(self):
-        current_tab = self.main_tabview.get()
-        if "行为树" in current_tab:
+        current_tab = self._get_current_tab()
+        if current_tab == 'bt':
             if hasattr(self.behavior_tree, '_duplicate_selected'):
                 self.behavior_tree._duplicate_selected()
     

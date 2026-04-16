@@ -120,6 +120,12 @@ class SettingsManager:
             "default_ocr_text_key": "last_ocr_text",
             "default_color_key": "last_color_value",
             "default_image_match_key": "last_image_match"
+        },
+        "update": {
+            "ignored_version": "",
+            "last_check_time": "",
+            "check_interval": 86400,
+            "force_update_cache": {}
         }
     }
     
