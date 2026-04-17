@@ -36,7 +36,7 @@ def open_download_page():
 class BetaExpirationChecker:
     """Beta 版本过期检查器"""
     
-    EXPIRE_DATE = "2026-12-31"
+    EXPIRE_DATE = "2026-5-21"
     
     def __init__(self, app=None):
         self.app = app
@@ -172,10 +172,8 @@ class VersionChecker:
             os.makedirs(os.path.dirname(config_file), exist_ok=True)
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-            
-            print(f"已保存强制更新缓存: {version}")
         except Exception as e:
-            print(f"保存强制更新缓存失败: {str(e)}")
+            pass
     
     def _is_force_update_cached(self) -> bool:
         """检查是否已有强制更新缓存"""
@@ -195,7 +193,6 @@ class VersionChecker:
             False: 无需强制更新
         """
         if self._is_force_update_cached():
-            print("检测到强制更新缓存，显示强制更新弹窗")
             cached_version = self._force_update_cache.get('version', 'Unknown')
             self._show_force_update_dialog(cached_version, UPDATE_LINKS["download"])
             return True
@@ -212,7 +209,6 @@ class VersionChecker:
                 
                 if self._parse_force_update_flag(release_body):
                     if self._is_newer_version(latest_version):
-                        print(f"检测到强制更新: {latest_version}")
                         self._save_force_update_cache(latest_version)
                         
                         download_url = self._get_download_url(data)
@@ -224,14 +220,17 @@ class VersionChecker:
                             self._show_force_update_dialog(latest_version, download_url)
                         return
                 
-                print("无需强制更新")
-                
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 404:
+                    pass
+                else:
+                    pass
             except requests.exceptions.Timeout:
-                print("强制更新检查超时，跳过检查")
+                pass
             except requests.exceptions.RequestException as e:
-                print(f"强制更新检查网络错误: {str(e)}，跳过检查")
+                pass
             except Exception as e:
-                print(f"强制更新检查失败: {str(e)}，跳过检查")
+                pass
         
         thread = threading.Thread(target=check_async, daemon=True)
         thread.start()
@@ -329,20 +328,29 @@ class VersionChecker:
                         if hasattr(self.app, 'root') and self.app.root:
                             self.app.root.after(0, self.show_no_update_notification)
                 
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 404:
+                    if manual:
+                        if hasattr(self.app, 'root') and self.app.root:
+                            self.app.root.after(0, lambda: messagebox.showinfo(
+                                "检查更新", "暂无版本信息。\n\n可能原因：\n1. 仓库尚未发布Release\n2. 仓库地址配置错误\n\n请稍后再试或联系开发者。"))
+                else:
+                    if manual:
+                        if hasattr(self.app, 'root') and self.app.root:
+                            self.app.root.after(0, lambda: messagebox.showinfo(
+                                "检查更新", f"网络请求失败: {str(e)}"))
             except requests.exceptions.Timeout:
-                print("版本检查超时，跳过检查")
                 if manual:
                     if hasattr(self.app, 'root') and self.app.root:
                         self.app.root.after(0, lambda: messagebox.showinfo(
                             "检查更新", "网络连接超时，请稍后再试。"))
             except requests.exceptions.RequestException as e:
-                print(f"版本检查网络错误: {str(e)}，跳过检查")
                 if manual:
                     if hasattr(self.app, 'root') and self.app.root:
                         self.app.root.after(0, lambda: messagebox.showinfo(
                             "检查更新", "网络连接失败，请检查网络设置。"))
             except Exception as e:
-                print(f"版本检查失败: {str(e)}，跳过检查")
+                pass
         
         thread = threading.Thread(target=check_async, daemon=True)
         thread.start()
@@ -354,6 +362,10 @@ class VersionChecker:
     def _compare_versions(self, current: str, latest: str) -> int:
         """比较两个版本号
         
+        支持格式：
+        - 纯数字：1.1.8
+        - 带后缀：1.1.1a, 1.2.0beta
+        
         Returns:
             1: 当前版本旧，需要更新
             0: 当前版本是最新
@@ -362,10 +374,29 @@ class VersionChecker:
         try:
             def normalize_version(v):
                 v = v.lstrip('vV')
-                return list(map(int, v.split('.')))
+                v = v.replace('Release', '').replace('release', '').strip()
+                v = v.split('-')[0].split('+')[0]
+                parts = v.split('.')
+                normalized = []
+                suffix = ''
+                
+                for i, part in enumerate(parts):
+                    if part.isdigit():
+                        normalized.append(int(part))
+                    else:
+                        match = ''.join(filter(str.isdigit, part))
+                        if match:
+                            normalized.append(int(match))
+                        else:
+                            normalized.append(0)
+                        
+                        if i == len(parts) - 1:
+                            suffix = ''.join(filter(str.isalpha, part))
+                
+                return normalized, suffix
             
-            current_parts = normalize_version(current)
-            latest_parts = normalize_version(latest)
+            current_parts, current_suffix = normalize_version(current)
+            latest_parts, latest_suffix = normalize_version(latest)
             
             for i in range(max(len(current_parts), len(latest_parts))):
                 current_val = current_parts[i] if i < len(current_parts) else 0
@@ -375,6 +406,16 @@ class VersionChecker:
                     return 1
                 elif current_val > latest_val:
                     return -1
+            
+            if current_suffix and latest_suffix:
+                if current_suffix < latest_suffix:
+                    return 1
+                elif current_suffix > latest_suffix:
+                    return -1
+            elif current_suffix and not latest_suffix:
+                return 1
+            elif not current_suffix and latest_suffix:
+                return -1
             
             return 0
         except Exception:

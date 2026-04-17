@@ -376,6 +376,17 @@ class BehaviorTreeApp(ctk.CTk):
         current_geometry = self.geometry()
         self._settings.set("session.window_geometry", current_geometry)
         
+        if hasattr(self, 'settings') and self.settings:
+            settings_data = self.settings.get_settings()
+            self._settings.set("alarm_sound_path", settings_data.get("alarm_sound_path", ""), auto_save=False)
+            self._settings.set("alarm_volume", settings_data.get("alarm_volume", 70), auto_save=False)
+            self._settings.set("default_project_path", settings_data.get("default_project_path", ""), auto_save=False)
+            if "shortcuts" in settings_data:
+                shortcuts = settings_data["shortcuts"]
+                self._settings.set("shortcuts.start", shortcuts.get("start", "F10"), auto_save=False)
+                self._settings.set("shortcuts.stop", shortcuts.get("stop", "F12"), auto_save=False)
+                self._settings.set("shortcuts.record", shortcuts.get("record", "F11"), auto_save=False)
+        
         if hasattr(self, 'behavior_tree') and self.behavior_tree:
             file_path = self.behavior_tree.file_path
             if file_path:

@@ -55,7 +55,6 @@ class SettingsTab(ctk.CTkFrame):
         scroll_frame.pack(fill="both", expand=True, padx=Theme.DIMENSIONS['spacing_md'], pady=Theme.DIMENSIONS['spacing_md'])
         
         self._create_project_section(scroll_frame)
-        self._create_ocr_section(scroll_frame)
         self._create_alarm_section(scroll_frame)
         self._create_shortcut_section(scroll_frame)
     
@@ -96,29 +95,6 @@ class SettingsTab(ctk.CTkFrame):
             command=self._browse_project_path
         )
         self.browse_project_btn.pack(side="left")
-    
-    def _create_ocr_section(self, parent):
-        """创建OCR信息区域"""
-        ocr_frame = CardFrame(parent)
-        ocr_frame.pack(fill="x", pady=(0, Theme.DIMENSIONS['spacing_md']))
-        
-        ocr_header = ctk.CTkFrame(ocr_frame, fg_color="transparent")
-        ocr_header.pack(fill="x", padx=Theme.DIMENSIONS['spacing_md'], pady=(Theme.DIMENSIONS['spacing_md'], Theme.DIMENSIONS['spacing_sm']))
-        create_section_title(ocr_header, "OCR 引擎信息", level=1).pack(side="left")
-        
-        create_divider(ocr_frame)
-        
-        info_frame = ctk.CTkFrame(ocr_frame, fg_color=self._dark_colors['bg_secondary'])
-        info_frame.pack(fill="x", padx=Theme.DIMENSIONS['spacing_md'], pady=(Theme.DIMENSIONS['spacing_sm'], Theme.DIMENSIONS['spacing_md']))
-        
-        info_text = ctk.CTkLabel(
-            info_frame,
-            text="当前使用: RapidOCR\n基于ONNX Runtime，无需额外配置\n支持中英文识别，识别速度更快",
-            font=Theme.get_font("sm"),
-            text_color=self._dark_colors['text_secondary'],
-            justify="left"
-        )
-        info_text.pack(padx=Theme.DIMENSIONS['spacing_md'], pady=Theme.DIMENSIONS['spacing_md'], anchor="w")
     
     def _create_alarm_section(self, parent):
         alarm_frame = CardFrame(parent)
