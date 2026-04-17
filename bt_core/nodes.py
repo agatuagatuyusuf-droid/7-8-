@@ -92,7 +92,7 @@ class Node(ABC):
                 self._repeat_count += 1
                 
                 repeat_interval_ms = self.config.repeat_interval_ms
-                repeat_interval_ms_random = self.config.get("repeat_interval_ms_random", 0)
+                repeat_interval_ms_random = self.config.get_int("repeat_interval_ms_random", 0)
                 if repeat_interval_ms > 0 or repeat_interval_ms_random > 0:
                     import time
                     actual_interval = get_random_interval(repeat_interval_ms, repeat_interval_ms_random)

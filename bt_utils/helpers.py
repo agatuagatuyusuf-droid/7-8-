@@ -28,6 +28,13 @@ def get_random_value(
         >>> get_random_value(50, 30, min_value=0)
         35  # 确保不小于0
     """
+    # 确保参数是数值类型
+    try:
+        base_value = float(base_value) if not isinstance(base_value, (int, float)) else base_value
+        random_range = float(random_range) if not isinstance(random_range, (int, float)) else random_range
+    except (ValueError, TypeError):
+        return base_value
+    
     if random_range <= 0:
         return base_value
     
