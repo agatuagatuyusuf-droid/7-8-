@@ -1,9 +1,39 @@
 import sys
 import os
+import json
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-VERSION = "1.2.1a"
+def load_version():
+    """从build_info.json加载版本信息"""
+    build_info_file = os.path.join(os.path.dirname(__file__), 'bt_utils', 'build_info.json')
+    
+    if os.path.exists(build_info_file):
+        try:
+            with open(build_info_file, 'r', encoding='utf-8') as f:
+                build_info = json.load(f)
+                return build_info.get('version', '1.0.0')
+        except Exception:
+            pass
+    
+    return "1.2.2a"
+
+def load_github_info():
+    """从build_info.json加载GitHub仓库信息"""
+    build_info_file = os.path.join(os.path.dirname(__file__), 'bt_utils', 'build_info.json')
+    
+    if os.path.exists(build_info_file):
+        try:
+            with open(build_info_file, 'r', encoding='utf-8') as f:
+                build_info = json.load(f)
+                github = build_info.get('github', {})
+                return github.get('owner', 'wdhq4261761'), github.get('repo', 'autodoor_behavior_tree')
+        except Exception:
+            pass
+    
+    return 'wdhq4261761', 'autodoor_behavior_tree'
+
+VERSION = load_version()
 
 from bt_utils.version_checker import BetaExpirationChecker
 
@@ -111,10 +141,11 @@ def main():
     app = BehaviorTreeApp()
     
     from bt_utils.version_checker import VersionChecker
+    github_owner, github_repo = load_github_info()
     version_checker = VersionChecker(
         app=app,
-        owner="wdhq4261761",
-        repo="autodoor_behavior_tree"
+        owner=github_owner,
+        repo=github_repo
     )
     
     app._version_checker = version_checker

@@ -26,6 +26,13 @@ if errorlevel 1 (
 )
 
 echo.
+echo Generating build info from build_config.json...
+python generate_build_info.py
+if errorlevel 1 (
+    echo Warning: Failed to generate build info, using defaults
+)
+
+echo.
 echo Starting PyInstaller build (Standard version)...
 pyinstaller autodoor_bt.spec --clean
 

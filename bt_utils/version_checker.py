@@ -10,11 +10,37 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 
-UPDATE_LINKS = {
+def load_build_info():
+    """加载构建信息"""
+    build_info_file = os.path.join(os.path.dirname(__file__), 'build_info.json')
+    
+    if os.path.exists(build_info_file):
+        try:
+            with open(build_info_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    
+    return {
+        "version": "1.0.0",
+        "expire_date": "2099-12-31",
+        "force_update": False,
+        "build_type": "release",
+        "update_links": {
+            "tool_intro": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink",
+            "download": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink",
+            "changelog": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink"
+        }
+    }
+
+
+_build_info = load_build_info()
+
+UPDATE_LINKS = _build_info.get('update_links', {
     "tool_intro": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink",
     "download": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink",
     "changelog": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink"
-}
+})
 
 
 def open_tool_intro():
@@ -36,10 +62,10 @@ def open_download_page():
 class BetaExpirationChecker:
     """Beta 版本过期检查器"""
     
-    EXPIRE_DATE = "2026-5-21"
-    
     def __init__(self, app=None):
         self.app = app
+        
+        self.EXPIRE_DATE = _build_info.get('expire_date', '2099-12-31')
     
     def check_expiration(self) -> bool:
         """检查是否过期

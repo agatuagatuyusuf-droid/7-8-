@@ -27,11 +27,14 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        fetch-tags: true
 
-    - name: Get version from main.py
+    - name: Get version from build_config.json
       id: get_version
       run: |
-        $VERSION = (Select-String -Path "main.py" -Pattern 'VERSION\s*=\s*"V?([0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*)"' | ForEach-Object { $_.Matches.Groups[1].Value })
+        $VERSION = (Get-Content build_config.json | ConvertFrom-Json).version
         Write-Host "Version: $VERSION"
         echo "VERSION=$VERSION" >> $env:GITHUB_OUTPUT
 
@@ -45,6 +48,12 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt pyinstaller
+
+    - name: Generate build info
+      run: |
+        python generate_build_info.py
+        Write-Host "Generated build_info.json:"
+        Get-Content bt_utils/build_info.json
 
     - name: Verify module structure
       run: |
@@ -72,7 +81,7 @@ jobs:
 
     - name: Verify build output
       run: |
-        $VERSION = (Select-String -Path "main.py" -Pattern 'VERSION\s*=\s*"V?([0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*)"' | ForEach-Object { $_.Matches.Groups[1].Value })
+        $VERSION = "${{ steps.get_version.outputs.VERSION }}"
         $EXE_NAME = "autodoor-behaviortree-$VERSION-normal.exe"
         $DIR_NAME = "autodoor-behaviortree-$VERSION-normal"
         
@@ -96,11 +105,14 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        fetch-tags: true
 
-    - name: Get version from main.py
+    - name: Get version from build_config.json
       id: get_version
       run: |
-        $VERSION = (Select-String -Path "main.py" -Pattern 'VERSION\s*=\s*"V?([0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*)"' | ForEach-Object { $_.Matches.Groups[1].Value })
+        $VERSION = (Get-Content build_config.json | ConvertFrom-Json).version
         Write-Host "Version: $VERSION"
         echo "VERSION=$VERSION" >> $env:GITHUB_OUTPUT
 
@@ -114,6 +126,12 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt pyinstaller
+
+    - name: Generate build info
+      run: |
+        python generate_build_info.py
+        Write-Host "Generated build_info.json:"
+        Get-Content bt_utils/build_info.json
 
     - name: Verify module structure
       run: |
@@ -151,7 +169,7 @@ jobs:
 
     - name: Verify build output
       run: |
-        $VERSION = (Select-String -Path "main.py" -Pattern 'VERSION\s*=\s*"V?([0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*)"' | ForEach-Object { $_.Matches.Groups[1].Value })
+        $VERSION = "${{ steps.get_version.outputs.VERSION }}"
         $EXE_NAME = "autodoor-behaviortree-$VERSION-DD.exe"
         $DIR_NAME = "autodoor-behaviortree-$VERSION-DD"
         
@@ -191,12 +209,12 @@ jobs:
         fetch-tags: true
 
     - name: Install zip command
-      run: sudo apt-get update && sudo apt-get install -y zip
+      run: sudo apt-get update && sudo apt-get install -y zip jq
 
-    - name: Get current version from main.py
+    - name: Get current version from build_config.json
       id: get_version
       run: |
-        VERSION=$(grep -oP 'VERSION\s*=\s*"[Vv]?\K[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9]*' main.py | tail -n 1 || echo "")
+        VERSION=$(jq -r '.version' build_config.json)
         
         if [[ -z "$VERSION" ]]; then
           VERSION=$(git tag -l "v*" | sort -V | tail -n 1 | sed 's/^v//' || echo "0.0.0")
