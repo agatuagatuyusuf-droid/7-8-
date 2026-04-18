@@ -111,7 +111,7 @@ autodoor_behavior_tree/
 │   │   ├── code.py            #   代码节点
 │   │   └── alarm.py           #   报警节点
 │   └── conditions/            # 条件节点
-│       ├── ocr.py             #   OCR检测节点
+│       ├── ocr.py             #   文字检测节点
 │       ├── image.py           #   图像匹配节点
 │       ├── color.py           #   颜色检测节点
 │       ├── number.py          #   数字比较节点
@@ -210,7 +210,7 @@ build_dd.bat
 
 | 节点                        | 说明                          |
 | ------------------------- | --------------------------- |
-| **OCRConditionNode**      | OCR 检测节点 - 检测屏幕指定区域是否包含目标文字 |
+| **OCRConditionNode**      | 文字检测节点 - 检测屏幕指定区域是否包含目标文字 |
 | **ImageConditionNode**    | 图像匹配节点 - 检测屏幕是否匹配目标图像模板     |
 | **ColorConditionNode**    | 颜色检测节点 - 检测屏幕指定区域是否包含目标颜色   |
 | **NumberConditionNode**   | 数字比较节点 - 识别屏幕数字并与目标值比较      |

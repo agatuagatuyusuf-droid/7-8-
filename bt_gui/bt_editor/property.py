@@ -13,7 +13,7 @@ NODE_CONFIG_SCHEMAS = {
     "OCRConditionNode": [
         {"key": "region", "label": "检测区域", "type": "region"},
         {"key": "keywords", "label": "关键词", "type": "text"},
-        {"key": "language", "label": "语言", "type": "select", "options": ["eng", "chi_sim", "chi_tra"], "default": "chi_sim"},
+        {"key": "language", "label": "语言", "type": "select", "options": ["简体中文", "English", "繁体中文"], "default": "简体中文"},
         {"key": "preprocess_mode", "label": "图像预处理", "type": "select", "options": ["默认", "复杂色彩"], "default": "默认"},
         {"key": "position_key", "label": "位置变量名", "type": "text", "default": "last_detection_position"},
         {"key": "offset", "label": "坐标偏移", "type": "offset"},
@@ -69,18 +69,18 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "click_interval_random", "label": "间隔随机范围(±ms)", "type": "number", "min": 0, "default": 0},
     ],
     "MouseMoveNode": [
-        {"key": "position", "label": "位置(拖拽时为起点)", "type": "position"},
+        {"key": "position", "label": "起点位置(相对移动值)", "type": "position"},
         {"key": "use_blackboard", "label": "移动到最近检测点", "type": "bool", "default": False},
         {"key": "position_key", "label": "黑板变量名", "type": "text", "default": "last_detection_position"},
         {"key": "relative", "label": "相对移动", "type": "bool", "default": False},
         {"key": "smooth", "label": "平滑移动", "type": "bool", "default": True},
         {"key": "move_type", "label": "移动类型", "type": "select", "options": ["移动", "拖拽"], "default": "移动"},
-        {"key": "drag_button", "label": "拖拽按钮", "type": "select", "options": ["left", "right", "middle"], "default": "left"},
-        {"key": "end_position", "label": "拖拽终点", "type": "position"},
-        {"key": "use_blackboard_end", "label": "终点使用黑板位置", "type": "bool", "default": False},
-        {"key": "position_key_end", "label": "终点位置变量名", "type": "text", "default": ""},
-        {"key": "drag_duration", "label": "拖拽时长(ms)", "type": "number", "default": 0},
-        {"key": "drag_duration_random", "label": "拖拽时长随机范围(±ms)", "type": "number", "min": 0, "default": 0},
+        {"key": "drag_button", "label": "拖拽按键", "type": "select", "options": ["left", "right", "middle"], "default": "left", "hide_if": {"field": "relative", "value": True}},
+        {"key": "end_position", "label": "终点", "type": "position", "hide_if": {"field": "relative", "value": True}},
+        {"key": "use_blackboard_end", "label": "终点使用黑板位置", "type": "bool", "default": False, "hide_if": {"field": "relative", "value": True}},
+        {"key": "position_key_end", "label": "终点位置变量名", "type": "text", "default": "", "hide_if": {"field": "relative", "value": True}},
+        {"key": "drag_duration", "label": "拖拽时长(ms)", "type": "number", "default": 0, "hide_if": {"field": "relative", "value": True}},
+        {"key": "drag_duration_random", "label": "拖拽时长随机范围(±ms)", "type": "number", "min": 0, "default": 0, "hide_if": {"field": "relative", "value": True}},
     ],
     "MouseScrollNode": [
         {"key": "distance", "label": "滚动距离", "type": "number", "default": 5},
@@ -113,6 +113,11 @@ NODE_CONFIG_SCHEMAS = {
     ],
     "ParallelNode": [
         {"key": "success_policy", "label": "成功策略", "type": "select", "options": ["require_all", "require_one"], "default": "require_all"},
+    ],
+    "RandomNode": [
+        {"key": "success_policy", "label": "成功策略", "type": "select", "options": ["require_all", "require_one"], "default": "require_all"},
+        {"key": "continue_on_failure", "label": "失败后继续执行", "type": "bool", "default": False},
+        {"key": "fully_random", "label": "完全随机", "type": "bool", "default": False},
     ],
     "SequenceNode": [
         {"key": "childinterval", "label": "子节点间隔(ms)", "type": "number", "min": 0, "default": 0},
@@ -1528,6 +1533,8 @@ class PropertyPanel(ctk.CTkFrame):
         self.current_node_id: Optional[str] = None
         self.current_node_type: Optional[str] = None
         self.widgets: Dict[str, FieldWidget] = {}
+        self.field_schemas: Dict[str, Dict[str, Any]] = {}
+        self.field_containers: Dict[str, Any] = {}
         self._is_loading: bool = False
         
         self._dark_colors = Theme.get_dark_colors()
@@ -1661,6 +1668,8 @@ class PropertyPanel(ctk.CTkFrame):
         for widget in self.content_frame.winfo_children():
             widget.destroy()
         self.widgets.clear()
+        self.field_schemas.clear()
+        self.field_containers.clear()
     
     def save_and_clear(self):
         self.current_node_id = None
@@ -1685,9 +1694,11 @@ class PropertyPanel(ctk.CTkFrame):
             schema = NODE_CONFIG_SCHEMAS.get(node_type, [])
             if schema:
                 self._create_section_title("配置参数")
+                self.config_fields_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+                self.config_fields_frame.pack(fill="x")
                 for field in schema:
                     value = node_data.get("config", {}).get(field["key"])
-                    self._create_field(field, value)
+                    self._create_field(field, value, self.config_fields_frame)
             
             decorator_fields = []
             if node_type in CONDITION_NODES:
@@ -1699,8 +1710,10 @@ class PropertyPanel(ctk.CTkFrame):
             
             if decorator_fields:
                 self._create_section_title("装饰参数")
+                self.decorator_fields_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+                self.decorator_fields_frame.pack(fill="x")
                 for field in decorator_fields:
-                    self._create_field(field, node_data.get("config", {}).get(field["key"]))
+                    self._create_field(field, node_data.get("config", {}).get(field["key"]), self.decorator_fields_frame)
         finally:
             self._is_loading = False
     
@@ -1746,58 +1759,128 @@ class PropertyPanel(ctk.CTkFrame):
         enabled_field.pack(fill="x", pady=Theme.DIMENSIONS['spacing_xs'])
         self.widgets["enabled"] = enabled_field
     
-    def _create_field(self, field: Dict[str, Any], value: Any):
+    def _create_field(self, field: Dict[str, Any], value: Any, parent_frame=None):
         field_type = field.get("type", "text")
         key = field["key"]
         label = field["label"]
         
+        self.field_schemas[key] = field
+        
+        container = parent_frame if parent_frame else self.content_frame
+        
         field_widget = None
         
         if field_type == "text":
-            field_widget = TextField(self.content_frame, label, key, self._on_field_change)
+            field_widget = TextField(container, label, key, self._on_field_change)
         elif field_type == "number":
             field_widget = NumberField(
-                self.content_frame, label, key, self._on_field_change,
+                container, label, key, self._on_field_change,
                 min_val=field.get("min"), max_val=field.get("max"), step=field.get("step", 1),
                 default=field.get("default")
             )
         elif field_type == "select":
             field_widget = SelectField(
-                self.content_frame, label, key, self._on_field_change,
+                container, label, key, self._on_field_change,
                 options=field.get("options", [])
             )
         elif field_type == "bool":
-            field_widget = BoolField(self.content_frame, label, key, self._on_field_change)
+            field_widget = BoolField(container, label, key, self._on_field_change)
         elif field_type == "region":
-            field_widget = RegionField(self.content_frame, label, key, self._on_field_change, self.app)
+            field_widget = RegionField(container, label, key, self._on_field_change, self.app)
         elif field_type == "file":
             field_widget = FileField(
-                self.content_frame, label, key, self._on_field_change,
+                container, label, key, self._on_field_change,
                 filetypes=field.get("filetypes", [("所有文件", "*.*")]),
                 app=self.app,
                 width=field.get("width")
             )
         elif field_type == "screenshot":
             field_widget = ScreenshotField(
-                self.content_frame, label, key, self._on_field_change,
+                container, label, key, self._on_field_change,
                 filetypes=field.get("filetypes", [("所有文件", "*.*")]),
                 app=self.app,
                 width=field.get("width")
             )
         elif field_type == "key":
-            field_widget = KeyField(self.content_frame, label, key, self._on_field_change)
+            field_widget = KeyField(container, label, key, self._on_field_change)
         elif field_type == "position":
-            field_widget = PositionField(self.content_frame, label, key, self._on_field_change, self.app)
+            field_widget = PositionField(container, label, key, self._on_field_change, self.app)
         elif field_type == "color":
-            field_widget = ColorField(self.content_frame, label, key, self._on_field_change, self.app)
+            field_widget = ColorField(container, label, key, self._on_field_change, self.app)
         elif field_type == "offset":
-            field_widget = OffsetField(self.content_frame, label, key, self._on_field_change, self.app)
+            field_widget = OffsetField(container, label, key, self._on_field_change, self.app)
         
         if field_widget:
             field_widget.set_value(value)
             field_widget.pack(fill="x", pady=Theme.DIMENSIONS['spacing_xs'])
             self.widgets[key] = field_widget
+            self.field_containers[key] = container
+            
+            self._update_single_field_visibility(key, field)
     
     def _on_field_change(self, key: str, value: Any):
         if self.on_change and self.current_node_id:
             self.on_change(self.current_node_id, key, value)
+        
+        self._update_dependent_fields_visibility(key)
+    
+    def _update_single_field_visibility(self, key: str, field: Dict[str, Any]):
+        hide_if = field.get("hide_if")
+        if not hide_if:
+            return
+        
+        depend_field = hide_if.get("field")
+        hide_value = hide_if.get("value")
+        
+        if not depend_field or depend_field not in self.widgets:
+            return
+        
+        depend_widget = self.widgets.get(depend_field)
+        if not depend_widget:
+            return
+        
+        current_value = depend_widget.get_value()
+        should_hide = (current_value == hide_value)
+        
+        widget = self.widgets.get(key)
+        container = self.field_containers.get(key)
+        
+        if widget and container:
+            if should_hide:
+                widget.pack_forget()
+            else:
+                next_widget = self._find_next_visible_widget(key, container)
+                if next_widget:
+                    widget.pack(fill="x", pady=Theme.DIMENSIONS['spacing_xs'], before=next_widget)
+                else:
+                    widget.pack(fill="x", pady=Theme.DIMENSIONS['spacing_xs'])
+    
+    def _find_next_visible_widget(self, current_key: str, container):
+        schema_keys = list(self.field_schemas.keys())
+        try:
+            current_index = schema_keys.index(current_key)
+        except ValueError:
+            return None
+        
+        for i in range(current_index + 1, len(schema_keys)):
+            next_key = schema_keys[i]
+            next_container = self.field_containers.get(next_key)
+            if next_container != container:
+                continue
+            next_widget = self.widgets.get(next_key)
+            if next_widget and next_widget.winfo_ismapped():
+                return next_widget
+        
+        return None
+    
+    def _update_dependent_fields_visibility(self, changed_key: str):
+        for key, field in self.field_schemas.items():
+            hide_if = field.get("hide_if")
+            if not hide_if:
+                continue
+            
+            depend_field = hide_if.get("field")
+            if depend_field != changed_key:
+                continue
+            
+            self._update_single_field_visibility(key, field)

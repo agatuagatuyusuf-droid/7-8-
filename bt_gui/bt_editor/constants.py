@@ -3,6 +3,7 @@ NODE_CATEGORY_MAP = {
     "SequenceNode": "composite",
     "SelectorNode": "composite",
     "ParallelNode": "composite",
+    "RandomNode": "composite",
     "OCRConditionNode": "condition",
     "ImageConditionNode": "condition",
     "ColorConditionNode": "condition",
@@ -24,7 +25,8 @@ NODE_DISPLAY_NAMES = {
     "SequenceNode": "顺序",
     "SelectorNode": "选择",
     "ParallelNode": "并行",
-    "OCRConditionNode": "OCR检测",
+    "RandomNode": "随机",
+    "OCRConditionNode": "文字检测",
     "ImageConditionNode": "图像匹配",
     "ColorConditionNode": "颜色检测",
     "NumberConditionNode": "数字比较",
@@ -45,6 +47,7 @@ NODE_DESCRIPTIONS = {
     "SequenceNode": "按顺序执行子节点",
     "SelectorNode": "选择第一个成功的子节点",
     "ParallelNode": "同时执行所有子节点",
+    "RandomNode": "随机执行子节点",
     "OCRConditionNode": "检测文字内容",
     "ImageConditionNode": "匹配图像模板",
     "ColorConditionNode": "检测颜色值",
@@ -61,7 +64,7 @@ NODE_DESCRIPTIONS = {
     "ScriptNode": "执行Txt脚本文件",
 }
 
-COMPOSITE_NODES = ["SequenceNode", "SelectorNode", "ParallelNode"]
+COMPOSITE_NODES = ["SequenceNode", "SelectorNode", "ParallelNode", "RandomNode"]
 CONDITION_NODES = ["OCRConditionNode", "ImageConditionNode", "ColorConditionNode", "NumberConditionNode", "VariableConditionNode"]
 ACTION_NODES = ["KeyPressNode", "MouseClickNode", "MouseMoveNode", "MouseScrollNode", "DelayNode", "SetVariableNode", "ScriptNode", "CodeNode", "AlarmNode"]
 
@@ -89,13 +92,14 @@ def build_node_categories(theme_colors: dict) -> dict:
                 ("SequenceNode", "顺序", "按顺序执行子节点"),
                 ("SelectorNode", "选择", "选择第一个成功的子节点"),
                 ("ParallelNode", "并行", "同时执行所有子节点"),
+                ("RandomNode", "随机", "随机执行子节点"),
             ]
         },
         "条件节点": {
             "icon": "◇",
             "color": theme_colors.get('condition', '#10B981'),
             "nodes": [
-                ("OCRConditionNode", "OCR检测", "检测文字内容"),
+                ("OCRConditionNode", "文字检测", "检测文字内容"),
                 ("ImageConditionNode", "图像匹配", "匹配图像模板"),
                 ("ColorConditionNode", "颜色检测", "检测颜色值"),
                 ("NumberConditionNode", "数字比较", "比较数值大小"),

@@ -35,20 +35,22 @@ class NodeRegistry:
 
 
 def register_core_nodes():
-    from .nodes import SequenceNode, SelectorNode, ParallelNode, StartNode
+    from .nodes import SequenceNode, SelectorNode, ParallelNode, StartNode, RandomNode
 
     NodeRegistry.register("SequenceNode", SequenceNode)
     NodeRegistry.register("SelectorNode", SelectorNode)
     NodeRegistry.register("ParallelNode", ParallelNode)
+    NodeRegistry.register("RandomNode", RandomNode)
     NodeRegistry.register("StartNode", StartNode)
 
 
 def register_all_nodes():
-    from .nodes import SequenceNode, SelectorNode, ParallelNode, StartNode
+    from .nodes import SequenceNode, SelectorNode, ParallelNode, StartNode, RandomNode
     
     NodeRegistry.register("SequenceNode", SequenceNode)
     NodeRegistry.register("SelectorNode", SelectorNode)
     NodeRegistry.register("ParallelNode", ParallelNode)
+    NodeRegistry.register("RandomNode", RandomNode)
     NodeRegistry.register("StartNode", StartNode)
     
     from bt_nodes.actions.keyboard import KeyPressNode

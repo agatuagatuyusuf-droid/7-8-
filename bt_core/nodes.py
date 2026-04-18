@@ -507,6 +507,210 @@ class ParallelNode(CompositeNode):
         self.cached_statuses.clear()
 
 
+class RandomNode(CompositeNode):
+    """随机节点
+
+    随机执行子节点，根据策略决定成功条件。
+
+    Args:
+        success_policy: 成功策略，require_all（全部成功）或 require_one（任一成功）
+        continue_on_failure: 失败后是否继续执行
+        fully_random: 是否完全随机（True时已执行的子节点仍可被选中）
+    """
+    NODE_TYPE = "RandomNode"
+
+    SUCCESS_POLICY_ALL = "require_all"
+    SUCCESS_POLICY_ONE = "require_one"
+
+    def __init__(self, node_id: str = None, config: NodeConfig = None):
+        super().__init__(node_id, config)
+        self.success_policy = self.config.get("success_policy", self.SUCCESS_POLICY_ALL)
+        self.continue_on_failure = self.config.get_bool("continue_on_failure", False)
+        self.fully_random = self.config.get_bool("fully_random", False)
+        self._executed_indices: set = set()
+        self._success_indices: set = set()
+        self._failure_indices: set = set()
+        self._current_running_index: Optional[int] = None
+        self._enabled_indices: List[int] = []
+
+    def tick(self, context: "ExecutionContext") -> NodeStatus:
+        return self._execute_with_decorators(context, self._tick_internal)
+
+    def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
+        from bt_utils.log_manager import LogManager
+        import random
+        
+        if not self.children:
+            LogManager.instance().log_success(
+                node_type="随机节点",
+                node_name=self.name
+            )
+            return NodeStatus.SUCCESS
+
+        if not self._enabled_indices:
+            self._enabled_indices = [
+                i for i, child in enumerate(self.children) 
+                if child.config.enabled
+            ]
+        
+        if not self._enabled_indices:
+            LogManager.instance().log_success(
+                node_type="随机节点",
+                node_name=self.name
+            )
+            return NodeStatus.SUCCESS
+
+        if self._current_running_index is not None:
+            child = self.children[self._current_running_index]
+            status = child.tick(context)
+            
+            if status == NodeStatus.RUNNING:
+                return NodeStatus.RUNNING
+            
+            if status == NodeStatus.SUCCESS:
+                self._success_indices.add(self._current_running_index)
+                if self.success_policy == self.SUCCESS_POLICY_ONE:
+                    LogManager.instance().log_success(
+                        node_type="随机节点",
+                        node_name=self.name
+                    )
+                    return NodeStatus.SUCCESS
+            elif status == NodeStatus.FAILURE:
+                self._failure_indices.add(self._current_running_index)
+                if not self.continue_on_failure and self.success_policy == self.SUCCESS_POLICY_ALL:
+                    LogManager.instance().log_failure(
+                        node_type="随机节点",
+                        node_name=self.name,
+                        reason=f"子节点 '{child.name}' 执行失败"
+                    )
+                    return NodeStatus.FAILURE
+            
+            self._current_running_index = None
+
+        available_indices = self._get_available_indices()
+        
+        if not available_indices:
+            return self._determine_final_status()
+        
+        if self.fully_random and self._executed_indices == set(self._enabled_indices):
+            return self._determine_final_status()
+
+        next_index = random.choice(available_indices)
+        
+        self._executed_indices.add(next_index)
+        
+        self._current_running_index = next_index
+        child = self.children[next_index]
+        status = child.tick(context)
+        
+        if status == NodeStatus.RUNNING:
+            return NodeStatus.RUNNING
+        
+        if status == NodeStatus.SUCCESS:
+            self._success_indices.add(next_index)
+            if self.success_policy == self.SUCCESS_POLICY_ONE:
+                LogManager.instance().log_success(
+                    node_type="随机节点",
+                    node_name=self.name
+                )
+                return NodeStatus.SUCCESS
+        elif status == NodeStatus.FAILURE:
+            self._failure_indices.add(next_index)
+            if not self.continue_on_failure and self.success_policy == self.SUCCESS_POLICY_ALL:
+                LogManager.instance().log_failure(
+                    node_type="随机节点",
+                    node_name=self.name,
+                    reason=f"子节点 '{child.name}' 执行失败"
+                )
+                return NodeStatus.FAILURE
+        
+        self._current_running_index = None
+        
+        available_indices = self._get_available_indices()
+        if not available_indices:
+            return self._determine_final_status()
+        
+        return NodeStatus.RUNNING
+
+    def _get_available_indices(self) -> List[int]:
+        """获取可执行的子节点索引列表
+        
+        Returns:
+            可执行的子节点索引列表
+        """
+        if self.fully_random:
+            return self._enabled_indices
+        else:
+            return [i for i in self._enabled_indices if i not in self._executed_indices]
+
+    def _determine_final_status(self) -> NodeStatus:
+        """确定最终状态
+        
+        Returns:
+            最终节点状态
+        """
+        from bt_utils.log_manager import LogManager
+        
+        enabled_count = len(self._enabled_indices)
+        success_count = len(self._success_indices)
+        
+        if self.success_policy == self.SUCCESS_POLICY_ALL:
+            if success_count == enabled_count:
+                LogManager.instance().log_success(
+                    node_type="随机节点",
+                    node_name=self.name
+                )
+                return NodeStatus.SUCCESS
+            else:
+                LogManager.instance().log_failure(
+                    node_type="随机节点",
+                    node_name=self.name,
+                    reason=f"成功 {success_count}/{enabled_count} 个子节点"
+                )
+                return NodeStatus.FAILURE
+        else:
+            if success_count > 0:
+                LogManager.instance().log_success(
+                    node_type="随机节点",
+                    node_name=self.name
+                )
+                return NodeStatus.SUCCESS
+            else:
+                LogManager.instance().log_failure(
+                    node_type="随机节点",
+                    node_name=self.name,
+                    reason="所有子节点都执行失败"
+                )
+                return NodeStatus.FAILURE
+
+    def reset(self, reset_counters: bool = True) -> None:
+        """重置节点状态"""
+        super().reset(reset_counters)
+        self._executed_indices.clear()
+        self._success_indices.clear()
+        self._failure_indices.clear()
+        self._current_running_index = None
+        self._enabled_indices = []
+    
+    def _reset_for_retry(self) -> None:
+        """重试时重置状态（保留重试计数器）"""
+        super()._reset_for_retry()
+        self._executed_indices.clear()
+        self._success_indices.clear()
+        self._failure_indices.clear()
+        self._current_running_index = None
+        self._enabled_indices = []
+    
+    def _reset_for_repeat(self) -> None:
+        """重复执行时重置状态（保留重复计数器）"""
+        super()._reset_for_repeat()
+        self._executed_indices.clear()
+        self._success_indices.clear()
+        self._failure_indices.clear()
+        self._current_running_index = None
+        self._enabled_indices = []
+
+
 class ConditionNode(Node):
     NODE_TYPE = "ConditionNode"
 

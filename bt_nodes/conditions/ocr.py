@@ -7,6 +7,16 @@ from bt_utils.log_manager import LogManager
 from bt_utils.ocr_manager import OCRManager
 
 
+LANGUAGE_MAP = {
+    "English": "eng",
+    "简体中文": "chi_sim",
+    "繁体中文": "chi_tra",
+    "eng": "eng",
+    "chi_sim": "chi_sim",
+    "chi_tra": "chi_tra",
+}
+
+
 class OCRConditionNode(ConditionNode):
     NODE_TYPE = "OCRConditionNode"
 
@@ -14,7 +24,8 @@ class OCRConditionNode(ConditionNode):
         super().__init__(node_id, config)
         self.region: Optional[Tuple[int, int, int, int]] = self._parse_region(self.config.get("region", None))
         self.keywords = self.config.get("keywords", "")
-        self.language = self.config.get("language", "eng")
+        language_display = self.config.get("language", "简体中文")
+        self.language = LANGUAGE_MAP.get(language_display, "chi_sim")
         preprocess_display = self.config.get("preprocess_mode", "默认")
         self.preprocess_mode = "game" if preprocess_display == "复杂色彩" else "normal"
 
@@ -32,7 +43,7 @@ class OCRConditionNode(ConditionNode):
             if found:
                 self._save_position(context, position)
                 LogManager.instance().log_success(
-                    node_type="OCR检测节点",
+                    node_type="文字检测节点",
                     node_name=self.name
                 )
                 return True
@@ -41,14 +52,14 @@ class OCRConditionNode(ConditionNode):
                 if all_text:
                     reason += f"，识别到的文本: {all_text}"
                 LogManager.instance().log_failure(
-                    node_type="OCR检测节点",
+                    node_type="文字检测节点",
                     node_name=self.name,
                     reason=reason
                 )
                 return False
         except Exception as e:
             LogManager.instance().log_failure(
-                node_type="OCR检测节点",
+                node_type="文字检测节点",
                 node_name=self.name,
                 reason=str(e)
             )
@@ -58,7 +69,8 @@ class OCRConditionNode(ConditionNode):
         data = super().to_dict()
         data["config"]["region"] = list(self.region) if self.region else None
         data["config"]["keywords"] = self.keywords
-        data["config"]["language"] = self.language
+        reverse_language_map = {"eng": "English", "chi_sim": "简体中文", "chi_tra": "繁体中文"}
+        data["config"]["language"] = reverse_language_map.get(self.language, self.language)
         data["config"]["preprocess_mode"] = "复杂色彩" if self.preprocess_mode == "game" else "默认"
         data["config"]["position_key"] = self.position_key
         data["config"]["offset"] = list(self.offset)
