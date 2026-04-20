@@ -8,9 +8,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # 注释掉终端日志输出（如需启用，取消下面注释即可）
 # logging.disable(logging.CRITICAL)
 
+def get_resource_path(relative_path):
+    """获取资源文件的绝对路径，支持PyInstaller打包后的路径"""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.dirname(__file__), relative_path)
+
 def load_version():
     """从build_info.json加载版本信息"""
-    build_info_file = os.path.join(os.path.dirname(__file__), 'bt_utils', 'build_info.json')
+    build_info_file = get_resource_path('bt_utils/build_info.json')
     
     if os.path.exists(build_info_file):
         try:
@@ -24,7 +30,7 @@ def load_version():
 
 def load_github_info():
     """从build_info.json加载GitHub仓库信息"""
-    build_info_file = os.path.join(os.path.dirname(__file__), 'bt_utils', 'build_info.json')
+    build_info_file = get_resource_path('bt_utils/build_info.json')
     
     if os.path.exists(build_info_file):
         try:

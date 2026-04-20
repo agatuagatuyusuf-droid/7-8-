@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import sys
 import threading
 import time
 import tkinter as tk
@@ -10,9 +11,16 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 
+def get_resource_path(relative_path):
+    """获取资源文件的绝对路径，支持PyInstaller打包后的路径"""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.dirname(__file__), relative_path)
+
+
 def load_build_info():
     """加载构建信息"""
-    build_info_file = os.path.join(os.path.dirname(__file__), 'build_info.json')
+    build_info_file = get_resource_path('bt_utils/build_info.json')
     
     if os.path.exists(build_info_file):
         try:

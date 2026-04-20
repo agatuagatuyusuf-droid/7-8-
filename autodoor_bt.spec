@@ -27,6 +27,7 @@ data_files = [
     (os.path.join(project_root, 'assets/icons/autodoor.ico'), 'assets/icons'),
     (os.path.join(project_root, 'assets/icons/autodoor.png'), 'assets/icons'),
     (os.path.join(project_root, 'config/settings.json'), 'config'),
+    (os.path.join(project_root, 'bt_utils/build_info.json'), 'bt_utils'),
 ] + collect_data_files('rapidocr')
 
 binaries = []

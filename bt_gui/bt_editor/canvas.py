@@ -169,10 +169,10 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self.canvas.config(cursor="arrow")
     
     def _on_click(self, event):
-        self.canvas.focus_set()
-        
         if self.property_panel:
             self.property_panel.force_save_current_field()
+        
+        self.canvas.focus_set()
         
         x = (self.canvas.canvasx(event.x) - self.pan_x) / self.zoom
         y = (self.canvas.canvasy(event.y) - self.pan_y) / self.zoom
