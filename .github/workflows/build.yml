@@ -269,38 +269,12 @@ jobs:
         zip -r autodoor-behaviortree-${{ steps.get_version.outputs.VERSION }}-normal.zip windows-normal-build/
         zip -r autodoor-behaviortree-${{ steps.get_version.outputs.VERSION }}-DD.zip windows-DD-build/
 
-    - name: Read update content
-      id: read_update_content
-      run: |
-        if [ -f "UPDATE_CONTENT.md" ]; then
-          echo "UPDATE_CONTENT<<EOF" >> $GITHUB_OUTPUT
-          cat UPDATE_CONTENT.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-        else
-          echo "UPDATE_CONTENT<<EOF" >> $GITHUB_OUTPUT
-          echo "AutoDoor BehaviorTree v${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-          echo "## Version Description" >> $GITHUB_OUTPUT
-          echo "- **Normal Version**: Uses PyAutoGUI, suitable for general applications" >> $GITHUB_OUTPUT
-          echo "- **DD Version**: Uses DD Virtual Keyboard, suitable for DirectInput games" >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-          echo "## OCR Engine" >> $GITHUB_OUTPUT
-          echo "- Uses RapidOCR (based on ONNX Runtime)" >> $GITHUB_OUTPUT
-          echo "- Faster and more accurate than Tesseract" >> $GITHUB_OUTPUT
-          echo "- No external dependencies required" >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-          echo "## Download Files" >> $GITHUB_OUTPUT
-          echo "- autodoor-behaviortree-${{ steps.get_version.outputs.VERSION }}-normal.zip (Normal)" >> $GITHUB_OUTPUT
-          echo "- autodoor-behaviortree-${{ steps.get_version.outputs.VERSION }}-DD.zip (DD Version)" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-        fi
-
     - name: Create Release and upload assets
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.get_version.outputs.VERSION }}
         name: Release ${{ steps.get_version.outputs.VERSION }}
-        body: ${{ steps.read_update_content.outputs.UPDATE_CONTENT }}
+        body_path: UPDATE_CONTENT.md
         draft: false
         prerelease: false
         files: |
