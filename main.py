@@ -152,7 +152,6 @@ def main():
     
     from bt_utils.version_checker import VersionChecker
     github_owner, github_repo = load_github_info()
-    print(f"[Main] 初始化版本检查器: owner={github_owner}, repo={github_repo}, version={VERSION}")
     version_checker = VersionChecker(
         app=app,
         owner=github_owner,
@@ -161,7 +160,6 @@ def main():
     )
     
     app._version_checker = version_checker
-    print(f"[Main] 版本检查器已绑定到app")
     
     version_checker.check_force_update()
     

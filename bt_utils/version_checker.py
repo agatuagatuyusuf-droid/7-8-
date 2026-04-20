@@ -146,9 +146,20 @@ class VersionChecker:
             self.current_version = app.version
         else:
             self.current_version = _build_info.get('version', '1.0.0')
-        print(f"[VersionChecker] 初始化完成: current_version={self.current_version}, owner={owner}, repo={repo}")
         self.ignored_version = self._load_ignored_version()
         self._force_update_cache = self._load_force_update_cache()
+    
+    def _get_root_window(self):
+        """获取根窗口
+        
+        BehaviorTreeApp继承自CTk，本身就是根窗口
+        兼容旧代码中检查self.app.root的情况
+        """
+        if self.app is None:
+            return None
+        if hasattr(self.app, 'root') and self.app.root:
+            return self.app.root
+        return self.app
     
     def _get_config_file_path(self) -> str:
         """获取配置文件路径"""
@@ -253,8 +264,9 @@ class VersionChecker:
                         
                         download_url = self._get_download_url(data)
                         
-                        if hasattr(self.app, 'root') and self.app.root:
-                            self.app.root.after(0, lambda: self._show_force_update_dialog(
+                        root = self._get_root_window()
+                        if root:
+                            root.after(0, lambda: self._show_force_update_dialog(
                                 latest_version, download_url))
                         else:
                             self._show_force_update_dialog(latest_version, download_url)
@@ -294,14 +306,15 @@ class VersionChecker:
         """显示强制更新弹窗（模态，无法关闭）"""
         import sys
         
-        if not (hasattr(self.app, 'root') and self.app.root):
+        root = self._get_root_window()
+        if not root:
             print("无法显示强制更新弹窗：root 窗口未初始化")
             return
         
-        dialog = tk.Toplevel(self.app.root)
+        dialog = tk.Toplevel(root)
         dialog.title("需要强制更新")
         dialog.geometry("450x320")
-        dialog.transient(self.app.root)
+        dialog.transient(root)
         dialog.grab_set()
         
         dialog.protocol("WM_DELETE_WINDOW", lambda: None)
@@ -333,8 +346,9 @@ class VersionChecker:
                 print(f"打开下载页面失败: {str(e)}")
             finally:
                 dialog.destroy()
-                if hasattr(self.app, 'root') and self.app.root:
-                    self.app.root.quit()
+                root = self._get_root_window()
+                if root:
+                    root.quit()
                 sys.exit(0)
         
         ttk.Button(frame, text="去更新", command=open_download).pack(pady=10)
@@ -346,65 +360,57 @@ class VersionChecker:
         def check_async():
             try:
                 url = self.GITHUB_API_URL.format(owner=self.owner, repo=self.repo)
-                print(f"[版本检查] 开始检查更新: {url}")
-                print(f"[版本检查] 当前版本: {self.current_version}")
-                print(f"[版本检查] GitHub仓库: {self.owner}/{self.repo}")
-                
                 response = requests.get(url, timeout=5)
                 response.raise_for_status()
                 
                 data = response.json()
                 latest_version = data.get('tag_name', '')
-                print(f"[版本检查] 最新版本: {latest_version}")
                 
-                is_newer = self._is_newer_version(latest_version)
-                print(f"[版本检查] 是否需要更新: {is_newer}")
-                
-                if is_newer:
+                if self._is_newer_version(latest_version):
                     if not manual and self.ignored_version:
                         ignored_comparison = self._compare_versions(self.ignored_version, latest_version)
                         if ignored_comparison <= 0:
-                            print(f"[版本检查] 版本已被忽略: {self.ignored_version}")
                             return
                     
                     download_url = self._get_download_url(data)
-                    print(f"[版本检查] 下载地址: {download_url}")
                     
-                    if hasattr(self.app, 'root') and self.app.root:
-                        self.app.root.after(0, lambda: self._show_update_notification(
+                    root = self._get_root_window()
+                    if root:
+                        root.after(0, lambda: self._show_update_notification(
                             data, latest_version, download_url))
                 else:
-                    print(f"[版本检查] 当前已是最新版本")
                     if manual:
-                        if hasattr(self.app, 'root') and self.app.root:
-                            self.app.root.after(0, self.show_no_update_notification)
+                        root = self._get_root_window()
+                        if root:
+                            root.after(0, self.show_no_update_notification)
                 
             except requests.exceptions.HTTPError as e:
-                print(f"[版本检查] HTTP错误: {e}")
                 if e.response.status_code == 404:
                     if manual:
-                        if hasattr(self.app, 'root') and self.app.root:
-                            self.app.root.after(0, lambda: messagebox.showinfo(
+                        root = self._get_root_window()
+                        if root:
+                            root.after(0, lambda: messagebox.showinfo(
                                 "检查更新", "暂无版本信息。\n\n可能原因：\n1. 仓库尚未发布Release\n2. 仓库地址配置错误\n\n请稍后再试或联系开发者。"))
                 else:
                     if manual:
-                        if hasattr(self.app, 'root') and self.app.root:
-                            self.app.root.after(0, lambda: messagebox.showinfo(
+                        root = self._get_root_window()
+                        if root:
+                            root.after(0, lambda: messagebox.showinfo(
                                 "检查更新", f"网络请求失败: {str(e)}"))
             except requests.exceptions.Timeout:
-                print(f"[版本检查] 请求超时")
                 if manual:
-                    if hasattr(self.app, 'root') and self.app.root:
-                        self.app.root.after(0, lambda: messagebox.showinfo(
+                    root = self._get_root_window()
+                    if root:
+                        root.after(0, lambda: messagebox.showinfo(
                             "检查更新", "网络连接超时，请稍后再试。"))
             except requests.exceptions.RequestException as e:
-                print(f"[版本检查] 网络请求异常: {e}")
                 if manual:
-                    if hasattr(self.app, 'root') and self.app.root:
-                        self.app.root.after(0, lambda: messagebox.showinfo(
+                    root = self._get_root_window()
+                    if root:
+                        root.after(0, lambda: messagebox.showinfo(
                             "检查更新", "网络连接失败，请检查网络设置。"))
-            except Exception as e:
-                print(f"[版本检查] 未知异常: {type(e).__name__}: {e}")
+            except Exception:
+                pass
         
         thread = threading.Thread(target=check_async, daemon=True)
         thread.start()
@@ -477,7 +483,8 @@ class VersionChecker:
     
     def _show_update_notification(self, data: Dict[str, Any], latest_version: str, download_url: str):
         """显示更新通知"""
-        if not (hasattr(self.app, 'root') and self.app.root):
+        root = self._get_root_window()
+        if not root:
             return
         
         release_date = data.get('published_at', '')
@@ -494,22 +501,22 @@ class VersionChecker:
         
         changelog_summary = changelog[:500] + '...' if len(changelog) > 500 else changelog
         
-        notification_window = tk.Toplevel(self.app.root)
+        notification_window = tk.Toplevel(root)
         notification_window.title("发现新版本")
         window_width = 450
         window_height = 400
         notification_window.geometry(f"{window_width}x{window_height}")
         notification_window.minsize(window_width, window_height)
-        notification_window.transient(self.app.root)
+        notification_window.transient(root)
         notification_window.grab_set()
         
-        self.app.root.update_idletasks()
-        self.app.root.update()
+        root.update_idletasks()
+        root.update()
         
-        root_x = self.app.root.winfo_rootx()
-        root_y = self.app.root.winfo_rooty()
-        root_width = self.app.root.winfo_width()
-        root_height = self.app.root.winfo_height()
+        root_x = root.winfo_rootx()
+        root_y = root.winfo_rooty()
+        root_width = root.winfo_width()
+        root_height = root.winfo_height()
         
         if root_width < 100 or root_height < 100:
             root_width = 1280
@@ -545,16 +552,16 @@ class VersionChecker:
         changelog_text.config(state=tk.DISABLED)
         
         button_frame = ttk.Frame(frame)
-        button_frame.pack(fill=tk.X, pady=(10, 0))
+        button_frame.pack(pady=(10, 0), expand=True)
         
         ttk.Button(button_frame, text="查看更新", 
                    command=lambda: self._open_update_link(download_url, notification_window)).pack(
-                       side=tk.LEFT, padx=(0, 10))
+                       side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="稍后提醒", 
-                   command=notification_window.destroy).pack(side=tk.LEFT, padx=(0, 10))
+                   command=notification_window.destroy).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="忽略此版本", 
                    command=lambda: self.ignore_version(latest_version, notification_window)).pack(
-                       side=tk.LEFT)
+                       side=tk.LEFT, padx=5)
     
     def _open_update_link(self, url: str, window: tk.Toplevel):
         """打开更新链接"""
@@ -597,22 +604,23 @@ class VersionChecker:
     
     def show_no_update_notification(self):
         """显示无更新通知"""
-        if not (hasattr(self.app, 'root') and self.app.root):
+        root = self._get_root_window()
+        if not root:
             return
         
-        notification_window = tk.Toplevel(self.app.root)
+        notification_window = tk.Toplevel(root)
         notification_window.title("检查更新")
         notification_window.geometry("300x150")
-        notification_window.transient(self.app.root)
+        notification_window.transient(root)
         notification_window.grab_set()
         
-        self.app.root.update_idletasks()
-        self.app.root.update()
+        root.update_idletasks()
+        root.update()
         
-        root_x = self.app.root.winfo_rootx()
-        root_y = self.app.root.winfo_rooty()
-        root_width = self.app.root.winfo_width()
-        root_height = self.app.root.winfo_height()
+        root_x = root.winfo_rootx()
+        root_y = root.winfo_rooty()
+        root_width = root.winfo_width()
+        root_height = root.winfo_height()
         
         if root_width < 100 or root_height < 100:
             root_width = 1280
