@@ -6,7 +6,7 @@ import logging
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # 注释掉终端日志输出（如需启用，取消下面注释即可）
-# logging.disable(logging.CRITICAL)
+logging.disable(logging.CRITICAL)
 
 def get_resource_path(relative_path):
     """获取资源文件的绝对路径，支持PyInstaller打包后的路径"""
@@ -152,13 +152,16 @@ def main():
     
     from bt_utils.version_checker import VersionChecker
     github_owner, github_repo = load_github_info()
+    print(f"[Main] 初始化版本检查器: owner={github_owner}, repo={github_repo}, version={VERSION}")
     version_checker = VersionChecker(
         app=app,
         owner=github_owner,
-        repo=github_repo
+        repo=github_repo,
+        current_version=VERSION
     )
     
     app._version_checker = version_checker
+    print(f"[Main] 版本检查器已绑定到app")
     
     version_checker.check_force_update()
     

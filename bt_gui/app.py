@@ -264,9 +264,12 @@ class BehaviorTreeApp(ctk.CTk):
     
     def _check_for_updates(self):
         """检查更新"""
+        print("[GUI] 检查更新按钮被点击")
         if hasattr(self, '_version_checker'):
+            print(f"[GUI] 版本检查器已初始化: {self._version_checker}")
             self._version_checker.check_for_updates(manual=True)
         else:
+            print("[GUI] 版本检查器未初始化")
             from tkinter import messagebox
             messagebox.showinfo("检查更新", "版本检查器未初始化")
     

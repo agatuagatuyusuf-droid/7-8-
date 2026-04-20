@@ -383,9 +383,9 @@ class RegionField(FieldWidget):
             fg_color=self._dark_colors['primary'],
             hover_color=self._dark_colors['primary_hover'],
             corner_radius=Theme.DIMENSIONS['button_corner_radius'],
-            command=self._start_selection
         )
         self.btn.pack(side="right")
+        self.btn.bind("<ButtonRelease-1>", lambda e: self._start_selection())
     
     def _start_selection(self):
         import time
@@ -551,9 +551,9 @@ class FileField(FieldWidget):
             fg_color=self._dark_colors['primary'],
             hover_color=self._dark_colors['primary_hover'],
             corner_radius=Theme.DIMENSIONS['button_corner_radius'],
-            command=self._browse
         )
         self.btn.pack(side="right")
+        self.btn.bind("<ButtonRelease-1>", lambda e: self._browse())
     
     def _get_project_root(self):
         if self.app and hasattr(self.app, 'behavior_tree'):
@@ -683,9 +683,9 @@ class ScreenshotField(FieldWidget):
             fg_color=self._dark_colors['primary'],
             hover_color=self._dark_colors['primary_hover'],
             corner_radius=Theme.DIMENSIONS['button_corner_radius'],
-            command=self._browse
         )
         self.browse_btn.pack(side="right")
+        self.browse_btn.bind("<ButtonRelease-1>", lambda e: self._browse())
         
         screenshot_frame = ctk.CTkFrame(self, fg_color="transparent")
         screenshot_frame.pack(fill="x", pady=(Theme.DIMENSIONS['spacing_xs'], 0))
@@ -699,9 +699,9 @@ class ScreenshotField(FieldWidget):
             fg_color=self._dark_colors['info'],
             hover_color=self._dark_colors['info_hover'],
             corner_radius=Theme.DIMENSIONS['button_corner_radius'],
-            command=self._take_screenshot
         )
         self.screenshot_btn.pack(side="left")
+        self.screenshot_btn.bind("<ButtonRelease-1>", lambda e: self._take_screenshot())
     
     def _browse(self):
         project_root = self._get_project_root()
@@ -1027,9 +1027,9 @@ class KeyField(FieldWidget):
             fg_color=self._dark_colors['primary'],
             hover_color=self._dark_colors['primary_hover'],
             corner_radius=Theme.DIMENSIONS['button_corner_radius'],
-            command=self._start_listening
         )
         self.btn.pack(side="right")
+        self.btn.bind("<ButtonRelease-1>", lambda e: self._start_listening())
     
     def _unbind_all_keys(self):
         toplevel = self.winfo_toplevel()
@@ -1170,9 +1170,9 @@ class PositionField(FieldWidget):
             fg_color=self._dark_colors['primary'],
             hover_color=self._dark_colors['primary_hover'],
             corner_radius=Theme.DIMENSIONS['button_corner_radius'],
-            command=self._pick_position
         )
         self.btn.pack(side="right")
+        self.btn.bind("<ButtonRelease-1>", lambda e: self._pick_position())
     
     def _parse_and_change(self):
         try:
@@ -1304,9 +1304,9 @@ class OffsetField(FieldWidget):
             fg_color=self._dark_colors['primary'],
             hover_color=self._dark_colors['primary_hover'],
             corner_radius=Theme.DIMENSIONS['button_corner_radius'],
-            command=self._measure_offset
         )
         self.btn.pack(side="right")
+        self.btn.bind("<ButtonRelease-1>", lambda e: self._measure_offset())
     
     def _parse_and_change(self):
         try:
@@ -1460,9 +1460,9 @@ class ColorField(FieldWidget):
             fg_color=self._dark_colors['primary'],
             hover_color=self._dark_colors['primary_hover'],
             corner_radius=Theme.DIMENSIONS['button_corner_radius'],
-            command=self._pick_color
         )
         self.btn.pack(side="right")
+        self.btn.bind("<ButtonRelease-1>", lambda e: self._pick_color())
     
     def _parse_and_change(self):
         import time

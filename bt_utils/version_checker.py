@@ -136,11 +136,17 @@ class VersionChecker:
     
     GITHUB_API_URL = "https://api.github.com/repos/{owner}/{repo}/releases/latest"
     
-    def __init__(self, app, owner: str, repo: str):
+    def __init__(self, app, owner: str, repo: str, current_version: str = None):
         self.app = app
         self.owner = owner
         self.repo = repo
-        self.current_version = app.version if hasattr(app, 'version') else "V1.0.0"
+        if current_version:
+            self.current_version = current_version
+        elif hasattr(app, 'version'):
+            self.current_version = app.version
+        else:
+            self.current_version = _build_info.get('version', '1.0.0')
+        print(f"[VersionChecker] 初始化完成: current_version={self.current_version}, owner={owner}, repo={repo}")
         self.ignored_version = self._load_ignored_version()
         self._force_update_cache = self._load_force_update_cache()
     
@@ -340,29 +346,41 @@ class VersionChecker:
         def check_async():
             try:
                 url = self.GITHUB_API_URL.format(owner=self.owner, repo=self.repo)
+                print(f"[版本检查] 开始检查更新: {url}")
+                print(f"[版本检查] 当前版本: {self.current_version}")
+                print(f"[版本检查] GitHub仓库: {self.owner}/{self.repo}")
+                
                 response = requests.get(url, timeout=5)
                 response.raise_for_status()
                 
                 data = response.json()
                 latest_version = data.get('tag_name', '')
+                print(f"[版本检查] 最新版本: {latest_version}")
                 
-                if self._is_newer_version(latest_version):
+                is_newer = self._is_newer_version(latest_version)
+                print(f"[版本检查] 是否需要更新: {is_newer}")
+                
+                if is_newer:
                     if not manual and self.ignored_version:
                         ignored_comparison = self._compare_versions(self.ignored_version, latest_version)
                         if ignored_comparison <= 0:
+                            print(f"[版本检查] 版本已被忽略: {self.ignored_version}")
                             return
                     
                     download_url = self._get_download_url(data)
+                    print(f"[版本检查] 下载地址: {download_url}")
                     
                     if hasattr(self.app, 'root') and self.app.root:
                         self.app.root.after(0, lambda: self._show_update_notification(
                             data, latest_version, download_url))
                 else:
+                    print(f"[版本检查] 当前已是最新版本")
                     if manual:
                         if hasattr(self.app, 'root') and self.app.root:
                             self.app.root.after(0, self.show_no_update_notification)
                 
             except requests.exceptions.HTTPError as e:
+                print(f"[版本检查] HTTP错误: {e}")
                 if e.response.status_code == 404:
                     if manual:
                         if hasattr(self.app, 'root') and self.app.root:
@@ -374,17 +392,19 @@ class VersionChecker:
                             self.app.root.after(0, lambda: messagebox.showinfo(
                                 "检查更新", f"网络请求失败: {str(e)}"))
             except requests.exceptions.Timeout:
+                print(f"[版本检查] 请求超时")
                 if manual:
                     if hasattr(self.app, 'root') and self.app.root:
                         self.app.root.after(0, lambda: messagebox.showinfo(
                             "检查更新", "网络连接超时，请稍后再试。"))
             except requests.exceptions.RequestException as e:
+                print(f"[版本检查] 网络请求异常: {e}")
                 if manual:
                     if hasattr(self.app, 'root') and self.app.root:
                         self.app.root.after(0, lambda: messagebox.showinfo(
                             "检查更新", "网络连接失败，请检查网络设置。"))
             except Exception as e:
-                pass
+                print(f"[版本检查] 未知异常: {type(e).__name__}: {e}")
         
         thread = threading.Thread(target=check_async, daemon=True)
         thread.start()
