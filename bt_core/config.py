@@ -1,5 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Dict, Any
+from typing import Dict, Any, FrozenSet
+
+
+_KNOWN_FIELDS: FrozenSet[str] = frozenset({
+    "name", "description", "enabled", "retry_count",
+    "repeat_count", "repeat_interval_ms", "timeout_ms", "extra"
+})
 
 
 @dataclass
@@ -26,27 +32,12 @@ class NodeConfig:
     extra: Dict[str, Any] = field(default_factory=dict)
     
     def get(self, key: str, default: Any = None) -> Any:
-        """获取配置值
-        
-        Args:
-            key: 配置键
-            default: 默认值
-            
-        Returns:
-            配置值
-        """
-        if hasattr(self, key):
+        if key in _KNOWN_FIELDS and key != "extra":
             return getattr(self, key, default)
         return self.extra.get(key, default)
     
     def set(self, key: str, value: Any) -> None:
-        """设置配置值
-        
-        Args:
-            key: 配置键
-            value: 配置值
-        """
-        if hasattr(self, key) and key != "extra":
+        if key in _KNOWN_FIELDS and key != "extra":
             setattr(self, key, value)
         else:
             self.extra[key] = value

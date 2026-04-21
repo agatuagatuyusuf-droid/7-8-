@@ -31,6 +31,8 @@ class MouseClickNode(ActionNode):
         self.click_interval_random = self.config.get_int("click_interval_random", 0)
         self._current_click = 0
         self._last_click_time: Optional[float] = None
+        self._actual_interval: Optional[int] = None
+        self._actual_duration: Optional[int] = None
         self._abort_flag = False
         self._click_started = False
         self._button_pressed = False
@@ -76,11 +78,13 @@ class MouseClickNode(ActionNode):
 
     def _non_blocking_finite_click(self, context, position: Optional[Tuple[int, int]]) -> NodeStatus:
         current_time = time.time() * 1000
-        actual_interval = get_random_interval(self.click_interval, self.click_interval_random)
         
-        if self._last_click_time is not None and actual_interval > 0:
+        if self._actual_interval is None:
+            self._actual_interval = get_random_interval(self.click_interval, self.click_interval_random)
+        
+        if self._last_click_time is not None and self._actual_interval > 0:
             elapsed = current_time - self._last_click_time
-            if elapsed < actual_interval:
+            if elapsed < self._actual_interval:
                 return NodeStatus.RUNNING
         
         if self._current_click < self.click_count:
@@ -88,14 +92,17 @@ class MouseClickNode(ActionNode):
                 self._release_button()
                 return NodeStatus.ABORTED
             
-            actual_duration = get_random_duration(self.duration, self.duration_random)
-            context.execute_mouse_click(self.button, position, self.action, actual_duration)
+            if self._actual_duration is None:
+                self._actual_duration = get_random_duration(self.duration, self.duration_random)
+            context.execute_mouse_click(self.button, position, self.action, self._actual_duration)
             
             if self.action == "down":
                 self._button_pressed = True
             
             self._current_click += 1
             self._last_click_time = time.time() * 1000
+            self._actual_interval = None
+            self._actual_duration = None
             
             if self._current_click < self.click_count:
                 return NodeStatus.RUNNING
@@ -109,11 +116,13 @@ class MouseClickNode(ActionNode):
 
     def _non_blocking_infinite_click(self, context, position: Optional[Tuple[int, int]]) -> NodeStatus:
         current_time = time.time() * 1000
-        actual_interval = get_random_interval(self.click_interval, self.click_interval_random)
         
-        if self._last_click_time is not None and actual_interval > 0:
+        if self._actual_interval is None:
+            self._actual_interval = get_random_interval(self.click_interval, self.click_interval_random)
+        
+        if self._last_click_time is not None and self._actual_interval > 0:
             elapsed = current_time - self._last_click_time
-            if elapsed < actual_interval:
+            if elapsed < self._actual_interval:
                 return NodeStatus.RUNNING
         
         if self._abort_flag or not context.check_running():
@@ -124,14 +133,17 @@ class MouseClickNode(ActionNode):
             )
             return NodeStatus.ABORTED
         
-        actual_duration = get_random_duration(self.duration, self.duration_random)
-        context.execute_mouse_click(self.button, position, self.action, actual_duration)
+        if self._actual_duration is None:
+            self._actual_duration = get_random_duration(self.duration, self.duration_random)
+        context.execute_mouse_click(self.button, position, self.action, self._actual_duration)
         
         if self.action == "down":
             self._button_pressed = True
         
         self._current_click += 1
         self._last_click_time = time.time() * 1000
+        self._actual_interval = None
+        self._actual_duration = None
         
         return NodeStatus.RUNNING
 
@@ -145,9 +157,10 @@ class MouseClickNode(ActionNode):
         self._reset_click_state()
 
     def _reset_click_state(self) -> None:
-        """重置点击状态（不释放按钮）"""
         self._current_click = 0
         self._last_click_time = None
+        self._actual_interval = None
+        self._actual_duration = None
         self._abort_flag = False
         self._click_started = False
         self._button_pressed = False

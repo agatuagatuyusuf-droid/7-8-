@@ -230,23 +230,24 @@ class Serializer:
         parent_stack = []
 
         for line in lines:
-            if not line.strip() or line.startswith(';'):
+            if not line.strip() or line.strip().startswith(';'):
                 continue
 
-            match = re.match(r'^(\s*)(\w+)', line)
+            match = re.match(r'^(\s*)(\w+)(?:\s*:\s*(.*))?', line)
             if not match:
                 continue
 
-            indent = len(match.group(1))
+            indent = len(match.group(1)) // 2
             node_type = match.group(2).strip()
-            name = match.group(3).strip() if match else ""
+            name = match.group(3).strip() if match.group(3) else ""
 
             config = {}
             current_line = line.lstrip()
 
-            while current_line and current_line.startswith(';'):
-                if ':' in current_line:
-                    key_part, value_part = current_line.split(':', 1)
+            if current_line.startswith(';'):
+                rest = current_line[1:].strip()
+                if ':' in rest:
+                    key_part, value_part = rest.split(':', 1)
                     key = key_part.strip()
                     value = value_part.strip()
                     if value.startswith('"') and value.endswith('"'):

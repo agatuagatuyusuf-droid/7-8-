@@ -39,6 +39,10 @@ class PackageImporter:
                 found_tree_json = False
                 
                 for name in namelist:
+                    normalized = os.path.normpath(name)
+                    if normalized.startswith('..') or os.path.isabs(normalized):
+                        return False, "ZIP 包含路径遍历条目，可能是恶意文件"
+                    
                     basename = os.path.basename(name)
                     if basename == "project.json":
                         found_project_json = True
@@ -172,7 +176,13 @@ class PackageImporter:
                     if not relative_path or relative_path.endswith("/"):
                         continue
                     
-                    target_path = os.path.join(project_root, relative_path)
+                    target_path = os.path.normpath(os.path.join(project_root, relative_path))
+                    
+                    normalized_root = os.path.normpath(project_root)
+                    if not (target_path.startswith(normalized_root + os.sep) or
+                            target_path == normalized_root):
+                        continue
+                    
                     os.makedirs(os.path.dirname(target_path), exist_ok=True)
                     
                     with zipf.open(member) as source, open(target_path, 'wb') as target:

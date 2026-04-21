@@ -18,6 +18,7 @@ class KeyPressNode(ActionNode):
         
         self._key_started = False
         self._start_time: Optional[float] = None
+        self._actual_duration: Optional[int] = None
         self._abort_flag = False
         self._context = None
 
@@ -61,11 +62,11 @@ class KeyPressNode(ActionNode):
             return NodeStatus.FAILURE
 
     def _non_blocking_press(self, context) -> NodeStatus:
-        """非阻塞按键"""
         if not self._key_started:
             context.execute_key_press(self.key, "down", 0)
             self._key_started = True
             self._start_time = time.time() * 1000
+            self._actual_duration = get_random_duration(self.duration, self.duration_random)
         
         if self._abort_flag or not context.check_running():
             self._release_key()
@@ -76,9 +77,8 @@ class KeyPressNode(ActionNode):
             return NodeStatus.ABORTED
         
         current_time = time.time() * 1000
-        actual_duration = get_random_duration(self.duration, self.duration_random)
         
-        if current_time - self._start_time < actual_duration:
+        if current_time - self._start_time < self._actual_duration:
             return NodeStatus.RUNNING
         
         context.execute_key_press(self.key, "up", 0)
@@ -100,9 +100,9 @@ class KeyPressNode(ActionNode):
         self._reset_key_state()
 
     def _reset_key_state(self) -> None:
-        """重置按键状态（不释放按键）"""
         self._key_started = False
         self._start_time = None
+        self._actual_duration = None
         self._abort_flag = False
 
     def abort(self, context) -> None:

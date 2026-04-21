@@ -1,5 +1,6 @@
 import json
 import os
+import copy
 import datetime
 from typing import Any, Dict, Optional, List, Callable
 from dataclasses import dataclass, field, asdict
@@ -195,9 +196,9 @@ class SettingsManager:
                 self._migrate_config()
             except Exception as e:
                 print(f"[WARN] 加载配置文件失败: {e}")
-                self.settings = dict(self.DEFAULT_SETTINGS)
+                self.settings = copy.deepcopy(self.DEFAULT_SETTINGS)
         else:
-            self.settings = dict(self.DEFAULT_SETTINGS)
+            self.settings = copy.deepcopy(self.DEFAULT_SETTINGS)
     
     def _merge_defaults(self) -> None:
         """合并默认设置"""
@@ -337,7 +338,7 @@ class SettingsManager:
             key: 设置键，为None时重置所有设置
         """
         if key is None:
-            self.settings = dict(self.DEFAULT_SETTINGS)
+            self.settings = copy.deepcopy(self.DEFAULT_SETTINGS)
             self._blackboard_config_cache = None
             self._session_config_cache = None
         else:
@@ -423,7 +424,7 @@ class SettingsManager:
     
     def get_all_settings(self) -> Dict[str, Any]:
         """获取所有设置"""
-        return dict(self.settings)
+        return copy.deepcopy(self.settings)
     
     def load_all_settings(self, settings: Dict[str, Any]) -> None:
         """加载所有设置"""
