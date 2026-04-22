@@ -48,6 +48,10 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self._redraw_scheduled = False
         self._redraw_all_flag = False
         
+        self._drag_throttle_timer = None
+        self._drag_pending_redraw = False
+        self._drag_throttle_ms = 16
+        
         self._dragging = False
         self._drag_node: Optional[str] = None
         self._drag_start = (0, 0)
@@ -344,7 +348,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                 node = self.nodes[self._drag_node]
                 node.move_to(x - self._drag_start[0], y - self._drag_start[1])
             
-            self._redraw_connections()
+            self._schedule_drag_redraw()
             return
         
         if self._panning:
@@ -352,7 +356,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             dy = event.y - self._pan_start[1]
             self.pan_x = self._pan_start_offset[0] + dx
             self.pan_y = self._pan_start_offset[1] + dy
-            self._redraw_all()
+            self._schedule_drag_redraw()
             self._draw_grid()
     
     def _on_release(self, event):
@@ -443,7 +447,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         if self._right_pan_moved:
             self.pan_x = self._right_pan_start_offset[0] + dx
             self.pan_y = self._right_pan_start_offset[1] + dy
-            self._redraw_all()
+            self._schedule_drag_redraw()
             self._draw_grid()
     
     def _on_right_release(self, event):
@@ -769,6 +773,28 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         if not self._redraw_scheduled:
             self._redraw_scheduled = True
             self.after(16, self._do_incremental_redraw)
+    
+    def _schedule_drag_redraw(self):
+        """节流式拖拽重绘，避免高频鼠标事件导致重绘过于频繁"""
+        if self._drag_throttle_timer is None:
+            self._drag_throttle_timer = self.after(
+                self._drag_throttle_ms, self._do_drag_redraw
+            )
+        else:
+            self._drag_pending_redraw = True
+    
+    def _do_drag_redraw(self):
+        """执行节流后的拖拽重绘"""
+        self._drag_throttle_timer = None
+        
+        if self._drag_pending_redraw:
+            self._drag_pending_redraw = False
+            self._drag_throttle_timer = self.after(
+                self._drag_throttle_ms, self._do_drag_redraw
+            )
+        
+        self._redraw_all_flag = True
+        self._do_incremental_redraw()
     
     def _do_incremental_redraw(self):
         self._redraw_scheduled = False

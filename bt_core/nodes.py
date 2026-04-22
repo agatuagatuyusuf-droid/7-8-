@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, TYPE_CHECKING
 import uuid
+import time
 
 from .status import NodeStatus
 from .config import NodeConfig
@@ -35,6 +36,8 @@ class Node(ABC):
         self._retry_count = 0
         self._repeat_count = 0
         self._start_time: Optional[float] = None
+        self._child_index = 0
+        self._children_running = False
 
     @abstractmethod
     def tick(self, context: "ExecutionContext") -> NodeStatus:
@@ -74,9 +77,12 @@ class Node(ABC):
             if elapsed_ms >= timeout_ms:
                 self.status = NodeStatus.FAILURE
                 context.notify_node_status(self.node_id, "failure")
+                context.record_node_stats(self.node_id, self.NODE_TYPE, self.name, "failure", timeout_ms)
                 return NodeStatus.FAILURE
 
+        start_time = time.perf_counter()
         status = execute_func(context)
+        duration_ms = (time.perf_counter() - start_time) * 1000
         self.status = status
 
         retry_count = self.config.retry_count
@@ -94,13 +100,15 @@ class Node(ABC):
                 repeat_interval_ms = self.config.repeat_interval_ms
                 repeat_interval_ms_random = self.config.get_int("repeat_interval_ms_random", 0)
                 if repeat_interval_ms > 0 or repeat_interval_ms_random > 0:
-                    import time
                     actual_interval = get_random_interval(repeat_interval_ms, repeat_interval_ms_random)
                     if actual_interval > 0:
                         time.sleep(actual_interval / 1000)
                 
                 self._reset_for_repeat()
                 return NodeStatus.RUNNING
+
+        status_str = "success" if status == NodeStatus.SUCCESS else "failure" if status == NodeStatus.FAILURE else "running"
+        context.record_node_stats(self.node_id, self.NODE_TYPE, self.name, status_str, duration_ms)
 
         if status == NodeStatus.SUCCESS:
             context.notify_node_status(self.node_id, "success")
@@ -136,8 +144,38 @@ class Node(ABC):
             self._retry_count = 0
             self._repeat_count = 0
         self._start_time = None
+        self._child_index = 0
+        self._children_running = False
         for child in self.children:
             child.reset()
+
+    def _execute_children(self, context: "ExecutionContext") -> NodeStatus:
+        """执行子节点（通用实现）
+
+        Args:
+            context: 执行上下文
+
+        Returns:
+            执行状态
+        """
+        while self._child_index < len(self.children):
+            child = self.children[self._child_index]
+            status = child.tick(context)
+            
+            if status == NodeStatus.RUNNING:
+                self._children_running = True
+                return NodeStatus.RUNNING
+            
+            if status != NodeStatus.SUCCESS:
+                self._child_index = 0
+                self._children_running = False
+                return status
+            
+            self._child_index += 1
+        
+        self._child_index = 0
+        self._children_running = False
+        return NodeStatus.SUCCESS
 
     def is_protected(self) -> bool:
         """
@@ -742,8 +780,6 @@ class ConditionNode(Node):
             self.offset = (offset_x, offset_y)
         
         self._last_check_time = -self.check_interval_ms - 1
-        self._child_index = 0
-        self._children_running = False
 
     def _parse_region(self, region_config) -> tuple:
         """解析区域配置
@@ -864,39 +900,69 @@ class ConditionNode(Node):
         """
         pass
 
-    def _execute_children(self, context: "ExecutionContext") -> NodeStatus:
-        """执行子节点
+    def _validate_region(self, region) -> bool:
+        """验证区域配置是否有效
+
+        Args:
+            region: 区域配置
+
+        Returns:
+            区域是否有效
+        """
+        if region is None:
+            return True
+        if isinstance(region, (list, tuple)) and len(region) == 4:
+            return all(isinstance(x, int) for x in region)
+        return False
+
+    def _get_region_image(self, context):
+        """获取区域图像（截图+裁剪）
 
         Args:
             context: 执行上下文
 
         Returns:
-            执行状态
+            PIL.Image 或 None
         """
-        while self._child_index < len(self.children):
-            child = self.children[self._child_index]
-            status = child.tick(context)
-            
-            if status == NodeStatus.RUNNING:
-                self._children_running = True
-                return NodeStatus.RUNNING
-            
-            if status != NodeStatus.SUCCESS:
-                self._child_index = 0
-                self._children_running = False
-                return status
-            
-            self._child_index += 1
-        
-        self._child_index = 0
-        self._children_running = False
-        return NodeStatus.SUCCESS
+        try:
+            return context.get_screenshot(self.region)
+        except Exception as e:
+            from bt_utils.log_manager import LogManager
+            LogManager.instance().log_failure(
+                node_type=self.NODE_TYPE,
+                node_name=self.name,
+                reason=f"截图失败: {e}"
+            )
+            return None
+
+    def _log_condition_result(self, success: bool, reason: str = None,
+                               extra_info: str = None):
+        """记录条件检测结果日志
+
+        Args:
+            success: 是否成功
+            reason: 失败原因（成功时为None）
+            extra_info: 额外信息
+        """
+        from bt_utils.log_manager import LogManager
+        if success:
+            LogManager.instance().log_success(
+                node_type=self.NODE_TYPE,
+                node_name=self.name
+            )
+        else:
+            log_reason = reason or "条件不满足"
+            if extra_info:
+                log_reason += f"，{extra_info}"
+            LogManager.instance().log_failure(
+                node_type=self.NODE_TYPE,
+                node_name=self.name,
+                reason=log_reason
+            )
 
     def reset(self, reset_counters: bool = True) -> None:
         super().reset(reset_counters)
         self._last_check_time = 0
-        self._child_index = 0
-        self._children_running = False
 
 
 class ActionNode(Node):
@@ -905,11 +971,6 @@ class ActionNode(Node):
     执行特定动作，动作成功后可选执行子节点。
     """
     NODE_TYPE = "ActionNode"
-
-    def __init__(self, node_id: str = None, config: NodeConfig = None):
-        super().__init__(node_id, config)
-        self._child_index = 0
-        self._children_running = False
 
     def tick(self, context: "ExecutionContext") -> NodeStatus:
         return self._execute_with_decorators(context, self._tick_internal)
@@ -939,38 +1000,6 @@ class ActionNode(Node):
             执行状态
         """
         pass
-
-    def _execute_children(self, context: "ExecutionContext") -> NodeStatus:
-        """执行子节点
-
-        Args:
-            context: 执行上下文
-
-        Returns:
-            执行状态
-        """
-        while self._child_index < len(self.children):
-            child = self.children[self._child_index]
-            status = child.tick(context)
-            
-            if status == NodeStatus.RUNNING:
-                return NodeStatus.RUNNING
-            
-            if status != NodeStatus.SUCCESS:
-                self._child_index = 0
-                self._children_running = False
-                return status
-            
-            self._child_index += 1
-        
-        self._child_index = 0
-        self._children_running = False
-        return NodeStatus.SUCCESS
-
-    def reset(self, reset_counters: bool = True) -> None:
-        super().reset(reset_counters)
-        self._child_index = 0
-        self._children_running = False
 
 
 class StartNode(CompositeNode):

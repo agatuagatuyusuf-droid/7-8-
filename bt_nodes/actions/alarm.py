@@ -98,8 +98,15 @@ class AlarmNode(ActionNode):
                 
                 if elapsed < self._sound_duration:
                     return NodeStatus.RUNNING
-            
-            self._stop_sound()
+                
+                # wait_complete = True 时，播放完成后停止音频
+                self._stop_sound()
+            else:
+                # wait_complete = False 时，只重置状态标志，不停止音频
+                self._sound_started = False
+                self._sound_start_time = None
+                self._sound_duration = None
+                self._abort_flag = False
             
             LogManager.instance().log_success(
                 node_type="报警节点",
@@ -118,12 +125,11 @@ class AlarmNode(ActionNode):
 
     def _stop_sound(self) -> None:
         """停止音频播放并重置状态"""
-        if self._sound_started:
-            try:
-                from bt_utils.alarm import AlarmPlayer
-                AlarmPlayer().stop()
-            except Exception:
-                pass
+        try:
+            from bt_utils.alarm import AlarmPlayer
+            AlarmPlayer().stop()
+        except Exception:
+            pass
         
         self._sound_started = False
         self._sound_start_time = None

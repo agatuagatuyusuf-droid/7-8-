@@ -1,9 +1,9 @@
-import os
-from PIL import Image
 from bt_core.nodes import ConditionNode
 from bt_core.config import NodeConfig
 from typing import Dict, Any, Tuple, Optional
-from bt_utils.log_manager import LogManager
+from PIL import Image
+import os
+from bt_utils.image_processor import ImageProcessor
 
 
 class ImageConditionNode(ConditionNode):
@@ -11,90 +11,82 @@ class ImageConditionNode(ConditionNode):
 
     def __init__(self, node_id: str = None, config: NodeConfig = None):
         super().__init__(node_id, config)
+        self.region: Optional[Tuple[int, int, int, int]] = self._parse_region(self.config.get("region", None))
         self.template_path = self.config.get("template_path", "")
-        raw_region = self.config.get("region", None)
-        self.region: Optional[Tuple[int, int, int, int]] = self._parse_region(raw_region)
-        
-        threshold_value = self.config.get_float("threshold", 0.8)
-        if threshold_value > 1.0:
-            self.threshold = threshold_value / 100.0
-        else:
-            self.threshold = threshold_value
-
-        self._template_image = None
-
-        self._last_template_path = None
-
-        self._last_template_mtime = 0
+        self.threshold = self.config.get_float("threshold", 0.8)
 
     def _check_condition(self, context) -> bool:
         try:
-            if not self.template_path:
-                LogManager.instance().log_failure(
-                    node_type="图像检测节点",
-                    node_name=self.name,
-                    reason="模板路径为空"
-                )
+            resolved_path = self._resolve_template_path(context)
+            if resolved_path is None:
                 return False
 
-            absolute_template_path = self.template_path
-            if self.template_path.startswith("./"):
-                if hasattr(context, 'resolve_path'):
-                    absolute_template_path = context.resolve_path(self.template_path)
-                elif hasattr(context, 'project_root'):
-                    absolute_template_path = os.path.join(context.project_root, self.template_path[2:])
-            else:
-                absolute_template_path = os.path.abspath(self.template_path)
-            if not os.path.exists(absolute_template_path):
-                LogManager.instance().log_failure(
-                    node_type="图像检测节点",
-                    node_name=self.name,
-                    reason=f"模板文件不存在: {absolute_template_path}"
-                )
+            screenshot = self._get_region_image(context)
+            if screenshot is None:
                 return False
-            if self._template_image is None or self._last_template_path != absolute_template_path:
-                self._template_image = Image.open(absolute_template_path)
-                self._last_template_path = absolute_template_path
-                self._last_template_mtime = os.path.getmtime(absolute_template_path)
-            screenshot = context.get_screenshot(self.region)
-            from bt_utils.image_processor import ImageProcessor
+
+            if not os.path.exists(resolved_path):
+                self._log_condition_result(False, f"模板文件不存在: {self.template_path}")
+                return False
+
+            template = Image.open(resolved_path)
+            if template is None:
+                self._log_condition_result(False, f"无法加载模板文件: {self.template_path}")
+                return False
+
             found, position, confidence = ImageProcessor.find_template(
-                screenshot, self._template_image, self.threshold
+                screenshot, template, self.threshold
             )
-            if found and position:
-                if self.region:
-                    position = (position[0] + self.region[0], position[1] + self.region[1])
-                self._save_position(context, position)
-                LogManager.instance().log_success(
-                    node_type="图像检测节点",
-                    node_name=self.name
-                )
+
+            if found:
+                actual_position = self._adjust_position(position)
+                self._save_position(context, actual_position)
+                self._log_condition_result(True)
                 return True
             else:
-                LogManager.instance().log_failure(
-                    node_type="图像检测节点",
-                    node_name=self.name,
-                    reason=f"未找到匹配的图像，最高置信度: {confidence:.2%}，阈值: {self.threshold:.2%}"
-                )
+                self._log_condition_result(False, f"未找到匹配模板 (阈值: {self.threshold}, 最高置信度: {confidence:.2f})")
                 return False
         except Exception as e:
-            LogManager.instance().log_failure(
-                node_type="图像检测节点",
-                node_name=self.name,
-                reason=str(e)
-            )
+            self._log_condition_result(False, str(e))
             return False
+
+    def _resolve_template_path(self, context) -> Optional[str]:
+        """解析模板路径
+
+        Args:
+            context: 执行上下文
+
+        Returns:
+            解析后的绝对路径，或None
+        """
+        if not self.template_path:
+            self._log_condition_result(False, "未设置模板路径")
+            return None
+
+        if self.template_path.startswith("./") and hasattr(context, 'resolve_path'):
+            return context.resolve_path(self.template_path)
+
+        return self.template_path
+
+    def _adjust_position(self, position: tuple) -> tuple:
+        """调整坐标（加上区域偏移）
+
+        Args:
+            position: 相对位置
+
+        Returns:
+            绝对位置
+        """
+        if position is None:
+            return None
+        if self.region:
+            return (position[0] + self.region[0], position[1] + self.region[1])
+        return position
 
     def to_dict(self) -> Dict[str, Any]:
         data = super().to_dict()
-        data["config"]["template_path"] = self.template_path
         data["config"]["region"] = list(self.region) if self.region else None
+        data["config"]["template_path"] = self.template_path
         data["config"]["threshold"] = self.threshold
         data["config"]["offset"] = list(self.offset)
         return data
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ImageConditionNode":
-        config = NodeConfig.from_dict(data.get("config", {}))
-        node = cls(node_id=data.get("id"), config=config)
-        return node

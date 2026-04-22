@@ -4,11 +4,14 @@ import math
 import threading
 from typing import Tuple
 
+from .base_input import BaseInputController
 
-class InputController:
+
+class InputController(BaseInputController):
     """输入控制器
 
     封装键盘和鼠标操作，提供统一的输入控制接口。
+    继承 BaseInputController 抽象基类。
     """
 
     _simulate_lock = threading.Lock()
@@ -187,22 +190,28 @@ class InputController:
         finally:
             self._set_simulating(False)
 
-    def mouse_move(self, position: Tuple[int, int], relative: bool = False,
-                   smooth: bool = False, duration: float = 0.3) -> None:
+    def mouse_move(self, position: Tuple[int, int], relative: bool = False) -> None:
         """移动鼠标
 
         Args:
             position: 目标位置 (x, y)
             relative: 是否相对移动
-            smooth: 是否平滑移动
-            duration: 平滑移动时长（秒）
         """
-        if smooth:
-            self._smooth_move(position, relative, duration)
-        elif relative:
+        if relative:
             pyautogui.move(position[0], position[1])
         else:
             pyautogui.moveTo(position[0], position[1])
+
+    def smooth_move(self, position: Tuple[int, int], relative: bool = False,
+                    duration: float = 0.3) -> None:
+        """平滑移动鼠标
+
+        Args:
+            position: 目标位置
+            relative: 是否相对移动
+            duration: 移动时长
+        """
+        self._smooth_move(position, relative, duration)
 
     def _smooth_move(self, target: Tuple[int, int], relative: bool, duration: float) -> None:
         """平滑移动鼠标
@@ -246,7 +255,10 @@ class InputController:
             smooth: 是否平滑移动
             duration: 平滑移动时长
         """
-        self.mouse_move((x, y), relative=False, smooth=smooth, duration=duration)
+        if smooth:
+            self.smooth_move((x, y), relative=False, duration=duration)
+        else:
+            self.mouse_move((x, y), relative=False)
 
     def mouse_scroll(self, amount: int, position: Tuple[int, int] = None) -> None:
         """鼠标滚轮

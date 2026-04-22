@@ -31,6 +31,29 @@ class ExecutionContext:
         self._ocr_manager = None
         self._alarm_player = None
         self._path_resolver = None
+        self._stats_collector = None
+    
+    def set_stats_collector(self, collector):
+        """设置统计收集器
+        
+        Args:
+            collector: 统计收集器实例
+        """
+        self._stats_collector = collector
+    
+    def record_node_stats(self, node_id: str, node_type: str, node_name: str,
+                          status: str, duration_ms: float):
+        """记录节点执行统计
+        
+        Args:
+            node_id: 节点ID
+            node_type: 节点类型
+            node_name: 节点名称
+            status: 执行状态
+            duration_ms: 执行时长（毫秒）
+        """
+        if self._stats_collector:
+            self._stats_collector.record_node(node_id, node_type, node_name, status, duration_ms)
     
     def check_running(self) -> bool:
         if self._is_paused:

@@ -5,9 +5,6 @@ import logging
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# 注释掉终端日志输出（如需启用，取消下面注释即可）
-logging.disable(logging.CRITICAL)
-
 def get_resource_path(relative_path):
     """获取资源文件的绝对路径，支持PyInstaller打包后的路径"""
     if hasattr(sys, '_MEIPASS'):

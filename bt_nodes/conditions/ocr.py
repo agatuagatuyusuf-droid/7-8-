@@ -1,9 +1,6 @@
 from bt_core.nodes import ConditionNode
 from bt_core.config import NodeConfig
 from typing import Dict, Any, Tuple, Optional
-from bt_utils.log_manager import LogManager
-
-
 from bt_utils.ocr_manager import OCRManager
 
 
@@ -33,36 +30,26 @@ class OCRConditionNode(ConditionNode):
 
     def _check_condition(self, context) -> bool:
         try:
-            screenshot = context.get_screenshot(self.region)
+            screenshot = self._get_region_image(context)
+            if screenshot is None:
+                return False
 
-            found, position, all_text = OCRManager.instance().recognize(
-                screenshot, self.keywords, self.language, 
+            found, position, all_text = OCRManager().recognize(
+                screenshot, self.keywords, self.language,
                 preprocess_mode=self.preprocess_mode, region=self.region
             )
 
             if found:
                 self._save_position(context, position)
-                LogManager.instance().log_success(
-                    node_type="文字检测节点",
-                    node_name=self.name
-                )
+                self._log_condition_result(True)
                 return True
             else:
                 reason = f"未找到关键词: {self.keywords}"
-                if all_text:
-                    reason += f"，识别到的文本: {all_text}"
-                LogManager.instance().log_failure(
-                    node_type="文字检测节点",
-                    node_name=self.name,
-                    reason=reason
-                )
+                extra = f"识别到的文本: {all_text}" if all_text else None
+                self._log_condition_result(False, reason, extra)
                 return False
         except Exception as e:
-            LogManager.instance().log_failure(
-                node_type="文字检测节点",
-                node_name=self.name,
-                reason=str(e)
-            )
+            self._log_condition_result(False, str(e))
             return False
 
     def to_dict(self) -> Dict[str, Any]:
@@ -75,4 +62,3 @@ class OCRConditionNode(ConditionNode):
         data["config"]["position_key"] = self.position_key
         data["config"]["offset"] = list(self.offset)
         return data
-

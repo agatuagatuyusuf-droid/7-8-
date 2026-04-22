@@ -1,8 +1,11 @@
 from rapidocr import RapidOCR
 from PIL import Image, ImageEnhance, ImageFilter
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
 import numpy as np
 import re
+import time
+import hashlib
+import threading
 from bt_utils.singleton import singleton
 
 
@@ -13,6 +16,7 @@ class OCRManager:
     封装RapidOCR功能，提供文字识别和数字识别。
     支持图像预处理和多语言识别。
     使用单例模式，线程安全。
+    带结果缓存机制，避免重复识别。
     """
     _engine: Optional[RapidOCR] = None
     _available: bool = True
@@ -20,9 +24,15 @@ class OCRManager:
 
     CHINESE_LANGS = {"chi_sim", "chi_tra"}
 
+    DEFAULT_CACHE_TTL = 1.0
+    MAX_CACHE_SIZE = 50
+
     def __init__(self):
         if not self._available:
             return
+        
+        self._cache: Dict[str, Tuple[Any, float]] = {}
+        self._cache_lock = threading.Lock()
         
         try:
             self._engine = RapidOCR()
@@ -74,6 +84,61 @@ class OCRManager:
             不可用原因
         """
         return cls._unavailable_reason
+
+    def _compute_cache_key(self, image: Image.Image, **kwargs) -> str:
+        """计算缓存键
+
+        Args:
+            image: PIL图像
+            **kwargs: 额外参数
+
+        Returns:
+            缓存键字符串
+        """
+        try:
+            img_bytes = np.array(image).tobytes()
+            img_hash = hashlib.md5(img_bytes).hexdigest()[:16]
+        except Exception:
+            img_hash = str(id(image))
+        
+        params_str = str(sorted(kwargs.items()))
+        params_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
+        return f"{img_hash}_{params_hash}"
+
+    def _get_cached_result(self, cache_key: str) -> Optional[Any]:
+        """获取缓存结果
+
+        Args:
+            cache_key: 缓存键
+
+        Returns:
+            缓存的结果，未命中返回None
+        """
+        with self._cache_lock:
+            if cache_key in self._cache:
+                result, timestamp = self._cache[cache_key]
+                if time.time() - timestamp < self.DEFAULT_CACHE_TTL:
+                    return result
+                del self._cache[cache_key]
+        return None
+
+    def _set_cached_result(self, cache_key: str, result: Any):
+        """设置缓存结果
+
+        Args:
+            cache_key: 缓存键
+            result: 结果
+        """
+        with self._cache_lock:
+            if len(self._cache) >= self.MAX_CACHE_SIZE:
+                oldest_key = min(self._cache, key=lambda k: self._cache[k][1])
+                del self._cache[oldest_key]
+            self._cache[cache_key] = (result, time.time())
+
+    def clear_cache(self):
+        """清空缓存"""
+        with self._cache_lock:
+            self._cache.clear()
 
     def _preprocess_chinese(self, image: Image.Image) -> Image.Image:
         """中文图像预处理
@@ -156,7 +221,8 @@ class OCRManager:
     def recognize(self, image: Image.Image, keywords: str = None,
                   language: str = "eng",
                   preprocess_mode: str = "normal",
-                  region: Tuple[int, int, int, int] = None) -> Tuple[bool, Optional[Tuple[int, int]], str]:
+                  region: Tuple[int, int, int, int] = None,
+                  use_cache: bool = True) -> Tuple[bool, Optional[Tuple[int, int]], str]:
         """执行OCR识别
 
         Args:
@@ -165,6 +231,7 @@ class OCRManager:
             language: OCR语言
             preprocess_mode: 预处理模式
             region: 截图区域 (left, top, right, bottom)，用于坐标转换
+            use_cache: 是否使用缓存
 
         Returns:
             (是否找到, 位置坐标, 所有识别文本) 元组
@@ -175,6 +242,16 @@ class OCRManager:
             
             if self._engine is None:
                 return False, None, ""
+            
+            cache_key = None
+            if use_cache:
+                cache_key = self._compute_cache_key(
+                    image, keywords=keywords, language=language,
+                    preprocess_mode=preprocess_mode, region=region
+                )
+                cached = self._get_cached_result(cache_key)
+                if cached is not None:
+                    return cached
             
             processed = self._preprocess_image(image, language, preprocess_mode)
             
@@ -231,11 +308,20 @@ class OCRManager:
                                 x += region[0]
                                 y += region[1]
                             
-                            return True, (x, y), all_text
+                            result = (True, (x, y), all_text)
+                            if cache_key:
+                                self._set_cached_result(cache_key, result)
+                            return result
                 
-                return False, None, all_text
+                result = (False, None, all_text)
+                if cache_key:
+                    self._set_cached_result(cache_key, result)
+                return result
             
-            return True, None, all_text
+            result = (True, None, all_text)
+            if cache_key:
+                self._set_cached_result(cache_key, result)
+            return result
         
         except Exception:
             return False, None, ""
@@ -286,7 +372,8 @@ class OCRManager:
                                         preprocess_mode: str = "normal",
                                         extract_mode: str = "无规则",
                                         extract_pattern: str = "",
-                                        min_confidence: float = 0.5) -> Tuple[bool, Optional[float], str, Optional[Tuple[int, int]]]:
+                                        min_confidence: float = 0.5,
+                                        use_cache: bool = True) -> Tuple[bool, Optional[float], str, Optional[Tuple[int, int]]]:
         """识别数字（带位置）
 
         Args:
@@ -296,6 +383,7 @@ class OCRManager:
             extract_mode: 提取模式 (无规则/x/y/自定义)
             extract_pattern: 自定义提取模式（使用*作为通配符）
             min_confidence: 最小置信度 (RapidOCR自动过滤低置信度结果)
+            use_cache: 是否使用缓存
 
         Returns:
             (是否识别成功, 数字值, 所有识别文本, 位置坐标) 元组
@@ -306,6 +394,17 @@ class OCRManager:
             
             if self._engine is None:
                 return False, None, "", None
+            
+            cache_key = None
+            if use_cache:
+                cache_key = self._compute_cache_key(
+                    image, language=language, preprocess_mode=preprocess_mode,
+                    extract_mode=extract_mode, extract_pattern=extract_pattern,
+                    min_confidence=min_confidence, method="number"
+                )
+                cached = self._get_cached_result(cache_key)
+                if cached is not None:
+                    return cached
             
             processed = self._preprocess_image(image, language, preprocess_mode)
             
@@ -335,9 +434,15 @@ class OCRManager:
                     
                     position = (center_x, center_y)
                 
-                return True, extracted, all_text, position
+                result_data = (True, extracted, all_text, position)
+                if cache_key:
+                    self._set_cached_result(cache_key, result_data)
+                return result_data
             
-            return False, None, all_text, None
+            result_data = (False, None, all_text, None)
+            if cache_key:
+                self._set_cached_result(cache_key, result_data)
+            return result_data
         
         except Exception:
             return False, None, "", None
