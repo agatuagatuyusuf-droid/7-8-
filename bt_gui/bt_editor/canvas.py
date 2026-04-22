@@ -1,6 +1,6 @@
 import tkinter as tk
 import customtkinter as ctk
-from typing import Dict, List, Optional, Any, Callable
+from typing import Dict, List, Optional, Any, Callable, Set, Tuple
 import math
 
 from ..theme import Theme
@@ -42,6 +42,11 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         
         self.grid_enabled = True
         self.grid_size = 20
+        
+        self._dirty_nodes: Set[str] = set()
+        self._dirty_connections: Set[Tuple[str, str]] = set()
+        self._redraw_scheduled = False
+        self._redraw_all_flag = False
         
         self._dragging = False
         self._drag_node: Optional[str] = None
@@ -745,11 +750,131 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         return value * self.zoom
     
     def _redraw_all(self):
-        for node in self.nodes.values():
-            node.set_zoom(self.zoom)
-            node.set_pan(self.pan_x, self.pan_y)
-            node.redraw()
-        self._redraw_connections()
+        self._redraw_all_flag = True
+        self._schedule_redraw()
+    
+    def mark_node_dirty(self, node_id: str):
+        self._dirty_nodes.add(node_id)
+        self._schedule_redraw()
+    
+    def mark_connection_dirty(self, parent_id: str, child_id: str):
+        self._dirty_connections.add((parent_id, child_id))
+        self._schedule_redraw()
+    
+    def mark_all_dirty(self):
+        self._redraw_all_flag = True
+        self._schedule_redraw()
+    
+    def _schedule_redraw(self):
+        if not self._redraw_scheduled:
+            self._redraw_scheduled = True
+            self.after(16, self._do_incremental_redraw)
+    
+    def _do_incremental_redraw(self):
+        self._redraw_scheduled = False
+        
+        if self._redraw_all_flag:
+            self._redraw_all_flag = False
+            for node in self.nodes.values():
+                node.set_zoom(self.zoom)
+                node.set_pan(self.pan_x, self.pan_y)
+                node.redraw()
+            self._do_redraw_all_connections()
+            self._dirty_nodes.clear()
+            self._dirty_connections.clear()
+            return
+        
+        for node_id in self._dirty_nodes:
+            if node_id in self.nodes:
+                self.nodes[node_id].redraw()
+        
+        if self._dirty_connections:
+            self._redraw_affected_connections()
+        
+        self._dirty_nodes.clear()
+        self._dirty_connections.clear()
+    
+    def _do_redraw_all_connections(self):
+        self.canvas.delete("connection")
+        self.canvas.delete("connection_order")
+        self.connection_items.clear()
+        
+        parent_child_order: Dict[str, int] = {}
+        
+        for parent_id, child_id in self.connections:
+            if parent_id not in parent_child_order:
+                parent_child_order[parent_id] = 0
+            else:
+                parent_child_order[parent_id] += 1
+            
+            order_num = parent_child_order[parent_id] + 1
+            
+            if parent_id in self.nodes and child_id in self.nodes:
+                self._draw_single_connection(parent_id, child_id, order_num)
+        
+        self.canvas.tag_lower("connection_order")
+        self.canvas.tag_lower("connection")
+        self.canvas.tag_lower("grid")
+    
+    def _redraw_affected_connections(self):
+        for parent_id, child_id in self._dirty_connections:
+            if (parent_id, child_id) in self.connection_items:
+                self.canvas.delete(self.connection_items[(parent_id, child_id)])
+                del self.connection_items[(parent_id, child_id)]
+        
+        for parent_id, child_id in self._dirty_connections:
+            if parent_id in self.nodes and child_id in self.nodes:
+                siblings = [c for c in self.connections if c[0] == parent_id]
+                order = siblings.index((parent_id, child_id)) + 1 if (parent_id, child_id) in siblings else 1
+                self._draw_single_connection(parent_id, child_id, order)
+        
+        self.canvas.tag_lower("connection_order")
+        self.canvas.tag_lower("connection")
+        self.canvas.tag_lower("grid")
+    
+    def _draw_single_connection(self, parent_id: str, child_id: str, order_num: int):
+        parent = self.nodes[parent_id]
+        child = self.nodes[child_id]
+        
+        start_x, start_y = parent.get_output_port_pos()
+        end_x, end_y = child.get_input_port_pos()
+        
+        start_x = start_x * self.zoom + self.pan_x
+        start_y = start_y * self.zoom + self.pan_y
+        end_x = end_x * self.zoom + self.pan_x
+        end_y = end_y * self.zoom + self.pan_y
+        
+        mid_y = (start_y + end_y) / 2
+        
+        is_selected = ((parent_id, child_id) == self.selected_connection or 
+                      (parent_id, child_id) in self.selected_connections)
+        line_color = self._dark_colors.get('node_selected', '#FFD700') if is_selected else self._dark_colors['connection_line']
+        line_width = 3 if is_selected else 2
+        
+        line_id = self.canvas.create_line(
+            start_x, start_y,
+            start_x, mid_y,
+            end_x, mid_y,
+            end_x, end_y,
+            fill=line_color,
+            width=line_width,
+            smooth=True,
+            arrow=tk.LAST,
+            arrowshape=(10, 12, 5),
+            tags="connection"
+        )
+        
+        self.connection_items[(parent_id, child_id)] = line_id
+        
+        if order_num > 1 or len([c for c in self.connections if c[0] == parent_id]) > 1:
+            self.canvas.create_text(
+                end_x + 15,
+                end_y - 15,
+                text=str(order_num),
+                fill=self._dark_colors['text_secondary'],
+                font=("Arial", max(8, int(10 * self.zoom)), "bold"),
+                tags="connection_order"
+            )
     
     def clear_canvas(self, force: bool = False):
         start_node = None

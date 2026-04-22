@@ -26,6 +26,9 @@ class BehaviorTreeEngine:
         self._on_status_change: Optional[Callable] = None
         self._on_node_status: Optional[Callable] = None
         self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._pause_event = threading.Event()
+        self._pause_event.set()
 
     def load_tree(self, data: Dict[str, Any]) -> None:
         """从字典数据加载行为树
@@ -84,10 +87,11 @@ class BehaviorTreeEngine:
                 self._on_status_change("running")
 
     def stop(self) -> None:
-        """停止执行"""
         with self._lock:
             self._running = False
             self._paused = False
+            self._stop_event.set()
+            self._pause_event.set()
 
             if self.context:
                 self.context._is_running = False
@@ -104,14 +108,14 @@ class BehaviorTreeEngine:
                 self._on_status_change("stopped")
 
     def pause(self) -> None:
-        """暂停执行"""
         self._paused = True
+        self._pause_event.clear()
         if self._on_status_change:
             self._on_status_change("paused")
 
     def resume(self) -> None:
-        """恢复执行"""
         self._paused = False
+        self._pause_event.set()
         if self._on_status_change:
             self._on_status_change("running")
 
@@ -129,13 +133,15 @@ class BehaviorTreeEngine:
         }
 
     def _run_loop(self) -> None:
-        """执行循环"""
         start_time = time.time()
+        self._stop_event.clear()
 
-        while self._running:
-            if self._paused:
-                time.sleep(0.1)
+        while self._running and not self._stop_event.is_set():
+            if not self._pause_event.wait(0.1):
                 continue
+
+            if self._stop_event.is_set() or not self._running:
+                break
 
             self.context.elapsed_time = time.time() - start_time
             self.context.tick_count += 1
@@ -151,4 +157,5 @@ class BehaviorTreeEngine:
                     if self._on_status_change:
                         self._on_status_change("completed", status)
 
-            time.sleep(self._tick_interval)
+            if self._stop_event.wait(self._tick_interval):
+                break

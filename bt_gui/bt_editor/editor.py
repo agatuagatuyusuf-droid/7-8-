@@ -1284,7 +1284,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
     def _init_ui_dispatcher(self):
         """初始化UI更新分发器"""
         from bt_utils.ui_dispatcher import UIUpdateDispatcher
-        self._dispatcher = UIUpdateDispatcher.get_instance()
+        self._dispatcher = UIUpdateDispatcher()
         self._dispatcher.attach(self)
         self._dispatcher.start_polling()
     

@@ -61,7 +61,7 @@ class ExecutionContext:
         if self._on_node_status:
             try:
                 from bt_utils.ui_dispatcher import UIUpdateDispatcher
-                dispatcher = UIUpdateDispatcher.get_instance()
+                dispatcher = UIUpdateDispatcher()
                 dispatcher.dispatch_node_status(node_id, status, self._on_node_status)
             except ImportError:
                 self._on_node_status(node_id, status)

@@ -8,40 +8,43 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 class ScriptExecutor:
-    """脚本执行器
-
-    解析和执行脚本文件，支持循环执行和暂停/恢复。
-    使用线程池优化并发执行。
-    
-    支持上下文管理器协议，确保资源正确释放。
-    
-    使用方式:
-        # 方式1：上下文管理器（推荐）
-        with ScriptExecutor() as executor:
-            executor.run_script(script)
-        
-        # 方式2：手动管理
-        executor = ScriptExecutor()
-        try:
-            executor.run_script(script)
-        finally:
-            executor.shutdown()
-    """
-    
     _instances = weakref.WeakSet()
     
     _executor_pool: Optional[ThreadPoolExecutor] = None
     _futures: Dict[str, any] = {}
     
     def __init__(self, max_workers: int = 4):
-        self.is_running = False
-        self.is_paused = False
+        self._state_lock = threading.Lock()
+        self._is_running = False
+        self._is_paused = False
+        self._pause_event = threading.Event()
+        self._pause_event.set()
         self.execution_thread = None
         self._input_controller = None
         self._executor_pool = ThreadPoolExecutor(max_workers=max_workers)
         self._futures = {}
         
         ScriptExecutor._instances.add(self)
+    
+    @property
+    def is_running(self) -> bool:
+        with self._state_lock:
+            return self._is_running
+    
+    @is_running.setter
+    def is_running(self, value: bool):
+        with self._state_lock:
+            self._is_running = value
+    
+    @property
+    def is_paused(self) -> bool:
+        with self._state_lock:
+            return self._is_paused
+    
+    @is_paused.setter
+    def is_paused(self, value: bool):
+        with self._state_lock:
+            self._is_paused = value
     
     def __enter__(self) -> "ScriptExecutor":
         """进入上下文管理器"""
@@ -76,29 +79,29 @@ class ScriptExecutor:
         return self._input_controller
     
     def run_script(self, script_content: str, loop: bool = False) -> None:
-        """执行脚本
-
-        Args:
-            script_content: 脚本内容
-            loop: 是否循环执行
-        """
         commands = self._parse_script(script_content)
         if not commands:
             return
 
-        self.is_running = True
-        self.is_paused = False
+        with self._state_lock:
+            self._is_running = True
+            self._is_paused = False
+        self._pause_event.set()
 
         def execute():
             pressed_keys = set()
 
-            while self.is_running:
-                for command in commands:
-                    if not self.is_running:
+            while True:
+                with self._state_lock:
+                    if not self._is_running:
                         break
-
-                    while self.is_paused:
-                        time.sleep(0.1)
+                
+                self._pause_event.wait()
+                
+                for command in commands:
+                    with self._state_lock:
+                        if not self._is_running:
+                            break
 
                     self._execute_command(command, pressed_keys)
 
@@ -106,39 +109,41 @@ class ScriptExecutor:
                     break
 
             self._release_all_keys(pressed_keys)
-            self.is_running = False
+            with self._state_lock:
+                self._is_running = False
 
         self.execution_thread = threading.Thread(target=execute, daemon=True)
         self.execution_thread.start()
     
     def submit_script(self, script_id: str, script_content: str, 
                       loop: bool = False, callback=None) -> None:
-        """提交脚本到线程池执行
-
-        Args:
-            script_id: 脚本ID
-            script_content: 脚本内容
-            loop: 是否循环执行
-            callback: 完成回调
-        """
         commands = self._parse_script(script_content)
         if not commands:
             if callback:
                 callback(False)
             return
 
+        with self._state_lock:
+            self._is_running = True
+            self._is_paused = False
+        self._pause_event.set()
+
         def execute():
             pressed_keys = set()
             success = True
             
             try:
-                while self.is_running:
-                    for command in commands:
-                        if not self.is_running:
+                while True:
+                    with self._state_lock:
+                        if not self._is_running:
                             break
-
-                        while self.is_paused:
-                            time.sleep(0.1)
+                    
+                    self._pause_event.wait()
+                    
+                    for command in commands:
+                        with self._state_lock:
+                            if not self._is_running:
+                                break
 
                         self._execute_command(command, pressed_keys)
 
@@ -284,21 +289,24 @@ class ScriptExecutor:
                 pass
 
     def stop_script(self) -> None:
-        """停止脚本执行"""
-        self.is_running = False
-        self.is_paused = False
+        with self._state_lock:
+            self._is_running = False
+            self._is_paused = False
+        self._pause_event.set()
         
         for future in self._futures.values():
             future.cancel()
         self._futures.clear()
 
     def pause_script(self) -> None:
-        """暂停脚本执行"""
-        self.is_paused = True
+        with self._state_lock:
+            self._is_paused = True
+        self._pause_event.clear()
 
     def resume_script(self) -> None:
-        """恢复脚本执行"""
-        self.is_paused = False
+        with self._state_lock:
+            self._is_paused = False
+        self._pause_event.set()
         
     def shutdown(self) -> None:
         """关闭线程池"""

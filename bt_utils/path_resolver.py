@@ -21,20 +21,15 @@ class PathResolver:
         return f"./{rel_path.replace(os.sep, '/')}"
     
     def to_absolute(self, relative_path: str) -> str:
-        """
-        将相对路径转换为绝对路径
-        
-        Args:
-            relative_path: 相对于项目根目录的相对路径
-        
-        Returns:
-            资源的绝对路径
-        """
         if relative_path.startswith("./"):
             relative_path = relative_path[2:]
         
-        abs_path = os.path.join(self.project_root, relative_path)
-        return os.path.normpath(abs_path)
+        abs_path = os.path.normpath(os.path.join(self.project_root, relative_path))
+        
+        if not abs_path.startswith(os.path.normpath(self.project_root) + os.sep):
+            raise ValueError(f"路径遍历攻击检测: {relative_path} 试图逃逸项目根目录")
+        
+        return abs_path
     
     def is_valid_relative_path(self, path: str) -> bool:
         """

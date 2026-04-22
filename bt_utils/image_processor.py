@@ -106,18 +106,18 @@ class ImageProcessor:
 
     @staticmethod
     def compute_phash(image: Image.Image, hash_size: int = 8) -> str:
-        """计算感知哈希
-
-        Args:
-            image: PIL.Image 图像
-            hash_size: 哈希大小
-
-        Returns:
-            哈希字符串
-        """
-        img_array = np.array(image.convert('L').resize((hash_size + 1, hash_size)))
+        img = image.convert('L').resize((32, 32))
+        img_array = np.array(img, dtype=np.float64)
         
-        diff = img_array[:, 1:] > img_array[:, :-1]
+        dct = cv2.dct(img_array)
+        
+        dct_low = dct[:hash_size, :hash_size]
+        
+        dct_low_flat = dct_low.flatten()
+        dct_low_flat_no_dc = dct_low_flat[1:]
+        median = np.median(dct_low_flat_no_dc)
+        
+        diff = dct_low > median
         
         return ''.join(['1' if b else '0' for b in diff.flatten()])
 

@@ -1,8 +1,8 @@
 {
-    "version": "1.2.2",
-    "expire_date": "2027-05-21",
+    "version": "1.2.3a",
+    "expire_date": "2026-05-01",
     "force_update": false,
-    "build_type": "release",
+    "build_type": "debug",
     
     "github": {
         "owner": "wdhq4261761",

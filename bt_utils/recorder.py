@@ -1,17 +1,14 @@
 import time
+import threading
 from typing import List, Callable, Optional
 
 from pynput import mouse, keyboard
 
 
 class ScriptRecorder:
-    """脚本录制器
-
-    录制键盘和鼠标操作，生成可回放的脚本。
-    """
-
     def __init__(self):
-        self.is_recording = False
+        self._lock = threading.Lock()
+        self._is_recording = False
         self.events: List[dict] = []
         self.start_time: float = 0
         self.last_event_time: float = 0
@@ -21,12 +18,18 @@ class ScriptRecorder:
         self.mouse_listener: Optional[mouse.Listener] = None
         self._on_event: Optional[Callable] = None
 
+    @property
+    def is_recording(self) -> bool:
+        with self._lock:
+            return self._is_recording
+
     def start_recording(self) -> None:
-        """开始录制"""
-        self.is_recording = True
-        self.events = []
-        self.start_time = time.time()
-        self.last_event_time = self.start_time
+        with self._lock:
+            self._is_recording = True
+            self.events = []
+            self.start_time = time.time()
+            self.last_event_time = self.start_time
+            self.pressed_keys = set()
 
         self.keyboard_listener = keyboard.Listener(
             on_press=self._on_key_press,
@@ -41,19 +44,16 @@ class ScriptRecorder:
         self.mouse_listener.start()
 
     def stop_recording(self) -> List[dict]:
-        """停止录制
-
-        Returns:
-            录制的事件列表
-        """
-        self.is_recording = False
+        with self._lock:
+            self._is_recording = False
 
         if self.keyboard_listener:
             self.keyboard_listener.stop()
         if self.mouse_listener:
             self.mouse_listener.stop()
 
-        return self.events
+        with self._lock:
+            return list(self.events)
 
     def save_to_file(self, filepath: str) -> None:
         """保存录制到脚本文件
@@ -66,53 +66,56 @@ class ScriptRecorder:
                 f.write(self._format_event(event) + '\n')
 
     def _on_key_press(self, key):
-        if not self.is_recording:
-            return
+        with self._lock:
+            if not self._is_recording:
+                return
 
-        key_name = self._get_key_name(key)
-        if key_name and key_name not in self.pressed_keys:
-            self._add_delay()
-            self.events.append({
-                "type": "keydown",
-                "key": key_name
-            })
-            self.pressed_keys.add(key_name)
+            key_name = self._get_key_name(key)
+            if key_name and key_name not in self.pressed_keys:
+                self._add_delay()
+                self.events.append({
+                    "type": "keydown",
+                    "key": key_name
+                })
+                self.pressed_keys.add(key_name)
 
-            if self._on_event:
-                self._on_event(self.events[-1])
+                if self._on_event:
+                    self._on_event(self.events[-1])
 
     def _on_key_release(self, key):
-        if not self.is_recording:
-            return
+        with self._lock:
+            if not self._is_recording:
+                return
 
-        key_name = self._get_key_name(key)
-        if key_name and key_name in self.pressed_keys:
-            self._add_delay()
-            self.events.append({
-                "type": "keyup",
-                "key": key_name
-            })
-            self.pressed_keys.remove(key_name)
+            key_name = self._get_key_name(key)
+            if key_name and key_name in self.pressed_keys:
+                self._add_delay()
+                self.events.append({
+                    "type": "keyup",
+                    "key": key_name
+                })
+                self.pressed_keys.remove(key_name)
 
     def _on_mouse_move(self, x, y):
         pass
 
     def _on_mouse_click(self, x, y, button, pressed):
-        if not self.is_recording:
-            return
+        with self._lock:
+            if not self._is_recording:
+                return
 
-        self._add_delay()
+            self._add_delay()
 
-        self.events.append({
-            "type": "moveto",
-            "x": x,
-            "y": y
-        })
+            self.events.append({
+                "type": "moveto",
+                "x": x,
+                "y": y
+            })
 
-        self.events.append({
-            "type": f"mouse_{'down' if pressed else 'up'}",
-            "button": button.name
-        })
+            self.events.append({
+                "type": f"mouse_{'down' if pressed else 'up'}",
+                "button": button.name
+            })
 
     def _add_delay(self):
         current_time = time.time()

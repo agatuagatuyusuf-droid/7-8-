@@ -58,7 +58,11 @@ class NumberConditionNode(ConditionNode):
             
             found, value, all_text, position = ocr_manager.recognize_number_with_position(
                 screenshot, 
-                language=self.language
+                language=self.language,
+                preprocess_mode=self.preprocess_mode,
+                extract_mode=self.extract_mode,
+                extract_pattern=self.extract_pattern,
+                min_confidence=self.min_confidence
             )
             
             if found and value is not None:

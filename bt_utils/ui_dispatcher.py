@@ -3,6 +3,7 @@ from queue import Queue, Empty
 from typing import Callable, Any, Optional, Dict
 from dataclasses import dataclass
 from enum import Enum
+from bt_utils.singleton import singleton
 
 
 class UpdateType(Enum):
@@ -19,34 +20,14 @@ class UpdateTask:
     callback: Callable
 
 
+@singleton
 class UIUpdateDispatcher:
-    _instance: Optional["UIUpdateDispatcher"] = None
-    _lock = threading.Lock()
-    
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-    
     def __init__(self):
-        if self._initialized:
-            return
-        
-        self._initialized = True
         self._task_queue: Queue = Queue()
         self._widget = None
         self._polling_active = False
         self._polling_interval_ms = 30
         self._max_batch_size = 50
-    
-    @classmethod
-    def get_instance(cls) -> "UIUpdateDispatcher":
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
     
     @classmethod
     def reset_instance(cls):
@@ -179,4 +160,4 @@ class UIUpdateDispatcher:
 
 
 def get_dispatcher() -> UIUpdateDispatcher:
-    return UIUpdateDispatcher.get_instance()
+    return UIUpdateDispatcher()

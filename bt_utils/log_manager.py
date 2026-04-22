@@ -57,7 +57,7 @@ class LogManager:
         
         try:
             from bt_utils.ui_dispatcher import UIUpdateDispatcher
-            dispatcher = UIUpdateDispatcher.get_instance()
+            dispatcher = UIUpdateDispatcher()
             dispatcher.dispatch_log_flush()
         except ImportError:
             pass

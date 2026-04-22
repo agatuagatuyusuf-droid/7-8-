@@ -1,5 +1,6 @@
 import os
 import sys
+from bt_utils.singleton import singleton
 
 
 def get_app_root() -> str:
@@ -30,30 +31,14 @@ def get_resource_path(relative_path: str) -> str:
     return os.path.join(app_root, relative_path)
 
 
+@singleton
 class ResourceManager:
-    """资源管理器
-    
-    管理应用程序的资源文件路径，包括音效、图标等。
-    兼容开发环境和打包后的环境。
-    """
-    
-    _instance = None
-    
     DEFAULT_ALARM_SOUND = "assets/sounds/alarm.mp3"
     DEFAULT_START_SOUND = "assets/sounds/alarm.mp3"
     DEFAULT_STOP_SOUND = "assets/sounds/temp_reversed.mp3"
     DEFAULT_ICON = "assets/icons/autodoor.ico"
     
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-    
     def __init__(self):
-        if self._initialized:
-            return
-        self._initialized = True
         self._app_root = get_app_root()
     
     @property

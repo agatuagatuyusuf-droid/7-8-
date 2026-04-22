@@ -1735,6 +1735,9 @@ class PropertyPanel(ctk.CTkFrame):
                     value = node_data.get("config", {}).get(field["key"])
                     self._create_field(field, value, self.config_fields_frame)
             
+            if node_type in CONDITION_NODES:
+                self._create_preview_section(node_type, node_data.get("config", {}))
+            
             decorator_fields = []
             if node_type in CONDITION_NODES:
                 decorator_fields = CONDITION_DECORATOR_FIELDS
@@ -1751,6 +1754,119 @@ class PropertyPanel(ctk.CTkFrame):
                     self._create_field(field, node_data.get("config", {}).get(field["key"]), self.decorator_fields_frame)
         finally:
             self._is_loading = False
+    
+    def _create_preview_section(self, node_type: str, config: Dict[str, Any]):
+        self._create_section_title("预览检测")
+        
+        preview_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        preview_frame.pack(fill="x", pady=Theme.DIMENSIONS['spacing_xs'])
+        
+        self.preview_btn = ctk.CTkButton(
+            preview_frame,
+            text="🔍 预览检测",
+            width=100,
+            command=lambda: self._on_preview_click(node_type)
+        )
+        self.preview_btn.pack(side="left", padx=(0, Theme.DIMENSIONS['spacing_sm']))
+        
+        self.preview_result_label = ctk.CTkLabel(
+            preview_frame,
+            text="",
+            font=Theme.get_font('sm'),
+            text_color=self._dark_colors['text_secondary']
+        )
+        self.preview_result_label.pack(side="left")
+    
+    def _on_preview_click(self, node_type: str):
+        from bt_utils.log_manager import LogManager
+        
+        self.preview_result_label.configure(text="检测中...", text_color="#FFA500")
+        self.update_idletasks()
+        
+        try:
+            config = self._get_current_config()
+            self._run_condition_node_preview(node_type, config)
+            self.preview_result_label.configure(text="✓ 检测完成", text_color="#4CAF50")
+        except Exception as e:
+            LogManager.instance().log_failure(
+                node_type="预览检测",
+                node_name=node_type.replace("Node", ""),
+                reason=f"检测异常: {str(e)}"
+            )
+            self.preview_result_label.configure(text="✗ 检测出错", text_color="#F44336")
+    
+    def _get_current_config(self) -> Dict[str, Any]:
+        config = {}
+        for key, widget in self.widgets.items():
+            if hasattr(widget, 'get_value'):
+                config[key] = widget.get_value()
+        return config
+    
+    def _run_condition_node_preview(self, node_type: str, config: Dict[str, Any]):
+        from bt_core.config import NodeConfig
+        from bt_core.blackboard import Blackboard
+        from PIL import ImageGrab
+        import importlib
+        
+        node_config = NodeConfig(name="预览检测")
+        for key, value in config.items():
+            node_config.set(key, value)
+        
+        class PreviewContext:
+            def __init__(ctx, app):
+                ctx._app = app
+                ctx._screenshot = None
+                ctx._is_running = True
+                ctx.blackboard = Blackboard()
+                
+                if app and hasattr(app, 'behavior_tree'):
+                    editor = app.behavior_tree
+                    if hasattr(editor, 'project_root') and editor.project_root:
+                        ctx._project_root = editor.project_root
+                    else:
+                        ctx._project_root = None
+                else:
+                    ctx._project_root = None
+            
+            def get_screenshot(ctx, region=None):
+                if ctx._screenshot is None:
+                    if region:
+                        ctx._screenshot = ImageGrab.grab(bbox=region)
+                    else:
+                        ctx._screenshot = ImageGrab.grab()
+                return ctx._screenshot
+            
+            def resolve_path(ctx, relative_path):
+                if relative_path.startswith("./") and ctx._project_root:
+                    import os
+                    return os.path.normpath(os.path.join(ctx._project_root, relative_path[2:]))
+                return relative_path
+            
+            @property
+            def project_root(ctx):
+                return ctx._project_root
+            
+            def check_running(ctx):
+                return True
+        
+        context = PreviewContext(self.app)
+        
+        node_map = {
+            "OCRConditionNode": "bt_nodes.conditions.ocr:OCRConditionNode",
+            "ImageConditionNode": "bt_nodes.conditions.image:ImageConditionNode",
+            "ColorConditionNode": "bt_nodes.conditions.color:ColorConditionNode",
+            "NumberConditionNode": "bt_nodes.conditions.number:NumberConditionNode",
+            "VariableConditionNode": "bt_nodes.conditions.variable:VariableConditionNode",
+        }
+        
+        if node_type not in node_map:
+            return
+        
+        module_path, class_name = node_map[node_type].split(":")
+        module = importlib.import_module(module_path)
+        node_class = getattr(module, class_name)
+        node = node_class(config=node_config)
+        node._check_condition(context)
     
     def _create_section_title(self, title: str):
         section_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")

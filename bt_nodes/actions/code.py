@@ -3,9 +3,83 @@ import subprocess
 import sys
 import threading
 import queue
+import ast
 from bt_core.nodes import ActionNode, NodeStatus
 from bt_core.config import NodeConfig
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Set
+
+
+class CodeSecurityChecker:
+    ALLOWED_AST_NODES: Set[type] = {
+        ast.Module, ast.Expr, ast.Constant, ast.Name, ast.Load, ast.Store,
+        ast.BinOp, ast.UnaryOp, ast.Compare, ast.BoolOp, ast.Num, ast.Str,
+        ast.List, ast.Tuple, ast.Dict, ast.Set, ast.ListComp, ast.DictComp,
+        ast.Assign, ast.AugAssign, ast.If, ast.While, ast.For, ast.Pass,
+        ast.Break, ast.Continue, ast.Return, ast.FunctionDef, ast.Lambda,
+        ast.arguments, ast.Call, ast.Attribute, ast.Subscript, ast.Index,
+        ast.Slice, ast.ExtSlice, ast.NameConstant, ast.Bytes, ast.Ellipsis,
+        ast.Assert, ast.Global, ast.Nonlocal, ast.Await, ast.AsyncFor,
+        ast.AsyncWith, ast.AsyncFunctionDef, ast.AnnAssign, ast.FormattedValue,
+        ast.JoinedStr, ast.NamedExpr,
+    }
+    
+    FORBIDDEN_NAMES: Set[str] = {
+        '__import__', 'eval', 'exec', 'compile', 'open', 'input',
+        'breakpoint', 'globals', 'locals', 'vars', 'dir',
+        'getattr', 'setattr', 'delattr', 'hasattr',
+        '__builtins__', '__class__', '__bases__', '__subclasses__',
+        '__mro__', '__dict__', '__globals__',
+    }
+    
+    FORBIDDEN_MODULES: Set[str] = {
+        'os.system', 'os.popen', 'os.spawn', 'os.exec',
+        'subprocess.call', 'subprocess.run', 'subprocess.Popen',
+        'ctypes', 'multiprocessing',
+    }
+    
+    @classmethod
+    def check_python_script(cls, file_path: str) -> tuple:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                code = f.read()
+            
+            tree = ast.parse(code)
+            
+            for node in ast.walk(tree):
+                if type(node) not in cls.ALLOWED_AST_NODES:
+                    if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
+                        continue
+                    return False, f"包含受限语法: {type(node).__name__}"
+                
+                if isinstance(node, ast.Name) and node.id in cls.FORBIDDEN_NAMES:
+                    return False, f"包含禁止的函数/变量: {node.id}"
+                
+                if isinstance(node, ast.Call):
+                    if isinstance(node.func, ast.Name):
+                        if node.func.id in cls.FORBIDDEN_NAMES:
+                            return False, f"调用了禁止的函数: {node.func.id}"
+            
+            return True, "安全检查通过"
+            
+        except SyntaxError as e:
+            return False, f"语法错误: {e}"
+        except Exception as e:
+            return False, f"检查异常: {e}"
+    
+    @classmethod
+    def check_path_safety(cls, code_path: str, project_root: str = None) -> tuple:
+        if project_root:
+            if os.path.isabs(code_path):
+                norm_path = os.path.normpath(code_path)
+                norm_root = os.path.normpath(project_root)
+                if not norm_path.startswith(norm_root + os.sep):
+                    return False, "路径遍历风险: 绝对路径超出项目目录"
+            else:
+                abs_path = os.path.normpath(os.path.join(project_root, code_path))
+                norm_root = os.path.normpath(project_root)
+                if not abs_path.startswith(norm_root + os.sep):
+                    return False, "路径遍历风险: 脚本路径超出项目目录"
+        return True, "路径安全"
 
 
 class CodeNode(ActionNode):
@@ -166,6 +240,27 @@ class CodeNode(ActionNode):
                     reason=f"代码文件不存在: {absolute_code_path}"
                 )
                 return NodeStatus.FAILURE
+            
+            project_root = getattr(context, 'project_root', None)
+            path_safe, path_msg = CodeSecurityChecker.check_path_safety(code_path, project_root)
+            if not path_safe:
+                LogManager.instance().log_failure(
+                    node_type="代码节点",
+                    node_name=self.name,
+                    reason=path_msg
+                )
+                return NodeStatus.FAILURE
+            
+            code_type = self._detect_code_type()
+            if code_type == "python":
+                script_safe, script_msg = CodeSecurityChecker.check_python_script(absolute_code_path)
+                if not script_safe:
+                    LogManager.instance().log_failure(
+                        node_type="代码节点",
+                        node_name=self.name,
+                        reason=f"脚本安全检查失败: {script_msg}"
+                    )
+                    return NodeStatus.FAILURE
 
             if not self.wait_complete:
                 cmd = self._build_command(absolute_code_path)
