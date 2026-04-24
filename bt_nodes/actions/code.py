@@ -356,10 +356,12 @@ class CodeNode(ActionNode):
                 return NodeStatus.FAILURE
 
         except Exception as e:
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"CodeNode '{self.name}'")
             LogManager.instance().log_failure(
                 node_type="代码节点",
                 node_name=self.name,
-                reason=f"执行异常: {str(e)}"
+                reason="执行异常，详情见终端日志"
             )
             return NodeStatus.FAILURE
 

@@ -19,7 +19,18 @@ def get_version():
     except Exception:
         return "0.0.0"
 
+def is_debug_build():
+    """检查是否为 debug 构建"""
+    config_file = os.path.join(project_root, 'build_config.json')
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            return config.get('build_type', 'release') == 'debug'
+    except Exception:
+        return False
+
 VERSION = get_version()
+DEBUG_BUILD = is_debug_build()
 
 data_files = [
     (os.path.join(project_root, 'assets/sounds/alarm.mp3'), 'assets/sounds'),
@@ -176,7 +187,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=False,
+    console=DEBUG_BUILD,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

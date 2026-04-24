@@ -62,10 +62,12 @@ class MouseClickNode(ActionNode):
                 return self._non_blocking_finite_click(context, click_position)
             
         except Exception as e:
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"MouseClickNode '{self.name}'")
             LogManager.instance().log_failure(
                 node_type="鼠标点击节点",
                 node_name=self.name,
-                reason=str(e)
+                reason="执行异常，详情见终端日志"
             )
             return NodeStatus.FAILURE
 
@@ -249,10 +251,12 @@ class MouseMoveNode(ActionNode):
                 return self._execute_move(context, move_position)
                 
         except Exception as e:
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"MouseMoveNode '{self.name}'")
             LogManager.instance().log_failure(
                 node_type="鼠标移动节点",
                 node_name=self.name,
-                reason=str(e)
+                reason="执行异常，详情见终端日志"
             )
             try:
                 context.execute_mouse_click(self.drag_button, None, "up", 0)

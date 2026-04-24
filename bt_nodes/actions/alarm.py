@@ -82,10 +82,12 @@ class AlarmNode(ActionNode):
                         message=f"开始播放音频"
                     )
                 except Exception as e:
+                    from bt_utils.exception_handler import log_exception
+                    log_exception(e, f"AlarmNode '{self.name}' 音频播放失败")
                     LogManager.instance().log_failure(
                         node_type="报警节点",
                         node_name=self.name,
-                        reason=f"音频播放失败: {str(e)}"
+                        reason="音频播放失败，详情见终端日志"
                     )
                     return NodeStatus.FAILURE
             
@@ -116,10 +118,12 @@ class AlarmNode(ActionNode):
             return NodeStatus.SUCCESS
 
         except Exception as e:
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"AlarmNode '{self.name}'")
             LogManager.instance().log_failure(
                 node_type="报警节点",
                 node_name=self.name,
-                reason=str(e)
+                reason="执行异常，详情见终端日志"
             )
             return NodeStatus.FAILURE
 

@@ -338,35 +338,49 @@ class BehaviorTreeApp(ctk.CTk):
                 self.script_editor._new_script()
     
     def _delete(self):
-        focused = self.focus_get()
-        if focused:
-            widget_type = str(type(focused).__name__)
-            if widget_type in ("CTkEntry", "Entry", "CTkTextbox", "Text"):
-                return
+        if self._is_focused_on_input_widget():
+            return
         current_tab = self._get_current_tab()
         if current_tab == 'bt':
             if hasattr(self.behavior_tree, '_delete_selected'):
                 self.behavior_tree._delete_selected()
     
+    def _is_focused_on_input_widget(self) -> bool:
+        """检查当前焦点是否在输入控件上"""
+        focused = self.focus_get()
+        if focused:
+            widget_type = str(type(focused).__name__)
+            if widget_type in ("CTkEntry", "Entry", "CTkTextbox", "Text"):
+                return True
+        return False
+    
     def _copy(self):
+        if self._is_focused_on_input_widget():
+            return
         current_tab = self._get_current_tab()
         if current_tab == 'bt':
             if hasattr(self.behavior_tree, '_copy_selected'):
                 self.behavior_tree._copy_selected()
     
     def _paste(self):
+        if self._is_focused_on_input_widget():
+            return
         current_tab = self._get_current_tab()
         if current_tab == 'bt':
             if hasattr(self.behavior_tree, '_paste_selected'):
                 self.behavior_tree._paste_selected()
     
     def _cut(self):
+        if self._is_focused_on_input_widget():
+            return
         current_tab = self._get_current_tab()
         if current_tab == 'bt':
             if hasattr(self.behavior_tree, '_cut_selected'):
                 self.behavior_tree._cut_selected()
     
     def _duplicate(self):
+        if self._is_focused_on_input_widget():
+            return
         current_tab = self._get_current_tab()
         if current_tab == 'bt':
             if hasattr(self.behavior_tree, '_duplicate_selected'):

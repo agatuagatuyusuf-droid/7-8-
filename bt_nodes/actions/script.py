@@ -127,10 +127,12 @@ class ScriptNode(ActionNode):
                 if self._aborted:
                     return NodeStatus.FAILURE
             
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"ScriptNode '{self.name}'")
             LogManager().log_failure(
                 node_type="脚本节点",
                 node_name=self.name,
-                reason=f"执行异常: {str(e)}"
+                reason="执行异常，详情见终端日志"
             )
             return NodeStatus.FAILURE
     

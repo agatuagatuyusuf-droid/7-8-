@@ -47,7 +47,9 @@ class ImageConditionNode(ConditionNode):
                 self._log_condition_result(False, f"未找到匹配模板 (阈值: {self.threshold}, 最高置信度: {confidence:.2f})")
                 return False
         except Exception as e:
-            self._log_condition_result(False, str(e))
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"ImageConditionNode '{self.name}'")
+            self._log_condition_result(False, "检测异常，详情见终端日志")
             return False
 
     def _resolve_template_path(self, context) -> Optional[str]:

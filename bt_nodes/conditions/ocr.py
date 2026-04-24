@@ -49,7 +49,9 @@ class OCRConditionNode(ConditionNode):
                 self._log_condition_result(False, reason, extra)
                 return False
         except Exception as e:
-            self._log_condition_result(False, str(e))
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"OCRConditionNode '{self.name}'")
+            self._log_condition_result(False, "检测异常，详情见终端日志")
             return False
 
     def to_dict(self) -> Dict[str, Any]:

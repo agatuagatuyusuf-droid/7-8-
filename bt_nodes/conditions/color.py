@@ -52,7 +52,9 @@ class ColorConditionNode(ConditionNode):
                     f"未找到匹配颜色 RGB{self.target_color} (容差: {self.tolerance})")
                 return False
         except Exception as e:
-            self._log_condition_result(False, str(e))
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"ColorConditionNode '{self.name}'")
+            self._log_condition_result(False, "检测异常，详情见终端日志")
             return False
 
     def to_dict(self) -> Dict[str, Any]:

@@ -470,7 +470,7 @@ class OCRManager:
                     return None
         
         elif extract_mode == "x/y":
-            match = re.search(r'(\d+\.?\d*)\s*/\s*\d+\.?\d*', text)
+            match = re.search(r'(-?\d+\.?\d*)\s*/\s*-?\d+\.?\d*', text)
             if match:
                 try:
                     return float(match.group(1))

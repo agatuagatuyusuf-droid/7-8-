@@ -33,7 +33,9 @@ class VariableConditionNode(ConditionNode):
                     f"变量比较失败: {value} {self.comparison} {self.target_value}")
                 return False
         except Exception as e:
-            self._log_condition_result(False, str(e))
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"VariableConditionNode '{self.name}'")
+            self._log_condition_result(False, "检测异常，详情见终端日志")
             return False
 
     def _compare_value(self, value) -> bool:

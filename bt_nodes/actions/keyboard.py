@@ -54,10 +54,12 @@ class KeyPressNode(ActionNode):
                 return NodeStatus.SUCCESS
                 
         except Exception as e:
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"KeyboardNode '{self.name}'")
             LogManager.instance().log_failure(
                 node_type="按键节点",
                 node_name=self.name,
-                reason=str(e)
+                reason="执行异常，详情见终端日志"
             )
             return NodeStatus.FAILURE
 

@@ -927,12 +927,8 @@ class ConditionNode(Node):
         try:
             return context.get_screenshot(self.region)
         except Exception as e:
-            from bt_utils.log_manager import LogManager
-            LogManager.instance().log_failure(
-                node_type=self.NODE_TYPE,
-                node_name=self.name,
-                reason=f"截图失败: {e}"
-            )
+            from bt_utils.exception_handler import log_exception
+            log_exception(e, f"{self.NODE_TYPE} '{self.name}' 截图失败")
             return None
 
     def _log_condition_result(self, success: bool, reason: str = None,
