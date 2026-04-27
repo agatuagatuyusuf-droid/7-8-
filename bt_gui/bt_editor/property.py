@@ -98,6 +98,7 @@ NODE_CONFIG_SCHEMAS = {
     ],
     "ScriptNode": [
         {"key": "script_path", "label": "脚本路径", "type": "file", "width": 120, "filetypes": [("所有文件", "*.*")]},
+        {"key": "convert_coords", "label": "", "type": "script_convert"},
         {"key": "loop", "label": "循环执行", "type": "bool", "default": False},
     ],
     "CodeNode": [
@@ -1589,6 +1590,169 @@ class WindowSelectField(FieldWidget):
         return value
 
 
+class ScriptConvertField(FieldWidget):
+    def __init__(self, master, label: str, key: str, on_change: Callable, app, **kwargs):
+        self.app = app
+        super().__init__(master, label, key, on_change, **kwargs)
+        self._create_widget()
+
+    def _create_widget(self):
+        self.convert_btn = ctk.CTkButton(
+            self,
+            text="转换相对坐标",
+            font=Theme.get_font('sm'),
+            width=100,
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['info'],
+            hover_color=self._dark_colors['info_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+        )
+        self.convert_btn.pack(anchor="w")
+        self.convert_btn.bind("<ButtonRelease-1>", lambda e: self._on_convert_click())
+
+    def _get_project_root(self) -> str:
+        if self.app and hasattr(self.app, 'behavior_tree'):
+            editor = self.app.behavior_tree
+            if hasattr(editor, 'project_root') and editor.project_root:
+                return editor.project_root
+        return None
+
+    def _resolve_script_path(self, script_path: str) -> str:
+        if not script_path:
+            return script_path
+        if script_path.startswith("./"):
+            project_root = self._get_project_root()
+            if project_root:
+                return os.path.join(project_root, script_path[2:])
+        if not os.path.isabs(script_path):
+            return os.path.abspath(script_path)
+        return script_path
+
+    def _get_script_path(self) -> str:
+        if self.app and hasattr(self.app, 'behavior_tree'):
+            editor = self.app.behavior_tree
+            if hasattr(editor, 'property_panel'):
+                panel = editor.property_panel
+                if "script_path" in panel.widgets:
+                    widget = panel.widgets["script_path"]
+                    val = widget.get_value()
+                    if val:
+                        return str(val)
+        return ""
+
+    def _get_start_node_config(self) -> dict:
+        if self.app and hasattr(self.app, 'behavior_tree'):
+            editor = self.app.behavior_tree
+            if hasattr(editor, 'get_start_node'):
+                start_node = editor.get_start_node()
+                if start_node:
+                    return {
+                        "bind_window": getattr(start_node, 'bind_window', False),
+                        "window_title": getattr(start_node, 'window_title', ""),
+                        "window_pid": getattr(start_node, 'window_pid', 0),
+                    }
+        return {}
+
+    def _check_window_marker(self, content: str) -> dict:
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith("# Window:"):
+                return {
+                    "has_marker": True,
+                    "window_title": line[len("# Window:"):].strip()
+                }
+        return {"has_marker": False, "window_title": ""}
+
+    def _backup_script(self, script_path: str) -> str:
+        import shutil
+        backup_path = script_path + ".bak"
+        shutil.copy2(script_path, backup_path)
+        return backup_path
+
+    def _convert_coordinates(self, content: str, hwnd: int, window_title: str):
+        import re
+        from bt_utils.coordinate import CoordinateConverter
+
+        converted_count = 0
+
+        def replace_coord(match):
+            nonlocal converted_count
+            x, y = int(match.group(1)), int(match.group(2))
+            result = CoordinateConverter.absolute_to_window(x, y, hwnd)
+            if result:
+                converted_count += 1
+                return f"MoveTo {result[0]}, {result[1]}"
+            return match.group(0)
+
+        new_content = re.sub(r'MoveTo\s+(\d+)\s*,\s*(\d+)', replace_coord, content)
+
+        rect = CoordinateConverter.get_window_rect(hwnd)
+        header = f"# Window: {window_title}\n"
+        if rect:
+            header += f"# WindowRect: {rect[0]}, {rect[1]}, {rect[2]}, {rect[3]}\n"
+
+        return header + new_content, converted_count
+
+    def _on_convert_click(self):
+        import tkinter.messagebox as messagebox
+        from bt_utils.window_manager import WindowManager
+
+        try:
+            script_path = self._get_script_path()
+            if not script_path:
+                messagebox.showwarning("提示", "请先选择脚本文件")
+                return
+
+            absolute_script_path = self._resolve_script_path(script_path)
+
+            if not os.path.exists(absolute_script_path):
+                messagebox.showerror("错误", f"脚本文件不存在: {absolute_script_path}")
+                return
+
+            with open(absolute_script_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            marker = self._check_window_marker(content)
+            if marker["has_marker"]:
+                messagebox.showwarning("提示",
+                    f"该脚本已完成相对坐标转换（窗口：{marker['window_title']}），不要重复执行")
+                return
+
+            start_config = self._get_start_node_config()
+            if not start_config.get("bind_window"):
+                messagebox.showinfo("提示", "当前项目未进行窗口绑定，无需转换相对坐标")
+                return
+
+            hwnd, _ = WindowManager.find_window_smart(
+                start_config.get("window_pid") if start_config.get("window_pid", 0) > 0 else None,
+                start_config.get("window_title", "")
+            )
+            if not hwnd:
+                messagebox.showerror("错误", "未找到绑定窗口，请确保窗口已打开")
+                return
+
+            backup_path = self._backup_script(absolute_script_path)
+
+            new_content, count = self._convert_coordinates(
+                content, hwnd, start_config.get("window_title", "")
+            )
+
+            with open(absolute_script_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+
+            messagebox.showinfo("成功",
+                f"转换完成，已将 {count} 个坐标转换为窗口相对坐标\n原脚本已备份至 {backup_path}")
+
+        except Exception as e:
+            messagebox.showerror("错误", f"转换失败: {str(e)}")
+
+    def set_value(self, value: Any):
+        pass
+
+    def get_value(self) -> Any:
+        return None
+
+
 class ColorField(FieldWidget):
     def __init__(self, master, label: str, key: str, on_change: Callable, app, **kwargs):
         self.app = app
@@ -2182,6 +2346,8 @@ class PropertyPanel(ctk.CTkFrame):
             field_widget = OffsetField(container, label, key, self._on_field_change, self.app)
         elif field_type == "window_select":
             field_widget = WindowSelectField(container, label, key, self._on_field_change, self.app)
+        elif field_type == "script_convert":
+            field_widget = ScriptConvertField(container, label, key, self._on_field_change, self.app)
         elif field_type == "text_list":
             field_widget = TextListField(container, label, key, self._on_field_change)
         

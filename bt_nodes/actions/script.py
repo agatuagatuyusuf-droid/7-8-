@@ -97,7 +97,7 @@ class ScriptNode(ActionNode):
                     return NodeStatus.FAILURE
                 
                 if not self._script_started:
-                    status = self._start_script(absolute_script_path, script_path)
+                    status = self._start_script(absolute_script_path, script_path, context)
                     if status != NodeStatus.RUNNING:
                         return status
                     return NodeStatus.RUNNING
@@ -153,11 +153,29 @@ class ScriptNode(ActionNode):
         
         return absolute_script_path
     
-    def _start_script(self, absolute_script_path: str, script_path: str) -> NodeStatus:
-        """启动脚本执行
-        
-        注意：调用此方法前必须持有 self._lock
-        """
+    def _parse_window_marker(self, content: str) -> dict:
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith("# Window:"):
+                return {
+                    "has_marker": True,
+                    "window_title": line[len("# Window:"):].strip()
+                }
+        return {"has_marker": False, "window_title": ""}
+
+    def _convert_to_absolute_coords(self, content: str, context) -> str:
+        import re
+
+        def replace_coord(match):
+            x, y = int(match.group(1)), int(match.group(2))
+            result = context.convert_to_screen_coords((x, y))
+            if result and result != (x, y):
+                return f"MoveTo {result[0]}, {result[1]}"
+            return match.group(0)
+
+        return re.sub(r'MoveTo\s+(\d+)\s*,\s*(\d+)', replace_coord, content)
+
+    def _start_script(self, absolute_script_path: str, script_path: str, context=None) -> NodeStatus:
         if not os.path.exists(absolute_script_path):
             LogManager().log_failure(
                 node_type="脚本节点",
@@ -168,7 +186,7 @@ class ScriptNode(ActionNode):
 
         with open(absolute_script_path, 'r', encoding='utf-8') as f:
             self._script_content = f.read()
-        
+
         if not self._script_content.strip():
             LogManager().log_failure(
                 node_type="脚本节点",
@@ -176,12 +194,29 @@ class ScriptNode(ActionNode):
                 reason="脚本内容为空"
             )
             return NodeStatus.FAILURE
-        
+
+        marker = self._parse_window_marker(self._script_content)
+        if marker["has_marker"] and context:
+            bound_window = context.get_bound_window()
+            if bound_window:
+                self._script_content = self._convert_to_absolute_coords(self._script_content, context)
+                LogManager().log_info(
+                    node_type="脚本节点",
+                    node_name=self.name,
+                    message="已将窗口相对坐标转换为屏幕绝对坐标"
+                )
+            else:
+                LogManager().log_info(
+                    node_type="脚本节点",
+                    node_name=self.name,
+                    message=f"脚本含窗口标记（窗口：{marker['window_title']}）但未绑定窗口，坐标可能不正确"
+                )
+
         self._executor = self._get_or_create_executor()
         use_loop = self.loop and self.config.repeat_count == 0
         self._executor.run_script(self._script_content, loop=use_loop)
         self._script_started = True
-        
+
         LogManager().log_info(
             node_type="脚本节点",
             node_name=self.name,
