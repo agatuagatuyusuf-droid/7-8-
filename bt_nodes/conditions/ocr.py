@@ -13,6 +13,26 @@ LANGUAGE_MAP = {
     "chi_tra": "chi_tra",
 }
 
+LANGUAGE_REVERSE_MAP = {
+    "eng": "English",
+    "chi_sim": "简体中文",
+    "chi_tra": "繁体中文",
+}
+
+PREPROCESS_MODE_MAP = {
+    "默认": "normal",
+    "复杂色彩": "game",
+    "自适应": "adaptive",
+    "自动调优": "auto",
+}
+
+PREPROCESS_MODE_REVERSE_MAP = {
+    "normal": "默认",
+    "game": "复杂色彩",
+    "adaptive": "自适应",
+    "auto": "自动调优",
+}
+
 
 class OCRConditionNode(ConditionNode):
     NODE_TYPE = "OCRConditionNode"
@@ -24,7 +44,7 @@ class OCRConditionNode(ConditionNode):
         language_display = self.config.get("language", "简体中文")
         self.language = LANGUAGE_MAP.get(language_display, "chi_sim")
         preprocess_display = self.config.get("preprocess_mode", "默认")
-        self.preprocess_mode = "game" if preprocess_display == "复杂色彩" else "normal"
+        self.preprocess_mode = PREPROCESS_MODE_MAP.get(preprocess_display, "normal")
 
         self.position_key = self.config.get("position_key", "last_detection_position")
 
@@ -58,9 +78,8 @@ class OCRConditionNode(ConditionNode):
         data = super().to_dict()
         data["config"]["region"] = list(self.region) if self.region else None
         data["config"]["keywords"] = self.keywords
-        reverse_language_map = {"eng": "English", "chi_sim": "简体中文", "chi_tra": "繁体中文"}
-        data["config"]["language"] = reverse_language_map.get(self.language, self.language)
-        data["config"]["preprocess_mode"] = "复杂色彩" if self.preprocess_mode == "game" else "默认"
+        data["config"]["language"] = LANGUAGE_REVERSE_MAP.get(self.language, self.language)
+        data["config"]["preprocess_mode"] = PREPROCESS_MODE_REVERSE_MAP.get(self.preprocess_mode, "默认")
         data["config"]["position_key"] = self.position_key
         data["config"]["offset"] = list(self.offset)
         return data

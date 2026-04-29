@@ -1,8 +1,0 @@
-Delay 500
-KeyDown "space", 1
-Delay 100
-KeyUp "space", 1
-MoveTo 100, 200
-LeftDown 1
-Delay 100
-LeftUp 1

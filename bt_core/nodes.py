@@ -89,6 +89,21 @@ class Node(ABC):
         if status == NodeStatus.FAILURE and retry_count != 0:
             if retry_count == -1 or self._retry_count < retry_count:
                 self._retry_count += 1
+                
+                repeat_interval_ms = self.config.repeat_interval_ms
+                repeat_interval_ms_random = self.config.get_int("repeat_interval_ms_random", 0)
+                if repeat_interval_ms > 0 or repeat_interval_ms_random > 0:    
+                    actual_interval = get_random_interval(repeat_interval_ms, repeat_interval_ms_random)
+                    if actual_interval > 0:
+                        elapsed = 0
+                        while elapsed < actual_interval / 1000 and context.check_running():
+                            sleep_time = min(0.01, actual_interval / 1000 - elapsed)
+                            time.sleep(sleep_time)
+                            elapsed += sleep_time
+
+                if not context.check_running():
+                    return NodeStatus.ABORTED
+
                 self._reset_for_retry()
                 return NodeStatus.RUNNING
 
@@ -99,11 +114,18 @@ class Node(ABC):
                 
                 repeat_interval_ms = self.config.repeat_interval_ms
                 repeat_interval_ms_random = self.config.get_int("repeat_interval_ms_random", 0)
-                if repeat_interval_ms > 0 or repeat_interval_ms_random > 0:
+                if repeat_interval_ms > 0 or repeat_interval_ms_random > 0:    
                     actual_interval = get_random_interval(repeat_interval_ms, repeat_interval_ms_random)
                     if actual_interval > 0:
-                        time.sleep(actual_interval / 1000)
-                
+                        elapsed = 0
+                        while elapsed < actual_interval / 1000 and context.check_running():
+                            sleep_time = min(0.01, actual_interval / 1000 - elapsed)
+                            time.sleep(sleep_time)
+                            elapsed += sleep_time
+
+                if not context.check_running():
+                    return NodeStatus.ABORTED
+
                 self._reset_for_repeat()
                 return NodeStatus.RUNNING
 
@@ -272,6 +294,16 @@ class CompositeNode(Node):
         """重置节点状态"""
         super().reset(reset_counters)
         self.current_index = 0
+
+    def abort(self, context: "ExecutionContext") -> None:
+        """中止节点执行，递归中止所有子节点
+
+        Args:
+            context: 执行上下文
+        """
+        for child in self.children:
+            child.abort(context)
+        super().abort(context)
 
 
 class SequenceNode(CompositeNode):
@@ -869,7 +901,7 @@ class ConditionNode(Node):
             return self._execute_children(context)
         
         current_time = context.elapsed_time * 1000
-        if current_time - self._last_check_time < self.check_interval_ms:
+        if current_time - self._last_check_time < self.check_interval_ms:      
             return self.status
 
         self._last_check_time = current_time

@@ -45,6 +45,8 @@ class ScriptNode(ActionNode):
                 executor = ScriptExecutor()
                 ScriptNode._executor_pool[self.node_id] = executor
             
+            self._executor = executor
+            
             return executor
     
     @classmethod

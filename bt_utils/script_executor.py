@@ -95,7 +95,7 @@ class ScriptExecutor:
                 with self._state_lock:
                     if not self._is_running:
                         break
-                
+
                 self._pause_event.wait()
                 
                 for command in commands:
@@ -297,6 +297,9 @@ class ScriptExecutor:
         for future in self._futures.values():
             future.cancel()
         self._futures.clear()
+        
+        if self.execution_thread is not None and self.execution_thread.is_alive():
+            self.execution_thread.join(timeout=1.0)
 
     def pause_script(self) -> None:
         with self._state_lock:

@@ -34,36 +34,16 @@ class TextExtractNode(ConditionNode):
         self.all_text_key = self.config.get("all_text_key", "all_ocr_text")
         self.save_position = self.config.get_bool("save_position", True)
         self.position_key = self.config.get("position_key", "last_detection_position")
-        
-        LogManager.debug_print(
-            f"[TextExtractNode] 初始化: node_id={self.node_id}, name={self.name}, "
-            f"extract_mode={self.extract_mode}, region={self.region}, "
-            f"language={self.language}, preprocess_mode={self.preprocess_mode}, "
-            f"output_key={self.output_key}, keywords={self.keywords}"
-        )
 
     def _check_condition(self, context) -> bool:
         try:
-            LogManager.debug_print(
-                f"[TextExtractNode] '{self.name}' 开始检测: region={self.region}"
-            )
-            
             screenshot = self._get_region_image(context)
             if screenshot is None:
-                LogManager.debug_print(f"[TextExtractNode] '{self.name}' 截图失败")
                 return False
-
-            LogManager.debug_print(
-                f"[TextExtractNode] '{self.name}' 截图成功, 尺寸: {screenshot.size}"
-            )
 
             ocr_manager = OCRManager()
             all_text = ocr_manager.get_all_text(
                 screenshot, self.language, self.preprocess_mode
-            )
-
-            LogManager.debug_print(
-                f"[TextExtractNode] '{self.name}' OCR识别结果: {all_text[:200] if all_text else '(空)'}"
             )
 
             if not all_text:
@@ -74,28 +54,16 @@ class TextExtractNode(ConditionNode):
                 extracted_text = all_text
             else:
                 extracted_text = self._extract_keywords_text(all_text, self.keywords)
-                LogManager.debug_print(
-                    f"[TextExtractNode] '{self.name}' 关键词提取结果: {extracted_text[:200] if extracted_text else '(空)'}"
-                )
 
             context.blackboard.set(self.output_key, extracted_text)
-            LogManager.debug_print(
-                f"[TextExtractNode] '{self.name}' 保存提取文本到黑板: {self.output_key}={extracted_text[:100] if extracted_text else '(空)'}"
-            )
 
             if self.save_all_text:
                 context.blackboard.set(self.all_text_key, all_text)
-                LogManager.debug_print(
-                    f"[TextExtractNode] '{self.name}' 保存全部文本到黑板: {self.all_text_key}"
-                )
 
             if self.save_position and self.region:
                 center_x = (self.region[0] + self.region[2]) // 2
                 center_y = (self.region[1] + self.region[3]) // 2
                 context.blackboard.set(self.position_key, (center_x, center_y))
-                LogManager.debug_print(
-                    f"[TextExtractNode] '{self.name}' 保存位置到黑板: {self.position_key}=({center_x}, {center_y})"
-                )
 
             if extracted_text:
                 self._log_condition_result(True)

@@ -1,12 +1,390 @@
 from rapidocr import RapidOCR
 from PIL import Image, ImageEnhance, ImageFilter
 from typing import Tuple, Optional, Dict, Any
+from dataclasses import dataclass
 import numpy as np
 import re
 import time
 import hashlib
 import threading
+import cv2
+import logging
 from bt_utils.singleton import singleton
+
+_logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ImageFeatures:
+    """图像特征分析结果"""
+    
+    width: int
+    height: int
+    min_dimension: int
+    mean_brightness: float
+    brightness_std: float
+    contrast: float
+    is_low_contrast: bool
+    noise_level: float
+    has_noise: bool
+    estimated_char_height: int
+    is_small_font: bool
+    is_dark_background: bool
+    has_gradient: bool
+
+
+class ImageFeatureAnalyzer:
+    """图像特征分析器"""
+    
+    LOW_CONTRAST_THRESHOLD = 0.3
+    NOISE_THRESHOLD = 0.5
+    DARK_BACKGROUND_THRESHOLD = 128
+    SMALL_FONT_HEIGHT_THRESHOLD = 15
+    DEFAULT_CHAR_HEIGHT = 20
+    MIN_CONTOUR_HEIGHT = 5
+    GRADIENT_EDGE_DENSITY_THRESHOLD = 0.05
+    GRADIENT_BRIGHTNESS_STD_THRESHOLD = 30
+    CANNY_LOW_THRESHOLD = 50
+    CANNY_HIGH_THRESHOLD = 150
+    
+    def analyze(self, image: Image.Image) -> ImageFeatures:
+        """分析图像特征
+        
+        Args:
+            image: 原始图像
+            
+        Returns:
+            图像特征分析结果
+        """
+        img_array = np.array(image)
+        
+        if len(img_array.shape) == 3:
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img_array.copy()
+        
+        height, width = gray.shape
+        min_dimension = min(width, height)
+        
+        mean_brightness = float(np.mean(gray))
+        brightness_std = float(np.std(gray))
+        
+        min_val = float(np.min(gray))
+        max_val = float(np.max(gray))
+        contrast = (max_val - min_val) / (max_val + min_val + 1e-6)
+        is_low_contrast = contrast < self.LOW_CONTRAST_THRESHOLD
+        
+        laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+        noise_level = float(laplacian.var() / 10000)
+        has_noise = noise_level > self.NOISE_THRESHOLD
+        
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if contours:
+            heights = [cv2.boundingRect(c)[3] for c in contours if cv2.boundingRect(c)[3] > self.MIN_CONTOUR_HEIGHT]
+            estimated_char_height = int(np.median(heights)) if heights else self.DEFAULT_CHAR_HEIGHT
+        else:
+            estimated_char_height = self.DEFAULT_CHAR_HEIGHT
+        
+        is_small_font = estimated_char_height < self.SMALL_FONT_HEIGHT_THRESHOLD
+        
+        is_dark_background = mean_brightness < self.DARK_BACKGROUND_THRESHOLD
+        
+        edges = cv2.Canny(gray, self.CANNY_LOW_THRESHOLD, self.CANNY_HIGH_THRESHOLD)
+        edge_density = float(np.sum(edges > 0)) / (width * height)
+        has_gradient = edge_density < self.GRADIENT_EDGE_DENSITY_THRESHOLD and brightness_std > self.GRADIENT_BRIGHTNESS_STD_THRESHOLD
+        
+        return ImageFeatures(
+            width=width,
+            height=height,
+            min_dimension=min_dimension,
+            mean_brightness=mean_brightness,
+            brightness_std=brightness_std,
+            contrast=contrast,
+            is_low_contrast=is_low_contrast,
+            noise_level=noise_level,
+            has_noise=has_noise,
+            estimated_char_height=estimated_char_height,
+            is_small_font=is_small_font,
+            is_dark_background=is_dark_background,
+            has_gradient=has_gradient
+        )
+
+
+class SmartScaleStrategy:
+    """智能放大策略"""
+    
+    TARGET_CHAR_HEIGHT = 15
+    MAX_SCALE_FACTOR = 4.0
+    SAFE_MIN_SIDE_LEN = 800
+    
+    def calculate_scale_factor(self, features: ImageFeatures) -> float:
+        """计算安全的放大倍数
+        
+        Args:
+            features: 图像特征
+            
+        Returns:
+            安全的放大倍数
+        """
+        if not features.is_small_font:
+            return 1.0
+        
+        char_based_scale = self.TARGET_CHAR_HEIGHT / features.estimated_char_height
+        scale_factor = min(char_based_scale, self.MAX_SCALE_FACTOR)
+        
+        return scale_factor
+    
+    def scale_image(self, image: Image.Image, 
+                    scale_factor: float) -> Image.Image:
+        """放大图像
+        
+        Args:
+            image: 原始图像
+            scale_factor: 放大倍数
+            
+        Returns:
+            放大后的图像
+        """
+        if scale_factor <= 1.0:
+            return image
+        
+        new_size = (
+            int(image.size[0] * scale_factor),
+            int(image.size[1] * scale_factor)
+        )
+        
+        return image.resize(new_size, Image.LANCZOS)
+
+
+@dataclass
+class PreprocessConfig:
+    """预处理配置参数"""
+    
+    scale_factor: float = 1.0
+    denoise_enabled: bool = True
+    denoise_method: str = "median"
+    denoise_kernel_size: int = 3
+    contrast_enabled: bool = True
+    contrast_method: str = "simple"
+    contrast_factor: float = 2.0
+    clahe_clip_limit: float = 2.0
+    sharpness_enabled: bool = True
+    sharpness_factor: float = 2.0
+    sharpness_iterations: int = 2
+    binarization_method: str = "fixed"
+    binarization_threshold: int = 130
+    binarization_block_size: int = 11
+    binarization_c: int = 2
+
+
+class AutoConfigSelector:
+    """自动配置选择器"""
+    
+    def __init__(self):
+        self._analyzer = ImageFeatureAnalyzer()
+        self._scale_strategy = SmartScaleStrategy()
+    
+    def select_config(self, image: Image.Image) -> PreprocessConfig:
+        """自动选择最佳预处理配置
+        
+        Args:
+            image: 原始图像
+            
+        Returns:
+            最佳预处理配置
+        """
+        features = self._analyzer.analyze(image)
+        config = PreprocessConfig()
+        
+        config.scale_factor = self._scale_strategy.calculate_scale_factor(features)
+        
+        # 按优先级处理：低优先级先执行，高优先级后执行覆盖
+        # 优先级：噪点 > 低对比度 > 深色背景 > 渐变背景 > 小字体
+        
+        if features.is_small_font:
+            config.sharpness_factor = 2.5
+            config.sharpness_iterations = 3
+            config.denoise_method = "bilateral"
+        
+        if features.has_gradient:
+            config.contrast_method = "clahe"
+            config.clahe_clip_limit = 2.5
+            config.binarization_method = "adaptive"
+        
+        if features.is_dark_background:
+            config.contrast_factor = 3.0
+            config.binarization_method = "adaptive"
+        
+        if features.is_low_contrast:
+            config.contrast_method = "clahe"
+            config.clahe_clip_limit = 3.0
+            config.binarization_method = "adaptive"
+            config.binarization_block_size = 15
+            config.binarization_c = 3
+        
+        if features.has_noise:
+            config.denoise_enabled = True
+            config.denoise_method = "median"
+            config.denoise_kernel_size = 5
+        
+        return config
+
+
+class PreprocessExecutor:
+    """预处理执行器"""
+    
+    def __init__(self):
+        self._scale_strategy = SmartScaleStrategy()
+    
+    def execute(self, image: Image.Image, 
+                config: PreprocessConfig) -> Image.Image:
+        """执行预处理
+        
+        Args:
+            image: 原始图像
+            config: 预处理配置
+            
+        Returns:
+            预处理后的图像
+        """
+        if config.scale_factor > 1.0:
+            image = self._scale_strategy.scale_image(image, config.scale_factor)
+        
+        img_array = np.array(image)
+        
+        if len(img_array.shape) == 3:
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img_array.copy()
+        
+        if config.denoise_enabled:
+            if config.denoise_method == "median":
+                gray = cv2.medianBlur(gray, config.denoise_kernel_size)
+            elif config.denoise_method == "gaussian":
+                gray = cv2.GaussianBlur(gray, (config.denoise_kernel_size,) * 2, 0)
+            elif config.denoise_method == "bilateral":
+                gray = cv2.bilateralFilter(gray, 9, 75, 75)
+        
+        if config.contrast_enabled:
+            if config.contrast_method == "clahe":
+                clahe = cv2.createCLAHE(
+                    clipLimit=config.clahe_clip_limit,
+                    tileGridSize=(8, 8)
+                )
+                gray = clahe.apply(gray)
+            else:
+                pil_image = Image.fromarray(gray)
+                enhancer = ImageEnhance.Contrast(pil_image)
+                pil_image = enhancer.enhance(config.contrast_factor)
+                gray = np.array(pil_image)
+        
+        if config.sharpness_enabled:
+            pil_image = Image.fromarray(gray)
+            enhancer = ImageEnhance.Sharpness(pil_image)
+            for _ in range(config.sharpness_iterations):
+                pil_image = enhancer.enhance(config.sharpness_factor)
+            gray = np.array(pil_image)
+        
+        if config.binarization_method == "adaptive":
+            gray = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY, config.binarization_block_size, config.binarization_c
+            )
+        elif config.binarization_method == "otsu":
+            _, gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        else:
+            _, gray = cv2.threshold(gray, config.binarization_threshold, 255, cv2.THRESH_BINARY)
+        
+        return Image.fromarray(gray)
+
+
+CHAR_WIDTH_FACTORS = {
+    'chinese': 2.0,
+    'fullwidth': 2.0,
+    'uppercase': 1.2,
+    'lowercase': 1.0,
+    'digit': 1.0,
+    'space': 0.5,
+    'punctuation': 0.6,
+    'other': 1.0,
+}
+
+
+def get_char_width_factor(char: str) -> float:
+    """获取字符宽度系数
+    
+    Args:
+        char: 单个字符
+        
+    Returns:
+        字符宽度系数
+    """
+    if '\u4e00' <= char <= '\u9fff':
+        return CHAR_WIDTH_FACTORS['chinese']
+    
+    if '\uff00' <= char <= '\uffef':
+        return CHAR_WIDTH_FACTORS['fullwidth']
+    
+    if char.isupper():
+        return CHAR_WIDTH_FACTORS['uppercase']
+    
+    if char.islower():
+        return CHAR_WIDTH_FACTORS['lowercase']
+    
+    if char.isdigit():
+        return CHAR_WIDTH_FACTORS['digit']
+    
+    if char.isspace():
+        return CHAR_WIDTH_FACTORS['space']
+    
+    if char in '.,;:!?\'"()[]{}<>@#$%^&*-+=_|\\/`~':
+        return CHAR_WIDTH_FACTORS['punctuation']
+    
+    return CHAR_WIDTH_FACTORS['other']
+
+
+def calculate_keyword_position(text: str, keyword: str, 
+                               box: np.ndarray) -> Tuple[int, int]:
+    """基于字符实际宽度精确计算关键词位置
+    
+    Args:
+        text: 完整文本
+        keyword: 关键词
+        box: 文本框坐标 [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+        
+    Returns:
+        关键词中心坐标 (x, y)
+    """
+    keyword_idx = text.lower().find(keyword.lower())
+    if keyword_idx == -1:
+        center_x = int((box[0][0] + box[2][0]) / 2)
+        center_y = int((box[0][1] + box[2][1]) / 2)
+        return (center_x, center_y)
+    
+    char_widths = [get_char_width_factor(char) for char in text]
+    total_width = sum(char_widths)
+    
+    start_width = sum(char_widths[:keyword_idx])
+    
+    keyword_widths = [get_char_width_factor(char) for char in keyword]
+    keyword_width = sum(keyword_widths)
+    
+    center_width = start_width + keyword_width / 2
+    center_ratio = center_width / total_width
+    
+    box_left = box[0][0]
+    box_right = box[2][0]
+    box_top = box[0][1]
+    box_bottom = box[2][1]
+    box_width = box_right - box_left
+    box_height = box_bottom - box_top
+    
+    x = int(box_left + box_width * center_ratio)
+    y = int(box_top + box_height / 2)
+    
+    return (x, y)
 
 
 @singleton
@@ -33,9 +411,15 @@ class OCRManager:
         
         self._cache: Dict[str, Tuple[Any, float]] = {}
         self._cache_lock = threading.Lock()
+        self._auto_config_selector = AutoConfigSelector()
         
         try:
-            self._engine = RapidOCR()
+            self._engine = RapidOCR(
+                params={
+                    "Det.limit_side_len": 736,
+                    "Det.limit_type": "max"
+                }
+            )
             
             if self._engine is None:
                 raise RuntimeError("RapidOCR 引擎创建失败，返回 None")
@@ -201,6 +585,57 @@ class OCRManager:
         
         return image
 
+    def _preprocess_adaptive(self, image: Image.Image) -> Image.Image:
+        """自适应二值化预处理
+        
+        使用OpenCV的自适应阈值算法，根据图像局部特征自动调整阈值。
+        适用于：低对比度图像、渐变背景、深色背景浅色文字等场景。
+        
+        Args:
+            image: 原始图像
+            
+        Returns:
+            预处理后的图像
+        """
+        img_array = np.array(image)
+        
+        if len(img_array.shape) == 3:
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img_array.copy()
+        
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+        
+        binary = cv2.adaptiveThreshold(
+            enhanced, 
+            255, 
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY, 
+            11, 
+            2
+        )
+        
+        kernel = np.ones((1, 1), np.uint8)
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+        
+        return Image.fromarray(binary)
+
+    def _preprocess_auto(self, image: Image.Image) -> Image.Image:
+        """自动调优预处理
+        
+        分析图像特征，自动选择最佳预处理配置。
+
+        Args:
+            image: 原始图像
+
+        Returns:
+            预处理后的图像
+        """
+        config = self._auto_config_selector.select_config(image)
+        executor = PreprocessExecutor()
+        return executor.execute(image, config)
+
     def _preprocess_image(self, image: Image.Image, language: str = "eng",
                           preprocess_mode: str = "normal") -> Image.Image:
         """图像预处理
@@ -208,13 +643,21 @@ class OCRManager:
         Args:
             image: 原始图像
             language: OCR语言 (已废弃，保留参数兼容)
-            preprocess_mode: 预处理模式 (normal/game)
+            preprocess_mode: 预处理模式
+                - normal: 标准预处理（固定阈值）
+                - game: 游戏界面预处理（放大+固定阈值）
+                - adaptive: 自适应预处理（自适应阈值）
+                - auto: 自动调优预处理（智能选择配置）
 
         Returns:
             预处理后的图像
         """
         if preprocess_mode == "game":
             return self._preprocess_chinese(image)
+        elif preprocess_mode == "adaptive":
+            return self._preprocess_adaptive(image)
+        elif preprocess_mode == "auto":
+            return self._preprocess_auto(image)
         else:
             return self._preprocess_standard(image)
 
@@ -281,22 +724,7 @@ class OCRManager:
                         if keyword_idx != -1:
                             box = result.boxes[i]
                             
-                            keyword_len = len(keyword)
-                            text_len = len(text)
-                            
-                            start_ratio = keyword_idx / text_len
-                            end_ratio = (keyword_idx + keyword_len) / text_len
-                            center_ratio = (start_ratio + end_ratio) / 2
-                            
-                            box_left = box[0][0]
-                            box_right = box[2][0]
-                            box_top = box[0][1]
-                            box_bottom = box[2][1]
-                            box_width = box_right - box_left
-                            box_height = box_bottom - box_top
-                            
-                            x = int(box_left + box_width * center_ratio)
-                            y = int(box_top + box_height / 2)
+                            x, y = calculate_keyword_position(text, keyword, box)
                             
                             if image.size != processed.size:
                                 scale_x = image.size[0] / processed.size[0]
@@ -323,7 +751,8 @@ class OCRManager:
                 self._set_cached_result(cache_key, result)
             return result
         
-        except Exception:
+        except Exception as e:
+            _logger.error(f"OCR识别异常: {e}", exc_info=True)
             return False, None, ""
 
     def recognize_single_psm(self, image: Image.Image, keywords: str = None,
@@ -444,7 +873,8 @@ class OCRManager:
                 self._set_cached_result(cache_key, result_data)
             return result_data
         
-        except Exception:
+        except Exception as e:
+            _logger.error(f"OCR数字识别异常: {e}", exc_info=True)
             return False, None, "", None
 
     def _extract_number(self, text: str, extract_mode: str,
