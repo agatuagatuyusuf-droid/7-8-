@@ -1151,6 +1151,8 @@ class KeyField(FieldWidget):
                     "Alt_L": "alt", "Alt_R": "alt",
                     "Shift_L": "shift", "Shift_R": "shift",
                     "Super_L": "win", "Super_R": "win",
+                    "Win_L": "win", "Win_R": "win",
+                    "Win-L": "win", "Win-R": "win",
                     "Return": "enter", "BackSpace": "backspace",
                     "Tab": "tab", "Escape": "escape",
                     "space": "space", "Delete": "delete",

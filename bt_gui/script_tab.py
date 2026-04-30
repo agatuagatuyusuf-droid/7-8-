@@ -81,11 +81,11 @@ PYNPUT_TO_PYAUTOGUI_MAP = {
     'shift_r': 'shiftright',
     'alt_l': 'altleft',
     'alt_r': 'altright',
-    'cmd': 'command',
-    'cmd_l': 'command',
-    'cmd_r': 'command',
-    'win_l': 'winleft',
-    'win_r': 'winright',
+    'cmd': 'win',
+    'cmd_l': 'win',
+    'cmd_r': 'win',
+    'win_l': 'win',
+    'win_r': 'win',
 }
 
 
