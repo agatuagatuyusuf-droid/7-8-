@@ -1,6 +1,7 @@
 import threading
 import os
 from typing import Optional
+from bt_utils.log_manager import LogManager
 
 
 class AlarmPlayer:
@@ -61,7 +62,7 @@ class AlarmPlayer:
                     pygame.time.wait(int(sound.get_length() * 1000))
 
             except Exception as e:
-                print(f"[WARN] 报警播放错误: {e}")
+                LogManager.debug_print(f"[WARN] 报警播放错误: {e}")
 
         if wait_complete:
             _play()
@@ -132,7 +133,7 @@ class AlarmPlayer:
             pygame.mixer.music.set_volume(0.7)
             pygame.mixer.music.play()
         except Exception as e:
-            print(f"[WARN] 播放开始运行音效失败: {e}")
+            LogManager.debug_print(f"[WARN] 播放开始运行音效失败: {e}")
 
     def play_stop_sound(self) -> None:
         """播放停止运行的音频
@@ -164,4 +165,4 @@ class AlarmPlayer:
             pygame.mixer.music.set_volume(0.7)
             pygame.mixer.music.play()
         except Exception as e:
-            print(f"[WARN] 播放停止运行音效失败: {e}")
+            LogManager.debug_print(f"[WARN] 播放停止运行音效失败: {e}")

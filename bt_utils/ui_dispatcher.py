@@ -4,6 +4,7 @@ from typing import Callable, Any, Optional, Dict
 from dataclasses import dataclass
 from enum import Enum
 from bt_utils.singleton import singleton
+from bt_utils.log_manager import LogManager
 
 
 class UpdateType(Enum):
@@ -74,7 +75,7 @@ class UIUpdateDispatcher:
         try:
             self._process_updates()
         except Exception as e:
-            print(f"[WARN] UI更新处理失败: {e}")
+            LogManager.debug_print(f"[WARN] UI更新处理失败: {e}")
     
     def _process_updates(self, event=None):
         processed = 0
@@ -90,7 +91,7 @@ class UIUpdateDispatcher:
                         else:
                             task.callback(task.data)
                     except Exception as e:
-                        print(f"[WARN] UI更新回调执行失败: {e}")
+                        LogManager.debug_print(f"[WARN] UI更新回调执行失败: {e}")
                 
                 processed += 1
                 
@@ -136,7 +137,7 @@ class UIUpdateDispatcher:
                 if pending > 0:
                     self._process_updates()
         except Exception as e:
-            print(f"[DEBUG] UI轮询处理异常: {e}")
+            LogManager.debug_print(f"[DEBUG] UI轮询处理异常: {e}")
         
         if self._polling_active:
             try:
@@ -145,7 +146,7 @@ class UIUpdateDispatcher:
                 else:
                     threading.Timer(self._polling_interval_ms / 1000, self._poll_daemon).start()
             except Exception as e:
-                print(f"[DEBUG] UI轮询调度异常: {e}")
+                LogManager.debug_print(f"[DEBUG] UI轮询调度异常: {e}")
                 threading.Timer(self._polling_interval_ms / 1000, self._poll_daemon).start()
     
     def _poll_daemon(self):

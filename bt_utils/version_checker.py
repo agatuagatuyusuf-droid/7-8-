@@ -9,6 +9,7 @@ from tkinter import ttk, messagebox
 import webbrowser
 from datetime import datetime
 from typing import Optional, Dict, Any
+from bt_utils.log_manager import LogManager
 
 
 def get_resource_path(relative_path):
@@ -56,7 +57,7 @@ def open_tool_intro():
     try:
         webbrowser.open(UPDATE_LINKS["tool_intro"])
     except Exception as e:
-        print(f"打开工具介绍页面失败: {str(e)}")
+        LogManager.debug_print(f"打开工具介绍页面失败: {str(e)}")
 
 
 def open_download_page():
@@ -64,7 +65,7 @@ def open_download_page():
     try:
         webbrowser.open(UPDATE_LINKS["download"])
     except Exception as e:
-        print(f"打开下载页面失败: {str(e)}")
+        LogManager.debug_print(f"打开下载页面失败: {str(e)}")
 
 
 class BetaExpirationChecker:
@@ -88,7 +89,7 @@ class BetaExpirationChecker:
             
             return current_date > expire_date
         except Exception as e:
-            print(f"过期检查失败: {str(e)}")
+            LogManager.debug_print(f"过期检查失败: {str(e)}")
             return False
     
     def show_expiration_dialog(self):
@@ -182,7 +183,7 @@ class VersionChecker:
                     config = json.load(f)
                     return config.get('update', {}).get('ignored_version')
         except Exception as e:
-            print(f"加载已忽略版本失败: {str(e)}")
+            LogManager.debug_print(f"加载已忽略版本失败: {str(e)}")
         return None
     
     def _load_force_update_cache(self) -> Dict[str, Any]:
@@ -194,7 +195,7 @@ class VersionChecker:
                     config = json.load(f)
                     return config.get('update', {}).get('force_update_cache', {})
         except Exception as e:
-            print(f"加载强制更新缓存失败: {str(e)}")
+            LogManager.debug_print(f"加载强制更新缓存失败: {str(e)}")
         return {}
     
     def _save_force_update_cache(self, version: str):
@@ -308,7 +309,7 @@ class VersionChecker:
         
         root = self._get_root_window()
         if not root:
-            print("无法显示强制更新弹窗：root 窗口未初始化")
+            LogManager.debug_print("无法显示强制更新弹窗：root 窗口未初始化")
             return
         
         dialog = tk.Toplevel(root)
@@ -343,7 +344,7 @@ class VersionChecker:
             try:
                 webbrowser.open(download_url)
             except Exception as e:
-                print(f"打开下载页面失败: {str(e)}")
+                LogManager.debug_print(f"打开下载页面失败: {str(e)}")
             finally:
                 dialog.destroy()
                 root = self._get_root_window()
@@ -568,7 +569,7 @@ class VersionChecker:
         try:
             webbrowser.open(url)
         except Exception as e:
-            print(f"打开更新链接失败: {str(e)}")
+            LogManager.debug_print(f"打开更新链接失败: {str(e)}")
         finally:
             window.destroy()
     
@@ -596,9 +597,9 @@ class VersionChecker:
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
-            print(f"已忽略版本: {version}")
+            LogManager.debug_print(f"已忽略版本: {version}")
         except Exception as e:
-            print(f"忽略版本失败: {str(e)}")
+            LogManager.debug_print(f"忽略版本失败: {str(e)}")
         finally:
             notification_window.destroy()
     

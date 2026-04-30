@@ -7,6 +7,7 @@ from tkinter import filedialog, messagebox
 
 from ..theme import Theme
 from .constants import CONDITION_NODES, ACTION_NODES, COMPOSITE_NODES
+from bt_utils.log_manager import LogManager
 
 
 NODE_CONFIG_SCHEMAS = {
@@ -508,9 +509,9 @@ class RegionField(FieldWidget):
                     from bt_utils.coordinate import CoordinateConverter
                     original_region = region
                     region = CoordinateConverter.screen_region_to_window(region, bound_window)
-                    print(f"[DEBUG] RegionField: 坐标转换 屏幕绝对{original_region} -> 窗口相对{region}, hwnd={bound_window}")
+                    LogManager.debug_print(f"[DEBUG] RegionField: 坐标转换 屏幕绝对{original_region} -> 窗口相对{region}, hwnd={bound_window}")
                 else:
-                    print(f"[DEBUG] RegionField: 未绑定窗口, 使用屏幕绝对坐标{region}")
+                    LogManager.debug_print(f"[DEBUG] RegionField: 未绑定窗口, 使用屏幕绝对坐标{region}")
 
                 self.var.set(f"{region[0]},{region[1]},{region[2]},{region[3]}")
                 self.on_change(self.key, list(region))
@@ -1301,11 +1302,11 @@ class PositionField(FieldWidget):
                     converted = CoordinateConverter.absolute_to_window(x, y, bound_window)
                     if converted:
                         x, y = converted
-                        print(f"[DEBUG] PositionField: 坐标转换 屏幕绝对{original_pos} -> 窗口相对{(x, y)}, hwnd={bound_window}")
+                        LogManager.debug_print(f"[DEBUG] PositionField: 坐标转换 屏幕绝对{original_pos} -> 窗口相对{(x, y)}, hwnd={bound_window}")
                     else:
-                        print(f"[DEBUG] PositionField: 坐标转换失败, 使用屏幕绝对坐标{(x, y)}")
+                        LogManager.debug_print(f"[DEBUG] PositionField: 坐标转换失败, 使用屏幕绝对坐标{(x, y)}")
                 else:
-                    print(f"[DEBUG] PositionField: 未绑定窗口, 使用屏幕绝对坐标{(x, y)}")
+                    LogManager.debug_print(f"[DEBUG] PositionField: 未绑定窗口, 使用屏幕绝对坐标{(x, y)}")
                 
                 self.var.set(f"{x}, {y}")
                 self.on_change(self.key, [x, y])
@@ -1514,7 +1515,7 @@ class WindowSelectField(FieldWidget):
         input_frame.pack(fill="x")
 
         self.var = tk.StringVar(value="")
-        print(f"[DEBUG] WindowSelectField._create_widget: 初始化 var=''")
+        LogManager.debug_print(f"[DEBUG] WindowSelectField._create_widget: 初始化 var=''")
 
         self._refresh_window_list()
 
@@ -1550,31 +1551,31 @@ class WindowSelectField(FieldWidget):
         self.combobox.pack(side="left", fill="x", expand=True)
 
     def _on_window_selected(self, choice: str):
-        print(f"[DEBUG] WindowSelectField._on_window_selected: choice='{choice}'")
-        print(f"[DEBUG] WindowSelectField._on_window_selected: 设置前 var='{self.var.get()}'")
+        LogManager.debug_print(f"[DEBUG] WindowSelectField._on_window_selected: choice='{choice}'")
+        LogManager.debug_print(f"[DEBUG] WindowSelectField._on_window_selected: 设置前 var='{self.var.get()}'")
         self.var.set(choice)
-        print(f"[DEBUG] WindowSelectField._on_window_selected: 设置后 var='{self.var.get()}'")
+        LogManager.debug_print(f"[DEBUG] WindowSelectField._on_window_selected: 设置后 var='{self.var.get()}'")
         self.on_change(self.key, choice)
         if choice in self._window_pids:
             pid = self._window_pids[choice]
             if pid:
                 self.on_change("window_pid", pid)
-                print(f"[DEBUG] WindowSelectField: 选择窗口 '{choice}', PID={pid}")
+                LogManager.debug_print(f"[DEBUG] WindowSelectField: 选择窗口 '{choice}', PID={pid}")
         else:
-            print(f"[DEBUG] WindowSelectField: choice='{choice}' 不在 _window_pids 中")
+            LogManager.debug_print(f"[DEBUG] WindowSelectField: choice='{choice}' 不在 _window_pids 中")
 
     def _clear_selection(self):
-        print(f"[DEBUG] WindowSelectField._clear_selection: 清空前 var='{self.var.get()}'")
+        LogManager.debug_print(f"[DEBUG] WindowSelectField._clear_selection: 清空前 var='{self.var.get()}'")
         self.var.set("")
         self.on_change(self.key, "")
         self.on_change("window_pid", 0)
-        print(f"[DEBUG] WindowSelectField: 清空窗口选择")
+        LogManager.debug_print(f"[DEBUG] WindowSelectField: 清空窗口选择")
 
     def _refresh_window_list(self):
         from bt_utils.window_manager import WindowManager
         
         current_value = self.var.get() if hasattr(self, 'var') else ""
-        print(f"[DEBUG] WindowSelectField._refresh_window_list: 刷新前 var='{current_value}'")
+        LogManager.debug_print(f"[DEBUG] WindowSelectField._refresh_window_list: 刷新前 var='{current_value}'")
         
         windows = WindowManager.enum_all_windows()
         self._window_titles = [title for hwnd, title in windows]
@@ -1584,23 +1585,23 @@ class WindowSelectField(FieldWidget):
             pid = WindowManager.get_window_pid(hwnd)
             if pid:
                 self._window_pids[title] = pid
-        print(f"[DEBUG] WindowSelectField._refresh_window_list: 窗口数量={len(self._window_titles)}")
+        LogManager.debug_print(f"[DEBUG] WindowSelectField._refresh_window_list: 窗口数量={len(self._window_titles)}")
         
         if hasattr(self, 'combobox'):
             self.combobox.configure(values=self._window_titles)
             if current_value and current_value in self._window_titles:
                 self.var.set(current_value)
-                print(f"[DEBUG] WindowSelectField._refresh_window_list: 恢复 var='{current_value}'")
+                LogManager.debug_print(f"[DEBUG] WindowSelectField._refresh_window_list: 恢复 var='{current_value}'")
 
     def set_value(self, value: Any):
-        print(f"[DEBUG] WindowSelectField.set_value: value='{value}'")
+        LogManager.debug_print(f"[DEBUG] WindowSelectField.set_value: value='{value}'")
         if value and hasattr(self, 'combobox'):
             self.var.set(str(value))
-            print(f"[DEBUG] WindowSelectField.set_value: 设置后 var='{self.var.get()}'")
+            LogManager.debug_print(f"[DEBUG] WindowSelectField.set_value: 设置后 var='{self.var.get()}'")
 
     def get_value(self) -> Any:
         value = self.var.get()
-        print(f"[DEBUG] WindowSelectField.get_value: 返回 '{value}'")
+        LogManager.debug_print(f"[DEBUG] WindowSelectField.get_value: 返回 '{value}'")
         return value
 
 

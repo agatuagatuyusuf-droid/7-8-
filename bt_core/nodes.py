@@ -885,9 +885,11 @@ class ConditionNode(Node):
     def _save_position(self, context, position: tuple):
         """保存位置到黑板（应用偏移）
         
+        坐标转换由 ExecutionContext 的 execute_mouse_* 方法自动处理。
+        
         Args:
             context: 执行上下文
-            position: 原始位置
+            position: 原始位置（窗口相对坐标或屏幕绝对坐标）
         """
         if position and self.save_position:
             final_position = self._apply_offset(position)
@@ -1011,6 +1013,7 @@ class ActionNode(Node):
         return self._execute_with_decorators(context, self._tick_internal)
 
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
+        from bt_utils.log_manager import LogManager
         bound_window = context.get_bound_window()
 
         if bound_window and not self.SKIP_WINDOW_SWITCH:
@@ -1022,13 +1025,13 @@ class ActionNode(Node):
                 self._was_already_foreground = WindowManager.is_foreground_window(bound_window)
                 
                 if self._was_already_foreground:
-                    print(f"[DEBUG] ActionNode '{self.name}' 绑定窗口已在前台，跳过切换")
+                    LogManager.debug_print(f"[DEBUG] ActionNode '{self.name}' 绑定窗口已在前台，跳过切换")
                 else:
-                    print(f"[DEBUG] ActionNode '{self.name}' 检测到绑定窗口: hwnd={bound_window}")
+                    LogManager.debug_print(f"[DEBUG] ActionNode '{self.name}' 检测到绑定窗口: hwnd={bound_window}")
                     context.smart_switch_to_bound_window()
                 self._window_switched = True
             
-            print(f"[DEBUG] ActionNode '{self.name}' 执行动作...")
+            LogManager.debug_print(f"[DEBUG] ActionNode '{self.name}' 执行动作...")
             status = self._execute_action(context)
             
             if status != NodeStatus.RUNNING:
@@ -1179,18 +1182,18 @@ class StartNode(CompositeNode):
             actual_pid = WindowManager.get_window_pid(hwnd)
             
             if find_method == "pid":
-                print(f"[DEBUG] StartNode 通过PID绑定窗口: pid={self.window_pid}, hwnd={hwnd}, title='{title}', rect={rect}")
+                LogManager.debug_print(f"[DEBUG] StartNode 通过PID绑定窗口: pid={self.window_pid}, hwnd={hwnd}, title='{title}', rect={rect}")
             else:
-                print(f"[DEBUG] StartNode 通过标题绑定窗口: title='{self.window_title}', hwnd={hwnd}, actual_title='{title}', pid={actual_pid}, rect={rect}")
+                LogManager.debug_print(f"[DEBUG] StartNode 通过标题绑定窗口: title='{self.window_title}', hwnd={hwnd}, actual_title='{title}', pid={actual_pid}, rect={rect}")
                 if actual_pid and actual_pid != self.window_pid:
-                    print(f"[DEBUG] StartNode 提示: 窗口PID已变更 ({self.window_pid} -> {actual_pid})，建议重新选择窗口")
+                    LogManager.debug_print(f"[DEBUG] StartNode 提示: 窗口PID已变更 ({self.window_pid} -> {actual_pid})，建议重新选择窗口")
         else:
             LogManager.instance().log_failure(
                 node_type="开始节点",
                 node_name=self.name,
                 reason=f"未找到窗口: pid={self.window_pid}, title='{self.window_title}'"
             )
-            print(f"[DEBUG] StartNode 未找到窗口: pid={self.window_pid}, title='{self.window_title}'")
+            LogManager.debug_print(f"[DEBUG] StartNode 未找到窗口: pid={self.window_pid}, title='{self.window_title}'")
     
     def _reset_for_retry(self) -> None:
         """重试时重置状态（保留重试计数器）"""

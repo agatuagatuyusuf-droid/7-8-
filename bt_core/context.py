@@ -95,11 +95,17 @@ class ExecutionContext:
         """获取屏幕截图
 
         Args:
-            region: 截图区域 (left, top, right, bottom)
+            region: 截图区域 (left, top, right, bottom)，窗口相对坐标
 
         Returns:
             PIL.Image 截图对象
         """
+        if self._bound_window:
+            from bt_utils.window_capture import WindowCapture
+            if region:
+                return WindowCapture.capture_window_region(self._bound_window, region)
+            return WindowCapture.capture_window(self._bound_window)
+
         if self._screenshot_manager is None:
             from bt_utils.screenshot import ScreenshotManager
             self._screenshot_manager = ScreenshotManager()
@@ -124,11 +130,11 @@ class ExecutionContext:
 
     def execute_mouse_click(self, button: str = "left", position: tuple = None,
                            action: str = "press", duration: int = 0) -> None:
-        """执行鼠标点击
+        """执行鼠标点击（全局自动坐标转换）
 
         Args:
             button: 鼠标按钮 (left/right/middle)
-            position: 点击位置 (x, y)
+            position: 点击位置 (x, y) - 窗口相对坐标或屏幕绝对坐标
             action: 动作类型 (press/down/up)
             duration: 按住时长（毫秒）
         """
@@ -136,19 +142,25 @@ class ExecutionContext:
             from bt_utils.input_controller_factory import InputController
             self._input_controller = InputController()
 
+        if position and self._bound_window:
+            position = self.convert_to_screen_coords(position)
+
         self._input_controller.mouse_click(button, position, action, duration)
 
     def execute_mouse_move(self, position: tuple, relative: bool = False, smooth: bool = False) -> None:
-        """执行鼠标移动
+        """执行鼠标移动（全局自动坐标转换）
 
         Args:
-            position: 目标位置 (x, y)
+            position: 目标位置 (x, y) - 窗口相对坐标或屏幕绝对坐标
             relative: 是否相对移动
             smooth: 是否平滑移动
         """
         if self._input_controller is None:
             from bt_utils.input_controller_factory import InputController
             self._input_controller = InputController()
+
+        if position and self._bound_window and not relative:
+            position = self.convert_to_screen_coords(position)
 
         self._input_controller.mouse_move(position, relative, smooth=smooth)
 

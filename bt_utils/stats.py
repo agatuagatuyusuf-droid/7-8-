@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from bt_utils.log_manager import LogManager
 
 
 @dataclass
@@ -159,7 +160,7 @@ class StatsCollector:
                 json.dump(report, f, indent=2, ensure_ascii=False)
             return True
         except Exception as e:
-            print(f"导出统计报告失败: {e}")
+            LogManager.debug_print(f"导出统计报告失败: {e}")
             return False
     
     def reset(self):

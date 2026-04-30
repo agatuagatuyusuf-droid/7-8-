@@ -63,7 +63,7 @@ class TextExtractNode(ConditionNode):
             if self.save_position and self.region:
                 center_x = (self.region[0] + self.region[2]) // 2
                 center_y = (self.region[1] + self.region[3]) // 2
-                context.blackboard.set(self.position_key, (center_x, center_y))
+                self._save_position(context, (center_x, center_y))
 
             if extracted_text:
                 self._log_condition_result(True)

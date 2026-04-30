@@ -5,6 +5,7 @@ import threading
 from typing import Tuple
 
 from .base_input import BaseInputController
+from bt_utils.log_manager import LogManager
 
 
 class InputController(BaseInputController):
@@ -81,7 +82,7 @@ class InputController(BaseInputController):
             mouse_controller.release(mouse.Button.middle)
             
         except Exception as e:
-            print(f"[WARN] 释放按键时出错: {e}")
+            LogManager.debug_print(f"[WARN] 释放按键时出错: {e}")
         finally:
             cls._set_simulating(False)
 

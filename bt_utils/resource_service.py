@@ -2,6 +2,7 @@ import os
 import shutil
 from typing import Dict, List, Set, Any, Optional
 from datetime import datetime
+from bt_utils.log_manager import LogManager
 
 
 class ResourceService:
@@ -127,7 +128,7 @@ class ResourceService:
             shutil.copy2(source_path, target_path)
             return f"./{target_dir}/{filename}".replace(os.sep, '/')
         except Exception as e:
-            print(f"[ERROR] 导入资源失败 {source_path}: {e}")
+            LogManager.debug_print(f"[ERROR] 导入资源失败 {source_path}: {e}")
             return None
     
     @classmethod
@@ -242,7 +243,7 @@ class ResourceService:
                             os.remove(abs_file_path)
                             removed_files.append(abs_file_path)
                         except Exception as e:
-                            print(f"[WARN] 无法删除文件 {abs_file_path}: {e}")
+                            LogManager.debug_print(f"[WARN] 无法删除文件 {abs_file_path}: {e}")
         
         return removed_files
     
@@ -302,7 +303,7 @@ class ResourceService:
             shutil.move(abs_file_path, cache_path)
             return cache_path
         except Exception as e:
-            print(f"[WARN] 移动文件到缓存失败: {e}")
+            LogManager.debug_print(f"[WARN] 移动文件到缓存失败: {e}")
             return None
     
     @classmethod
@@ -352,5 +353,5 @@ class ResourceService:
             os.makedirs(cache_dir, exist_ok=True)
             return True
         except Exception as e:
-            print(f"[ERROR] 创建项目目录结构失败: {e}")
+            LogManager.debug_print(f"[ERROR] 创建项目目录结构失败: {e}")
             return False

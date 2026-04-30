@@ -136,22 +136,52 @@ class TextInputNode(ActionNode):
             return ""
 
     def _input_text(self, context, text: str) -> None:
+        import pyautogui
+        
+        original_pause = pyautogui.PAUSE
+        pyautogui.PAUSE = 0
+        
+        try:
+            if self.input_delay == 0:
+                self._input_text_fast(context, text)
+            else:
+                self._input_text_slow(context, text)
+        finally:
+            pyautogui.PAUSE = original_pause
+    
+    def _input_text_fast(self, context, text: str) -> None:
+        pyperclip.copy(text)
+        time.sleep(0.01)
+        
+        context.execute_key_press("ctrl", "down", 0)
+        context.execute_key_press("v", "press", 0)
+        context.execute_key_press("ctrl", "up", 0)
+    
+    def _input_text_slow(self, context, text: str) -> None:
+        CLIPBOARD_READY_DELAY = 0.005
+        PASTE_COMPLETE_DELAY = 0.01
+        
         for char in text:
             if not context.check_running():
                 break
 
             if char == "\n":
                 context.execute_key_press("enter", "press", 0)
+                time.sleep(PASTE_COMPLETE_DELAY)
             elif char == "\t":
                 context.execute_key_press("tab", "press", 0)
+                time.sleep(PASTE_COMPLETE_DELAY)
             else:
                 pyperclip.copy(char)
+                time.sleep(CLIPBOARD_READY_DELAY)
+                
                 context.execute_key_press("ctrl", "down", 0)
                 context.execute_key_press("v", "press", 0)
                 context.execute_key_press("ctrl", "up", 0)
+                
+                time.sleep(PASTE_COMPLETE_DELAY)
 
-            if self.input_delay > 0:
-                time.sleep(self.input_delay / 1000.0)
+            time.sleep(self.input_delay / 1000.0)
 
     def to_dict(self) -> Dict[str, Any]:
         data = super().to_dict()

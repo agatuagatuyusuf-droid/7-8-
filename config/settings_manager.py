@@ -3,6 +3,7 @@ import os
 import copy
 import datetime
 from typing import Any, Dict, Optional, List, Callable
+from bt_utils.log_manager import LogManager
 from dataclasses import dataclass, field, asdict
 from bt_utils.singleton import singleton
 
@@ -195,7 +196,7 @@ class SettingsManager:
                 self._merge_defaults()
                 self._migrate_config()
             except Exception as e:
-                print(f"[WARN] 加载配置文件失败: {e}")
+                LogManager.debug_print(f"[WARN] 加载配置文件失败: {e}")
                 self.settings = copy.deepcopy(self.DEFAULT_SETTINGS)
         else:
             self.settings = copy.deepcopy(self.DEFAULT_SETTINGS)
@@ -232,7 +233,7 @@ class SettingsManager:
                 json.dump(self.settings, f, indent=2, ensure_ascii=False)
             return True
         except Exception as e:
-            print(f"[WARN] 保存配置文件失败: {e}")
+            LogManager.debug_print(f"[WARN] 保存配置文件失败: {e}")
             return False
     
     def defer_save(self, delay_ms: int = 1000) -> None:
@@ -329,7 +330,7 @@ class SettingsManager:
                 try:
                     callback(key, value)
                 except Exception as e:
-                    print(f"[WARN] 配置监听器回调失败: {e}")
+                    LogManager.debug_print(f"[WARN] 配置监听器回调失败: {e}")
     
     def reset(self, key: str = None) -> None:
         """重置设置

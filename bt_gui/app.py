@@ -7,6 +7,7 @@ from .bt_editor import BehaviorTreeEditor
 from .script_tab import ScriptTab
 from .settings_tab import SettingsTab
 from config.settings_manager import SettingsManager
+from bt_utils.log_manager import LogManager
 
 
 def _get_app_title() -> str:
@@ -81,7 +82,7 @@ class BehaviorTreeApp(ctk.CTk):
             if os.path.exists(icon_path):
                 self.iconbitmap(icon_path)
         except Exception as e:
-            print(f"[WARN] 设置图标失败: {e}")
+            LogManager.debug_print(f"[WARN] 设置图标失败: {e}")
     
     def _create_ui(self):
         self._create_main_container()

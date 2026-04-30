@@ -18,6 +18,7 @@ from .undo_redo import (
     RemoveNodesCommand, MoveNodeCommand, MoveNodesCommand, AddConnectionCommand,
     RemoveConnectionCommand
 )
+from bt_utils.log_manager import LogManager
 from bt_core.engine import BehaviorTreeEngine
 from bt_core.context import ExecutionContext
 from bt_core.serializer import Serializer
@@ -189,7 +190,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             if hasattr(self.app, 'script_editor') and hasattr(self.app.script_editor, 'toggle_recording'):
                 self.app.script_editor.toggle_recording()
         except Exception as e:
-            print(f"[WARN] 切换录制状态失败: {e}")
+            LogManager.debug_print(f"[WARN] 切换录制状态失败: {e}")
     
     def update_run_shortcuts(self, start_key: str, stop_key: str, record_key: str = None):
         """更新运行快捷键"""
@@ -799,7 +800,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
                     if new_relative_path:
                         config[key] = new_relative_path
                 except Exception as e:
-                    print(f"导入资源失败 {absolute_path}: {e}")
+                    LogManager.debug_print(f"导入资源失败 {absolute_path}: {e}")
         
         return data
     
@@ -1418,7 +1419,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
     
     def _on_autosave_complete(self, success: bool):
         if not success:
-            print("[WARN] 自动保存失败")
+            LogManager.debug_print("[WARN] 自动保存失败")
     
     def on_content_changed(self):
         if self._autosave_manager:
@@ -1466,7 +1467,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
                 else:
                     self.toolbar.set_file_path(None)
                 
-                print("[OK] 已自动恢复上次未保存的会话")
+                LogManager.debug_print("[OK] 已自动恢复上次未保存的会话")
         
         self._crash_recovery_handler.delete_crash_file(crash_info["path"])
     
