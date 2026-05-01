@@ -69,22 +69,27 @@ class WindowCapture:
         return None
 
     @staticmethod
-    def capture_window(hwnd: HWND, client_only: bool = False) -> Optional[Image.Image]:
+    def capture_window(hwnd: HWND, client_only: bool = True) -> Optional[Image.Image]:
         """捕获窗口图像
 
         Args:
             hwnd: 窗口句柄
-            client_only: 是否仅捕获客户区
+            client_only: 是否仅捕获客户区（默认True，与坐标系统一致）
 
         Returns:
             PIL.Image 图像对象
         """
-        rect = WindowCapture.get_window_rect(hwnd)
-        if not rect:
-            return None
-
-        width = rect[2] - rect[0]
-        height = rect[3] - rect[1]
+        if client_only:
+            rect = wintypes.RECT()
+            user32.GetClientRect(hwnd, ctypes.byref(rect))
+            width = rect.right - rect.left
+            height = rect.bottom - rect.top
+        else:
+            rect = WindowCapture.get_window_rect(hwnd)
+            if not rect:
+                return None
+            width = rect[2] - rect[0]
+            height = rect[3] - rect[1]
 
         if width <= 0 or height <= 0:
             return None
@@ -105,8 +110,10 @@ class WindowCapture:
 
             gdi32.SelectObject(hdcMem, hBitmap)
 
-            flags = PW_CLIENTONLY if client_only else 0
-            flags |= PW_RENDERFULLCONTENT
+            if client_only:
+                flags = PW_CLIENTONLY | PW_RENDERFULLCONTENT
+            else:
+                flags = PW_RENDERFULLCONTENT
 
             result = user32.PrintWindow(hwnd, hdcMem, flags)
 

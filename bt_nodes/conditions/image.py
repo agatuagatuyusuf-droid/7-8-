@@ -13,7 +13,8 @@ class ImageConditionNode(ConditionNode):
         super().__init__(node_id, config)
         self.region: Optional[Tuple[int, int, int, int]] = self._parse_region(self.config.get("region", None))
         self.template_path = self.config.get("template_path", "")
-        self.threshold = self.config.get_float("threshold", 0.8)
+        raw_threshold = self.config.get_float("threshold", 80)
+        self.threshold = raw_threshold / 100.0 if raw_threshold > 1 else raw_threshold
 
     def _check_condition(self, context) -> bool:
         try:

@@ -1299,7 +1299,7 @@ class PositionField(FieldWidget):
                 if bound_window:
                     from bt_utils.coordinate import CoordinateConverter
                     original_pos = (x, y)
-                    converted = CoordinateConverter.absolute_to_window(x, y, bound_window)
+                    converted = CoordinateConverter.absolute_to_client(x, y, bound_window)
                     if converted:
                         x, y = converted
                         LogManager.debug_print(f"[DEBUG] PositionField: 坐标转换 屏幕绝对{original_pos} -> 窗口相对{(x, y)}, hwnd={bound_window}")
@@ -1693,7 +1693,7 @@ class ScriptConvertField(FieldWidget):
         def replace_coord(match):
             nonlocal converted_count
             x, y = int(match.group(1)), int(match.group(2))
-            result = CoordinateConverter.absolute_to_window(x, y, hwnd)
+            result = CoordinateConverter.absolute_to_client(x, y, hwnd)
             if result:
                 converted_count += 1
                 return f"MoveTo {result[0]}, {result[1]}"
@@ -2161,31 +2161,75 @@ class PropertyPanel(ctk.CTkFrame):
         )
         self.preview_btn.pack(side="left", padx=(0, Theme.DIMENSIONS['spacing_sm']))
         
-        self.preview_result_label = ctk.CTkLabel(
+        self.view_image_btn = ctk.CTkButton(
             preview_frame,
-            text="",
+            text="查看识别图片",
+            width=100,
             font=Theme.get_font('sm'),
-            text_color=self._dark_colors['text_secondary']
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['info'],
+            hover_color=self._dark_colors['info_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+            command=self._open_preview_image
         )
-        self.preview_result_label.pack(side="left")
+        self._preview_image_path = None
+        self.view_image_btn.pack(side="left", padx=(0, Theme.DIMENSIONS['spacing_sm']))
+        self.view_image_btn.pack_forget()
     
     def _on_preview_click(self, node_type: str):
         from bt_utils.log_manager import LogManager
         
-        self.preview_result_label.configure(text="检测中...", text_color="#FFA500")
+        self.view_image_btn.pack_forget()
         self.update_idletasks()
         
         try:
             config = self._get_current_config()
-            self._run_condition_node_preview(node_type, config)
-            self.preview_result_label.configure(text="✓ 检测完成", text_color="#4CAF50")
+            result = self._run_condition_node_preview(node_type, config)
+            
+            if result.get("image_path"):
+                self._preview_image_path = result["image_path"]
+                self.view_image_btn.pack(side="left", padx=(0, Theme.DIMENSIONS['spacing_sm']))
+                
         except Exception as e:
             LogManager.instance().log_failure(
                 node_type="预览检测",
                 node_name=node_type.replace("Node", ""),
                 reason=f"检测异常: {str(e)}"
             )
-            self.preview_result_label.configure(text="✗ 检测出错", text_color="#F44336")
+    
+    def _open_preview_image(self):
+        if self._preview_image_path and os.path.exists(self._preview_image_path):
+            import subprocess
+            import platform
+            if platform.system() == 'Windows':
+                os.startfile(self._preview_image_path)
+            elif platform.system() == 'Darwin':
+                subprocess.run(['open', self._preview_image_path])
+            else:
+                subprocess.run(['xdg-open', self._preview_image_path])
+    
+    def _get_preview_images_dir(self) -> str:
+        if self.app and hasattr(self.app, 'behavior_tree'):
+            editor = self.app.behavior_tree
+            if hasattr(editor, 'project_root') and editor.project_root:
+                images_dir = os.path.join(editor.project_root, "images")
+                if not os.path.exists(images_dir):
+                    os.makedirs(images_dir)
+                return images_dir
+        return None
+    
+    def _cleanup_old_preview_images(self):
+        images_dir = self._get_preview_images_dir()
+        if images_dir and os.path.exists(images_dir):
+            for filename in os.listdir(images_dir):
+                if filename.startswith("preview_") and filename.endswith(".png"):
+                    try:
+                        os.remove(os.path.join(images_dir, filename))
+                    except Exception:
+                        pass
+    
+    def cleanup_preview_images(self):
+        self._cleanup_old_preview_images()
     
     def _get_current_config(self) -> Dict[str, Any]:
         config = {}
@@ -2199,8 +2243,11 @@ class PropertyPanel(ctk.CTkFrame):
     def _run_condition_node_preview(self, node_type: str, config: Dict[str, Any]):
         from bt_core.config import NodeConfig
         from bt_core.blackboard import Blackboard
-        from PIL import ImageGrab
+        from PIL import ImageGrab, ImageDraw
         import importlib
+        import time
+        
+        self._cleanup_old_preview_images()
         
         node_config = NodeConfig(name="预览检测")
         for key, value in config.items():
@@ -2212,6 +2259,7 @@ class PropertyPanel(ctk.CTkFrame):
                 ctx._screenshot = None
                 ctx._is_running = True
                 ctx.blackboard = Blackboard()
+                ctx._bound_window = None
                 
                 if app and hasattr(app, 'behavior_tree'):
                     editor = app.behavior_tree
@@ -2219,16 +2267,50 @@ class PropertyPanel(ctk.CTkFrame):
                         ctx._project_root = editor.project_root
                     else:
                         ctx._project_root = None
+                    
+                    if hasattr(editor, 'get_start_node'):
+                        start_node = editor.get_start_node()
+                        if start_node:
+                            bind_window = getattr(start_node, 'bind_window', False)
+                            if bind_window:
+                                window_title = getattr(start_node, 'window_title', '')
+                                window_pid = getattr(start_node, 'window_pid', 0)
+                                from bt_utils.window_manager import WindowManager
+                                hwnd, _ = WindowManager.find_window_smart(
+                                    window_pid if window_pid > 0 else None,
+                                    window_title
+                                )
+                                if hwnd:
+                                    ctx._bound_window = hwnd
                 else:
                     ctx._project_root = None
             
             def get_screenshot(ctx, region=None):
-                if ctx._screenshot is None:
+                if ctx._bound_window:
+                    from bt_utils.window_capture import WindowCapture
+                    if ctx._screenshot is None:
+                        ctx._screenshot = WindowCapture.capture_window(ctx._bound_window)
+                    if region and ctx._screenshot:
+                        return ctx._screenshot.crop(region)
+                    return ctx._screenshot
+                else:
+                    if ctx._screenshot is None:
+                        ctx._screenshot = ImageGrab.grab()
                     if region:
-                        ctx._screenshot = ImageGrab.grab(bbox=region)
+                        return ctx._screenshot.crop(region)
+                    return ctx._screenshot
+            
+            def get_full_screenshot(ctx):
+                if ctx._screenshot is None:
+                    if ctx._bound_window:
+                        from bt_utils.window_capture import WindowCapture
+                        ctx._screenshot = WindowCapture.capture_window(ctx._bound_window)
                     else:
                         ctx._screenshot = ImageGrab.grab()
                 return ctx._screenshot
+            
+            def get_bound_window(ctx):
+                return ctx._bound_window
             
             def resolve_path(ctx, relative_path):
                 if relative_path.startswith("./") and ctx._project_root:
@@ -2255,13 +2337,44 @@ class PropertyPanel(ctk.CTkFrame):
         }
         
         if node_type not in node_map:
-            return
+            return {"success": False, "image_path": None}
         
         module_path, class_name = node_map[node_type].split(":")
         module = importlib.import_module(module_path)
         node_class = getattr(module, class_name)
         node = node_class(config=node_config)
-        node._check_condition(context)
+        success = node._check_condition(context)
+        
+        image_path = None
+        images_dir = self._get_preview_images_dir()
+        if images_dir and context._screenshot:
+            screenshot = context._screenshot.copy()
+            draw = ImageDraw.Draw(screenshot)
+            
+            region = config.get("region")
+            if region:
+                if isinstance(region, str):
+                    try:
+                        parts = [int(x.strip()) for x in region.split(",")]
+                        if len(parts) == 4:
+                            region = tuple(parts)
+                        else:
+                            region = None
+                    except (ValueError, AttributeError):
+                        region = None
+                elif isinstance(region, (list, tuple)) and len(region) == 4:
+                    region = tuple(region)
+                else:
+                    region = None
+            
+            if region and len(region) == 4:
+                draw.rectangle([region[0], region[1], region[2], region[3]], outline="red", width=2)
+            
+            timestamp = int(time.time() * 1000)
+            image_path = os.path.join(images_dir, f"preview_{timestamp}.png")
+            screenshot.save(image_path)
+        
+        return {"success": success, "image_path": image_path}
     
     def _create_section_title(self, title: str):
         section_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")

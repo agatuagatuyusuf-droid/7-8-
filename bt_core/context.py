@@ -236,7 +236,7 @@ class ExecutionContext:
             return region
         from bt_utils.coordinate import CoordinateConverter
         if len(region) == 2:
-            result = CoordinateConverter.window_to_absolute(region[0], region[1], self._bound_window)
+            result = CoordinateConverter.client_to_absolute(region[0], region[1], self._bound_window)
             return result if result else region
         return CoordinateConverter.window_region_to_screen(region, self._bound_window)
 

@@ -419,6 +419,9 @@ class BehaviorTreeApp(ctk.CTk):
                 self._settings.set("shortcuts.record", shortcuts.get("record", "F11"), auto_save=False)
         
         if hasattr(self, 'behavior_tree') and self.behavior_tree:
+            if hasattr(self.behavior_tree, 'property_panel'):
+                self.behavior_tree.property_panel.cleanup_preview_images()
+            
             file_path = self.behavior_tree.file_path
             if file_path:
                 self._settings.set_last_file_path(file_path)

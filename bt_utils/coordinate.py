@@ -153,27 +153,19 @@ class CoordinateConverter:
 
     @staticmethod
     def screen_region_to_window(screen_region: tuple, hwnd: int) -> tuple:
-        rect = CoordinateConverter.get_window_rect(hwnd)
-        if not rect:
-            return (0, 0, 0, 0)
-        return (
-            screen_region[0] - rect[0],
-            screen_region[1] - rect[1],
-            screen_region[2] - rect[0],
-            screen_region[3] - rect[1]
-        )
+        left_top = CoordinateConverter.absolute_to_client(screen_region[0], screen_region[1], hwnd)
+        right_bottom = CoordinateConverter.absolute_to_client(screen_region[2], screen_region[3], hwnd)
+        if left_top and right_bottom:
+            return (left_top[0], left_top[1], right_bottom[0], right_bottom[1])
+        return (0, 0, 0, 0)
 
     @staticmethod
     def window_region_to_screen(window_region: tuple, hwnd: int) -> tuple:
-        rect = CoordinateConverter.get_window_rect(hwnd)
-        if not rect:
-            return (0, 0, 0, 0)
-        return (
-            window_region[0] + rect[0],
-            window_region[1] + rect[1],
-            window_region[2] + rect[0],
-            window_region[3] + rect[1]
-        )
+        left_top = CoordinateConverter.client_to_absolute(window_region[0], window_region[1], hwnd)
+        right_bottom = CoordinateConverter.client_to_absolute(window_region[2], window_region[3], hwnd)
+        if left_top and right_bottom:
+            return (left_top[0], left_top[1], right_bottom[0], right_bottom[1])
+        return (0, 0, 0, 0)
 
     @staticmethod
     def find_window(title: str = None, class_name: str = None) -> Optional[wintypes.HWND]:
