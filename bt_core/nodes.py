@@ -53,15 +53,6 @@ class Node(ABC):
 
     def _execute_with_decorators(self, context: "ExecutionContext", 
                                    execute_func: callable) -> NodeStatus:
-        """带装饰参数执行节点逻辑
-
-        Args:
-            context: 执行上下文
-            execute_func: 实际执行函数
-
-        Returns:
-            节点执行状态
-        """
         if not self.config.enabled:
             return NodeStatus.SUCCESS
 
@@ -85,11 +76,24 @@ class Node(ABC):
         duration_ms = (time.perf_counter() - start_time) * 1000
         self.status = status
 
+        from bt_utils.log_manager import LogManager
+        LogManager.debug_print(
+            f"[DEBUG] _execute_with_decorators: {self.NODE_TYPE} '{self.name}' "
+            f"(id={self.node_id}) execute_func returned {status.name}, "
+            f"retry_count={self.config.retry_count}, _retry_count={self._retry_count}, "
+            f"repeat_count={self.config.repeat_count}, _repeat_count={self._repeat_count}"
+        )
+
         retry_count = self.config.retry_count
         if status == NodeStatus.FAILURE and retry_count != 0:
             if retry_count == -1 or self._retry_count < retry_count:
                 self._retry_count += 1
                 
+                LogManager.debug_print(
+                    f"[DEBUG] _execute_with_decorators: {self.NODE_TYPE} '{self.name}' "
+                    f"RETRY #{self._retry_count}, retry_count config={retry_count}"
+                )
+
                 repeat_interval_ms = self.config.repeat_interval_ms
                 repeat_interval_ms_random = self.config.get_int("repeat_interval_ms_random", 0)
                 if repeat_interval_ms > 0 or repeat_interval_ms_random > 0:    
@@ -105,6 +109,13 @@ class Node(ABC):
                     return NodeStatus.ABORTED
 
                 self._reset_for_retry()
+
+                LogManager.debug_print(
+                    f"[DEBUG] _execute_with_decorators: {self.NODE_TYPE} '{self.name}' "
+                    f"after _reset_for_retry: status={self.status.name}, "
+                    f"current_index={getattr(self, 'current_index', 'N/A')}"
+                )
+
                 return NodeStatus.RUNNING
 
         repeat_count = self.config.repeat_count
@@ -140,12 +151,36 @@ class Node(ABC):
         return status
 
     def _reset_for_retry(self) -> None:
-        """重试时重置状态（保留重试计数器）"""
+        from bt_utils.log_manager import LogManager
+        LogManager.debug_print(
+            f"[DEBUG] _reset_for_retry: {self.NODE_TYPE} '{self.name}' (id={self.node_id}) "
+            f"BEFORE: status={self.status.name}, current_index={getattr(self, 'current_index', 'N/A')}, "
+            f"_child_index={self._child_index}, _children_running={self._children_running}"
+        )
         self.status = NodeStatus.RUNNING
         self._tick_count = 0
         self._start_time = None
+        self._child_index = 0
+        self._children_running = False
+        if hasattr(self, 'current_index'):
+            self.current_index = 0
+        if hasattr(self, '_last_child_finish_time'):
+            self._last_child_finish_time = None
         for child in self.children:
+            LogManager.debug_print(
+                f"[DEBUG] _reset_for_retry: resetting child {child.NODE_TYPE} '{child.name}' "
+                f"(id={child.node_id}), child.status BEFORE reset={child.status.name}"
+            )
             child.reset()
+            LogManager.debug_print(
+                f"[DEBUG] _reset_for_retry: child {child.NODE_TYPE} '{child.name}' "
+                f"(id={child.node_id}), child.status AFTER reset={child.status.name}"
+            )
+        LogManager.debug_print(
+            f"[DEBUG] _reset_for_retry: {self.NODE_TYPE} '{self.name}' (id={self.node_id}) "
+            f"AFTER: status={self.status.name}, current_index={getattr(self, 'current_index', 'N/A')}, "
+            f"_child_index={self._child_index}, _children_running={self._children_running}"
+        )
 
     def _reset_for_repeat(self) -> None:
         """重复执行时重置状态（保留重复计数器）"""
@@ -325,6 +360,13 @@ class SequenceNode(CompositeNode):
         if not self.children:
             return NodeStatus.SUCCESS
 
+        LogManager.debug_print(
+            f"[DEBUG] SequenceNode._tick_internal: '{self.name}' (id={self.node_id}) "
+            f"ENTER: current_index={self.current_index}, "
+            f"continue_on_failure={self.continue_on_failure}, "
+            f"children_count={len(self.children)}"
+        )
+
         has_failure = False
 
         while self.current_index < len(self.children):
@@ -340,7 +382,19 @@ class SequenceNode(CompositeNode):
                 if current_time - self._last_child_finish_time < actual_interval:
                     return NodeStatus.RUNNING
 
+            LogManager.debug_print(
+                f"[DEBUG] SequenceNode._tick_internal: '{self.name}' "
+                f"ticking child[{self.current_index}]={child.NODE_TYPE} '{child.name}' "
+                f"(id={child.node_id}), child.status={child.status.name}"
+            )
+
             status = child.tick(context)
+
+            LogManager.debug_print(
+                f"[DEBUG] SequenceNode._tick_internal: '{self.name}' "
+                f"child[{self.current_index}]={child.NODE_TYPE} '{child.name}' "
+                f"returned {status.name}"
+            )
 
             if status == NodeStatus.RUNNING:
                 return NodeStatus.RUNNING
@@ -352,6 +406,10 @@ class SequenceNode(CompositeNode):
                     self._last_child_finish_time = context.elapsed_time * 1000
                     continue
                 else:
+                    LogManager.debug_print(
+                        f"[DEBUG] SequenceNode._tick_internal: '{self.name}' "
+                        f"FAILURE branch: setting current_index=0 (was {self.current_index})"
+                    )
                     self.current_index = 0
                     LogManager.instance().log_failure(
                         node_type="顺序节点",
@@ -381,6 +439,10 @@ class SequenceNode(CompositeNode):
 
     def reset(self, reset_counters: bool = True) -> None:
         super().reset(reset_counters)
+        self._last_child_finish_time = None
+
+    def _reset_for_retry(self) -> None:
+        super()._reset_for_retry()
         self._last_child_finish_time = None
 
 
@@ -446,6 +508,10 @@ class SelectorNode(CompositeNode):
 
     def reset(self, reset_counters: bool = True) -> None:
         super().reset(reset_counters)
+        self._last_child_time = 0
+
+    def _reset_for_retry(self) -> None:
+        super()._reset_for_retry()
         self._last_child_time = 0
 
 
@@ -899,12 +965,33 @@ class ConditionNode(Node):
         return self._execute_with_decorators(context, self._tick_internal)
 
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
+        from bt_utils.log_manager import LogManager
+
         if self._children_running and self.children:
+            LogManager.debug_print(
+                f"[DEBUG] ConditionNode._tick_internal: {self.NODE_TYPE} '{self.name}' "
+                f"(id={self.node_id}) _children_running=True, executing children"
+            )
             return self._execute_children(context)
         
         current_time = context.elapsed_time * 1000
-        if current_time - self._last_check_time < self.check_interval_ms:      
+        time_since_last = current_time - self._last_check_time
+        if time_since_last < self.check_interval_ms:
+            LogManager.debug_print(
+                f"[DEBUG] ConditionNode._tick_internal: {self.NODE_TYPE} '{self.name}' "
+                f"(id={self.node_id}) CHECK_INTERVAL_CACHE HIT: "
+                f"time_since_last={time_since_last:.1f}ms < check_interval={self.check_interval_ms}ms, "
+                f"returning cached status={self.status.name}"
+            )
             return self.status
+
+        LogManager.debug_print(
+            f"[DEBUG] ConditionNode._tick_internal: {self.NODE_TYPE} '{self.name}' "
+            f"(id={self.node_id}) CHECK_INTERVAL_CACHE MISS: "
+            f"time_since_last={time_since_last:.1f}ms >= check_interval={self.check_interval_ms}ms, "
+            f"current_status={self.status.name}, _last_check_time={self._last_check_time}, "
+            f"current_time={current_time:.1f}"
+        )
 
         self._last_check_time = current_time
         result = self._check_condition(context)
@@ -914,6 +1001,11 @@ class ConditionNode(Node):
 
         status = NodeStatus.SUCCESS if result else NodeStatus.FAILURE
         self.status = status
+
+        LogManager.debug_print(
+            f"[DEBUG] ConditionNode._tick_internal: {self.NODE_TYPE} '{self.name}' "
+            f"(id={self.node_id}) condition_result={result}, final_status={status.name}"
+        )
 
         if status == NodeStatus.SUCCESS and self.children:
             context.notify_node_status(self.node_id, "success")
@@ -992,7 +1084,7 @@ class ConditionNode(Node):
 
     def reset(self, reset_counters: bool = True) -> None:
         super().reset(reset_counters)
-        self._last_check_time = 0
+        self._last_check_time = -self.check_interval_ms - 1
 
 
 class ActionNode(Node):
@@ -1129,6 +1221,11 @@ class StartNode(CompositeNode):
             )
             return NodeStatus.SUCCESS
         
+        LogManager.debug_print(
+            f"[DEBUG] StartNode._tick_internal: '{self.name}' (id={self.node_id}) "
+            f"ENTER: current_index={self.current_index}, children_count={len(self.children)}"
+        )
+
         while self.current_index < len(self.children):
             child = self.children[self.current_index]
             
@@ -1136,7 +1233,19 @@ class StartNode(CompositeNode):
                 self.current_index += 1
                 continue
             
+            LogManager.debug_print(
+                f"[DEBUG] StartNode._tick_internal: '{self.name}' "
+                f"ticking child[{self.current_index}]={child.NODE_TYPE} '{child.name}' "
+                f"(id={child.node_id})"
+            )
+
             status = child.tick(context)
+
+            LogManager.debug_print(
+                f"[DEBUG] StartNode._tick_internal: '{self.name}' "
+                f"child[{self.current_index}]={child.NODE_TYPE} '{child.name}' "
+                f"returned {status.name}"
+            )
             
             if status == NodeStatus.RUNNING:
                 return NodeStatus.RUNNING

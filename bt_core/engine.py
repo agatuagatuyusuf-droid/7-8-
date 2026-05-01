@@ -214,6 +214,12 @@ class BehaviorTreeEngine:
             if self.root_node:
                 status = self.root_node.tick(self.context)
 
+                from bt_utils.log_manager import LogManager
+                LogManager.debug_print(
+                    f"[DEBUG] Engine._run_loop: tick={self.context.tick_count}, "
+                    f"root_node status={status.name}"
+                )
+
                 if self._on_node_status:
                     self._on_node_status(self.root_node.node_id, status.value)
 
