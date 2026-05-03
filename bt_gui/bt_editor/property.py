@@ -1935,6 +1935,9 @@ class TextListField(FieldWidget):
     def _on_change(self):
         self.on_change(self.key, self.get_value())
 
+    def validate_and_save(self):
+        self._on_change()
+
     def set_value(self, value: Any):
         self.textbox.delete("1.0", tk.END)
         if isinstance(value, list) and value:
@@ -1998,24 +2001,31 @@ class PropertyPanel(ctk.CTkFrame):
             return
         
         for key, widget in self.widgets.items():
-            if not hasattr(widget, 'entry'):
-                continue
-            
             try:
-                entry_widget = widget.entry
-                
-                if entry_widget == focused:
-                    self._save_widget_value(widget)
-                    return
-                
-                if hasattr(entry_widget, '_entry'):
-                    if entry_widget._entry == focused:
+                if hasattr(widget, 'entry'):
+                    entry_widget = widget.entry
+                    
+                    if entry_widget == focused:
                         self._save_widget_value(widget)
                         return
+                    
+                    if hasattr(entry_widget, '_entry'):
+                        if entry_widget._entry == focused:
+                            self._save_widget_value(widget)
+                            return
+                    
+                    if hasattr(entry_widget, 'winfo_children'):
+                        for child in entry_widget.winfo_children():
+                            if child == focused:
+                                self._save_widget_value(widget)
+                                return
                 
-                if hasattr(entry_widget, 'winfo_children'):
-                    for child in entry_widget.winfo_children():
-                        if child == focused:
+                if hasattr(widget, 'textbox'):
+                    if widget.textbox == focused:
+                        self._save_widget_value(widget)
+                        return
+                    if hasattr(widget.textbox, '_textbox'):
+                        if widget.textbox._textbox == focused:
                             self._save_widget_value(widget)
                             return
             except Exception:
