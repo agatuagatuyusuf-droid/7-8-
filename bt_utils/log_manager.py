@@ -11,6 +11,7 @@ class LogLevel(Enum):
     FAILURE = "failure"
     ABORTED = "aborted"
     INFO = "info"
+    TIMEOUT = "timeout"
 
 
 @dataclass
@@ -30,6 +31,8 @@ class LogEntry:
             return f"[{time_str}] ✅ {self.node_type} \"{self.node_name}\" - 成功"
         elif self.level == LogLevel.FAILURE:
             return f"[{time_str}] ❌ {self.node_type} \"{self.node_name}\" - 失败: {self.message}"
+        elif self.level == LogLevel.TIMEOUT:
+            return f"[{time_str}] ⏱️ {self.node_type} \"{self.node_name}\" - 超时: {self.message}"
         elif self.level == LogLevel.ABORTED:
             return f"[{time_str}] ⏸️ {self.node_type} \"{self.node_name}\" - 中止"
         else:
@@ -70,6 +73,7 @@ class LogManager:
     def __init__(self):
         self._buffer: List[LogEntry] = []
         self._buffer_lock = threading.Lock()
+        self._stopped = False
         
         if LogManager._console_output_enabled is None:
             LogManager._console_output_enabled = _is_console_output_enabled()
@@ -127,6 +131,9 @@ class LogManager:
         Args:
             entry: 日志条目
         """
+        if self._stopped and entry.level in (LogLevel.SUCCESS, LogLevel.FAILURE):
+            return
+        
         with self._buffer_lock:
             self._buffer.append(entry)
         
@@ -180,6 +187,21 @@ class LogManager:
             node_name=node_name
         ))
     
+    def log_timeout(self, node_type: str, node_name: str, timeout_ms: int) -> None:
+        """记录超时日志（前端显示）
+        
+        Args:
+            node_type: 节点类型
+            node_name: 节点名称
+            timeout_ms: 超时时间（毫秒）
+        """
+        self.log(LogEntry(
+            level=LogLevel.TIMEOUT,
+            node_type=node_type,
+            node_name=node_name,
+            message=f"运行超时（{timeout_ms}ms）"
+        ))
+    
     def log_info(self, node_type: str, node_name: str, message: str = "") -> None:
         """记录信息日志（前端显示）
         
@@ -194,6 +216,34 @@ class LogManager:
             node_name=node_name,
             message=message
         ))
+    
+    def set_stopped(self, stopped: bool) -> None:
+        """设置停止标志
+        
+        当设置为 True 时，log_success 和 log_failure 将被抑制，
+        防止停止运行时产生误导性的成功/失败日志。
+        log_aborted 和 log_info 不受影响。
+        
+        Args:
+            stopped: 是否停止
+        """
+        self._stopped = stopped
+    
+    def is_stopped(self) -> bool:
+        """检查是否处于停止状态"""
+        return self._stopped
+    
+    def clear_success_failure_entries(self) -> None:
+        """清除缓冲区中的成功和失败日志条目
+        
+        在停止运行时调用，清除可能因竞态条件残留的成功/失败日志，
+        避免用户看到停止瞬间的误导性成功日志。
+        """
+        with self._buffer_lock:
+            self._buffer = [
+                entry for entry in self._buffer
+                if entry.level not in (LogLevel.SUCCESS, LogLevel.FAILURE)
+            ]
     
     def flush(self) -> List[LogEntry]:
         with self._buffer_lock:

@@ -1264,6 +1264,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
 
         self._is_running = True
         self._stop_requested = False
+        
+        from bt_utils.log_manager import LogManager
+        LogManager.instance().set_stopped(False)
+        
         self._play_start_sound()
 
         self.canvas.show_all_status_indicators()
@@ -1283,6 +1287,16 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         if not self._is_running:
             return
         
+        from bt_utils.log_manager import LogManager
+        log_manager = LogManager.instance()
+        log_manager.set_stopped(True)
+        log_manager.clear_success_failure_entries()
+        log_manager.log_info(
+            node_type="系统",
+            node_name="",
+            message="用户停止运行"
+        )
+        
         self._stop_requested = True
         self.after(0, self._stop_running_in_main_thread)
     
@@ -1290,6 +1304,17 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         """在主线程中执行停止操作"""
         if not self._is_running:
             return
+        
+        from bt_utils.log_manager import LogManager
+        log_manager = LogManager.instance()
+        if not log_manager.is_stopped():
+            log_manager.set_stopped(True)
+            log_manager.clear_success_failure_entries()
+            log_manager.log_info(
+                node_type="系统",
+                node_name="",
+                message="用户停止运行"
+            )
         
         self._play_stop_sound()
         

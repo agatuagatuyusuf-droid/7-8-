@@ -69,6 +69,14 @@ class Node(ABC):
                 self.status = NodeStatus.FAILURE
                 context.notify_node_status(self.node_id, "failure")
                 context.record_node_stats(self.node_id, self.NODE_TYPE, self.name, "failure", timeout_ms)
+                
+                from bt_utils.log_manager import LogManager
+                LogManager.instance().log_timeout(
+                    node_type=self.NODE_TYPE,
+                    node_name=self.name,
+                    timeout_ms=timeout_ms
+                )
+                
                 return NodeStatus.FAILURE
 
         start_time = time.perf_counter()
