@@ -5,7 +5,7 @@ name: AutoDoor BehaviorTree Build and Release
 
 on:
   push:
-    branches: [ master, refactor, test, behavior_tree ]
+    branches: [ master, refactor, test, behavior_tree, debug ]
     tags: [ 'autodoor_V*' ]
   pull_request:
     branches: [ master ]
