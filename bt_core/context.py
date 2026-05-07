@@ -1,8 +1,11 @@
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, List, TYPE_CHECKING
 import os
 import time
 
 from .blackboard import Blackboard
+
+if TYPE_CHECKING:
+    pass
 
 
 class ExecutionContext:
@@ -17,6 +20,8 @@ class ExecutionContext:
         tick_count: tick执行次数
         project_root: 项目根目录
     """
+
+    MAX_SUBTREE_DEPTH = 10
 
     def __init__(self, project_root: str = None):
         self.blackboard = Blackboard()
@@ -34,6 +39,8 @@ class ExecutionContext:
         self._stats_collector = None
         self._bound_window: Optional[int] = None
         self._previous_foreground_window: Optional[int] = None
+        self._subtree_stack: List[str] = []
+        self._parent_context: Optional['ExecutionContext'] = None
     
     def set_stats_collector(self, collector):
         """设置统计收集器
@@ -42,6 +49,45 @@ class ExecutionContext:
             collector: 统计收集器实例
         """
         self._stats_collector = collector
+    
+    def push_subtree(self, subtree_path: str) -> None:
+        """进入子树时压栈
+
+        Args:
+            subtree_path: 子树文件路径
+        """
+        self._subtree_stack.append(subtree_path)
+    
+    def pop_subtree(self) -> Optional[str]:
+        """退出子树时出栈
+
+        Returns:
+            弹出的子树路径，如果栈为空返回 None
+        """
+        return self._subtree_stack.pop() if self._subtree_stack else None
+    
+    def get_subtree_depth(self) -> int:
+        """获取当前子树嵌套深度"""
+        return len(self._subtree_stack)
+    
+    def is_in_subtree(self, path: str) -> bool:
+        """检查路径是否已在引用链中
+
+        Args:
+            path: 待检查的子树路径
+
+        Returns:
+            是否已在引用链中
+        """
+        normalized_path = os.path.normpath(os.path.abspath(path))
+        for p in self._subtree_stack:
+            if os.path.normpath(os.path.abspath(p)) == normalized_path:
+                return True
+        return False
+    
+    def can_enter_subtree(self) -> bool:
+        """检查是否可以进入新的子树（深度限制）"""
+        return len(self._subtree_stack) < self.MAX_SUBTREE_DEPTH
     
     def record_node_stats(self, node_id: str, node_type: str, node_name: str,
                           status: str, duration_ms: float):

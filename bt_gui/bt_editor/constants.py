@@ -4,6 +4,7 @@ NODE_CATEGORY_MAP = {
     "SelectorNode": "composite",
     "ParallelNode": "composite",
     "RandomNode": "composite",
+    "SubtreeNode": "composite",
     "OCRConditionNode": "condition",
     "ImageConditionNode": "condition",
     "ColorConditionNode": "condition",
@@ -28,6 +29,7 @@ NODE_DISPLAY_NAMES = {
     "SelectorNode": "选择",
     "ParallelNode": "并行",
     "RandomNode": "随机",
+    "SubtreeNode": "子树引用",
     "OCRConditionNode": "文字检测",
     "ImageConditionNode": "图像匹配",
     "ColorConditionNode": "颜色检测",
@@ -52,6 +54,7 @@ NODE_DESCRIPTIONS = {
     "SelectorNode": "选择第一个成功的子节点",
     "ParallelNode": "同时执行所有子节点",
     "RandomNode": "随机执行子节点",
+    "SubtreeNode": "引用外部行为树文件作为子树",
     "OCRConditionNode": "检测文字内容",
     "ImageConditionNode": "匹配图像模板",
     "ColorConditionNode": "检测颜色值",
@@ -70,7 +73,7 @@ NODE_DESCRIPTIONS = {
     "TextInputNode": "向目标位置输入文本",
 }
 
-COMPOSITE_NODES = ["SequenceNode", "SelectorNode", "ParallelNode", "RandomNode"]
+COMPOSITE_NODES = ["SequenceNode", "SelectorNode", "ParallelNode", "RandomNode", "SubtreeNode"]
 CONDITION_NODES = ["OCRConditionNode", "ImageConditionNode", "ColorConditionNode", "NumberConditionNode", "VariableConditionNode", "TextExtractNode"]
 ACTION_NODES = ["KeyPressNode", "MouseClickNode", "MouseMoveNode", "MouseScrollNode", "DelayNode", "SetVariableNode", "ScriptNode", "CodeNode", "AlarmNode", "TextInputNode"]
 
@@ -99,6 +102,7 @@ def build_node_categories(theme_colors: dict) -> dict:
                 ("SelectorNode", "选择", "选择第一个成功的子节点"),
                 ("ParallelNode", "并行", "同时执行所有子节点"),
                 ("RandomNode", "随机", "随机执行子节点"),
+                ("SubtreeNode", "子树引用", "引用外部行为树文件作为子树"),
             ]
         },
         "条件节点": {

@@ -159,6 +159,12 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "window_title", "label": "窗口标题", "type": "window_select", "default": "", "hide_if": {"field": "bind_window", "value": False}},
         {"key": "window_pid", "label": "窗口PID", "type": "number", "default": 0, "hidden": True},
     ],
+    "SubtreeNode": [
+        {"key": "subtree_path", "label": "子树项目文件夹", "type": "folder", "width": 150},
+        {"key": "blackboard_mode", "label": "黑板模式", "type": "select", "options": ["inherit", "isolated", "namespaced"], "default": "inherit"},
+        {"key": "namespace", "label": "命名空间", "type": "text", "hide_if": {"field": "blackboard_mode", "value": ["inherit", "isolated"]}},
+        {"key": "auto_reload", "label": "自动重载", "type": "bool", "default": False},
+    ],
 }
 
 CONDITION_DECORATOR_FIELDS = [
@@ -688,6 +694,144 @@ class FileField(FieldWidget):
         else:
             self.var.set("")
     
+    def get_value(self) -> Any:
+        return self.full_path
+
+
+class FolderField(FieldWidget):
+    def __init__(self, master, label: str, key: str, on_change: Callable,
+                 app=None, width: int = None, **kwargs):
+        self.full_path = ""
+        self.app = app
+        self._width = width
+        super().__init__(master, label, key, on_change, **kwargs)
+        self._create_widget()
+
+    def _create_widget(self):
+        input_frame = ctk.CTkFrame(self, fg_color="transparent")
+        input_frame.pack(fill="x")
+
+        self.var = tk.StringVar(value="")
+
+        entry_kwargs = {
+            "textvariable": self.var,
+            "font": Theme.get_font('sm'),
+            "height": Theme.DIMENSIONS['input_height'],
+            "fg_color": self._dark_colors['bg_tertiary'],
+            "border_color": self._dark_colors['border'],
+            "text_color": self._dark_colors['text_primary'],
+            "corner_radius": Theme.DIMENSIONS['button_corner_radius'],
+            "state": "disabled"
+        }
+        if self._width:
+            entry_kwargs["width"] = self._width
+
+        self.entry = ctk.CTkEntry(input_frame, **entry_kwargs)
+        self.entry.pack(side="left", fill="x", expand=True, padx=(0, Theme.DIMENSIONS['spacing_xs']))
+
+        self.btn = ctk.CTkButton(
+            input_frame,
+            text="浏览",
+            font=Theme.get_font('sm'),
+            width=60,
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['primary'],
+            hover_color=self._dark_colors['primary_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+        )
+        self.btn.pack(side="right")
+        self.btn.bind("<ButtonRelease-1>", lambda e: self._browse())
+
+    def _get_project_root(self):
+        if self.app and hasattr(self.app, 'behavior_tree'):
+            editor = self.app.behavior_tree
+            if hasattr(editor, 'project_root') and editor.project_root:
+                return editor.project_root
+        return None
+
+    def _browse(self):
+        project_root = self._get_project_root()
+
+        initial_dir = None
+        if self.full_path:
+            abs_full_path = self.full_path
+            if self.full_path.startswith("./"):
+                abs_full_path = os.path.normpath(os.path.join(project_root or ".", self.full_path[2:]))
+            if os.path.isdir(abs_full_path):
+                initial_dir = os.path.dirname(abs_full_path)
+        else:
+            if project_root and os.path.exists(project_root):
+                initial_dir = os.path.dirname(project_root)
+
+        folder_path = filedialog.askdirectory(
+            initialdir=initial_dir,
+            title="选择子树项目文件夹"
+        )
+
+        if not folder_path:
+            return
+
+        project_json = os.path.join(folder_path, "project.json")
+        tree_json = os.path.join(folder_path, "tree.json")
+        if not os.path.exists(project_json) and not os.path.exists(tree_json):
+            from tkinter import messagebox
+            result = messagebox.askyesno(
+                "提示",
+                f"所选文件夹中未找到 project.json 或 tree.json。\n\n是否仍要使用此文件夹作为子树项目？"
+            )
+            if not result:
+                return
+
+        if project_root:
+            import shutil
+            folder_name = os.path.basename(folder_path)
+            subtrees_dir = os.path.join(project_root, "subtrees")
+            os.makedirs(subtrees_dir, exist_ok=True)
+
+            dest_dir = os.path.join(subtrees_dir, folder_name)
+
+            if os.path.exists(dest_dir):
+                from tkinter import messagebox
+                result = messagebox.askyesno(
+                    "文件夹已存在",
+                    f"子树文件夹 '{folder_name}' 已存在于当前项目中。\n\n是否覆盖？"
+                )
+                if not result:
+                    rel_path = "./subtrees/" + folder_name
+                    self.full_path = rel_path
+                    self.var.set(folder_name)
+                    self.on_change(self.key, rel_path)
+                    return
+                shutil.rmtree(dest_dir)
+
+            try:
+                shutil.copytree(folder_path, dest_dir)
+            except Exception as e:
+                from tkinter import messagebox
+                messagebox.showerror("复制失败", f"复制子树项目文件夹失败: {e}")
+                return
+
+            rel_path = "./subtrees/" + folder_name
+            self.full_path = rel_path
+            self.var.set(folder_name)
+            self.on_change(self.key, rel_path)
+            return
+
+        self.full_path = folder_path
+        folder_name = os.path.basename(folder_path)
+        self.var.set(folder_name)
+        self.on_change(self.key, folder_path)
+
+    def set_value(self, value: Any):
+        if value:
+            self.full_path = str(value)
+            display = str(value)
+            if "/" in display or "\\" in display:
+                display = display.replace("\\", "/").split("/")[-1]
+            self.var.set(display)
+        else:
+            self.var.set("")
+
     def get_value(self) -> Any:
         return self.full_path
 
@@ -2464,6 +2608,12 @@ class PropertyPanel(ctk.CTkFrame):
             field_widget = FileField(
                 container, label, key, self._on_field_change,
                 filetypes=field.get("filetypes", [("所有文件", "*.*")]),
+                app=self.app,
+                width=field.get("width")
+            )
+        elif field_type == "folder":
+            field_widget = FolderField(
+                container, label, key, self._on_field_change,
                 app=self.app,
                 width=field.get("width")
             )
