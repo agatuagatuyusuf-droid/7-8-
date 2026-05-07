@@ -67,14 +67,13 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         self.configure(fg_color=self._dark_colors['bg_primary'], corner_radius=0)
         
         self._fallback_canvas = None
-        self._fallback_command_manager = None
+        self._fallback_command_manager = CommandManager()
         
         self.tab_manager = GuiTabManager()
         self.tab_manager.on_tab_switched = self._on_tab_switched
         self.tab_manager.on_tab_status_changed = self._on_tab_status_changed
         self.tab_manager.on_tab_removed = self._on_tab_removed
         
-        self._fallback_command_manager = CommandManager()
         self._clipboard_data = None
         
         self._autosave_manager: Optional[AutoSaveManager] = None
