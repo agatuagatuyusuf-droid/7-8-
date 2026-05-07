@@ -272,7 +272,17 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             on_stop=self._stop_running,
             on_open_folder=self._open_project_folder
         )
+        self.toolbar.set_on_all_run(self._handle_all_run)
+        self.toolbar.set_on_all_stop(self._handle_all_stop)
         self.toolbar.pack(fill="x")
+    
+    def _handle_all_run(self):
+        count = self.tab_manager.start_all()
+        LogManager.debug_print(f"[OK] 启动了 {count} 个行为树")
+    
+    def _handle_all_stop(self):
+        count = self.tab_manager.stop_all()
+        LogManager.debug_print(f"[OK] 停止了 {count} 个行为树")
     
     def _create_main_area(self):
         self.main_area = ctk.CTkFrame(self.main_container, fg_color="transparent")
