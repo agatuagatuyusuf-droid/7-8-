@@ -130,6 +130,9 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             if result:
                 self._save_tab(tab_id)
         
+        if hasattr(instance, '_autosave_manager') and instance._autosave_manager:
+            instance._autosave_manager.stop()
+        
         self.tab_manager.remove_tab(tab_id)
     
     def _handle_tab_run(self, tab_id: str):
@@ -242,8 +245,13 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             command_manager=command_manager
         )
         
+        autosave_manager = self._create_autosave_for_tab(instance)
+        instance._autosave_manager = autosave_manager
+        
         self.tab_manager.add_tab(tab_id, instance)
         self.tab_bar.add_tab(tab_id, name)
+        
+        autosave_manager.start()
         
         return tab_id
     
@@ -338,8 +346,22 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             command_manager=command_manager
         )
         
+        autosave_manager = self._create_autosave_for_tab(instance)
+        instance._autosave_manager = autosave_manager
+        
         self.tab_manager.add_tab(tab_id, instance)
         self.tab_bar.add_tab(tab_id, instance.name)
+        
+        autosave_manager.start()
+    
+    def _create_autosave_for_tab(self, instance: TreeInstance) -> AutoSaveManager:
+        """为 Tab 创建 AutoSaveManager"""
+        return AutoSaveManager(
+            get_data_func=instance.canvas.get_tree_data if instance.canvas else lambda: {},
+            on_save_callback=self._on_autosave_complete,
+            autosave_dir=self.BACKUP_DIR,
+            get_file_path_func=lambda inst=instance: inst.file_path
+        )
     
     def _get_project_name(self) -> str:
         if self._fallback_project_root:
@@ -1621,31 +1643,19 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         self.canvas.load_tree(data)
     
     def _init_autosave(self):
-        self._autosave_manager = AutoSaveManager(
-            get_data_func=self.canvas.get_tree_data if hasattr(self, 'canvas') else lambda: {},
-            on_save_callback=self._on_autosave_complete,
-            autosave_dir=self.BACKUP_DIR,
-            get_file_path_func=lambda: self.file_path
-        )
-        
-        self._crash_recovery_handler = CrashRecoveryHandler(
-            get_data_func=self.canvas.get_tree_data if hasattr(self, 'canvas') else lambda: {},
-            recovery_dir=self.RECOVERY_DIR,
-            log_func=print
-        )
-        self._crash_recovery_handler.install()
-        
+        pass
+    
     def _start_autosave(self):
-        if self._autosave_manager:
-            self._autosave_manager.start()
+        pass
     
     def _on_autosave_complete(self, success: bool):
         if not success:
             LogManager.debug_print("[WARN] 自动保存失败")
     
     def on_content_changed(self):
-        if self._autosave_manager:
-            self._autosave_manager.on_content_changed()
+        active_tab = self.tab_manager.get_active_tab()
+        if active_tab and hasattr(active_tab, '_autosave_manager') and active_tab._autosave_manager:
+            active_tab._autosave_manager.on_content_changed()
     
     def _check_crash_recovery(self):
         if not hasattr(self, '_crash_recovery_handler'):
