@@ -49,3 +49,5 @@ backup/
 /md/
 
 bt_utils/build_info.json
+
+.worktrees/
