@@ -79,8 +79,6 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         
         self._clipboard_data = None
         
-        self._autosave_manager: Optional[AutoSaveManager] = None
-        
         self._hotkey_manager = GlobalHotkeyManager.get_instance()
         
         self._create_ui()
