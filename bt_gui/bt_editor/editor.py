@@ -63,6 +63,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         
         self.project_manager = None
         self._fallback_project_root = None
+        self._fallback_project_manager = None
         
         self._dark_colors = Theme.get_dark_colors()
         self.configure(fg_color=self._dark_colors['bg_primary'], corner_radius=0)
@@ -141,6 +142,9 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             self.tab_bar.set_active(remaining_tab.tab_id)
             self._on_tab_switched(remaining_tab.tab_id, remaining_tab)
         else:
+            self._fallback_project_root = None
+            self._fallback_file_path = None
+            self._fallback_project_manager = None
             self._update_title("未命名")
             self.toolbar.set_project_path(None)
             self.toolbar.set_running(False)
@@ -265,9 +269,12 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         tree_data = instance.canvas.get_tree_data()
         
         if instance.project_root:
-            from bt_utils.project_manager import ProjectManager
-            pm = ProjectManager(instance.project_root)
-            pm.save_project(tree_data)
+            if instance.project_manager:
+                instance.project_manager.save_project(tree_data)
+            else:
+                from bt_utils.project_manager import ProjectManager
+                pm = ProjectManager(instance.project_root)
+                pm.save_project(tree_data)
         elif instance.file_path:
             save_path = instance.file_path
             with open(save_path, "w", encoding="utf-8") as f:
@@ -325,6 +332,14 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         engine = BehaviorTreeEngine(None)
         command_manager = CommandManager()
         
+        pm = None
+        if project_root:
+            from bt_utils.project_manager import ProjectManager
+            try:
+                pm = ProjectManager(project_root)
+            except Exception:
+                pm = None
+        
         BehaviorTreeEditor._tab_counter += 1
         tab_id = f"tab_{BehaviorTreeEditor._tab_counter}"
         
@@ -351,7 +366,8 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             file_path=file_path,
             project_root=project_root,
             modified=False,
-            command_manager=command_manager
+            command_manager=command_manager,
+            project_manager=pm
         )
         
         autosave_manager = self._create_autosave_for_tab(instance)
@@ -452,7 +468,8 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             file_path=self._fallback_file_path,
             project_root=self._fallback_project_root,
             modified=False,
-            command_manager=command_manager
+            command_manager=command_manager,
+            project_manager=self._fallback_project_manager
         )
         
         autosave_manager = self._create_autosave_for_tab(instance)
@@ -530,9 +547,6 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         self._hotkey_manager.register(record_key, self._toggle_recording)
         
         self._hotkey_manager.start()
-        
-        status = self._hotkey_manager.get_status()
-        LogManager.debug_print(f"[DEBUG] Hotkey manager status: {status}")
     
     def _toggle_recording(self):
         """切换录制状态"""
@@ -1012,7 +1026,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         
         self._on_new_project_dialog()
     
-    def load_tree(self, file_path: Optional[str] = None):
+    def load_tree(self, file_path: Optional[str] = None, skip_clear: bool = False):
         if not file_path:
             from tkinter import filedialog
             file_path = filedialog.askopenfilename(
@@ -1027,7 +1041,8 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            self.clear_canvas()
+            if not skip_clear:
+                self.clear_canvas()
             self.canvas.load_tree(data)
             self.file_path = file_path
             self._set_modified(False)
@@ -1772,9 +1787,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
     @engine.setter
     def engine(self, value):
         self._fallback_engine = value
-        tab = self.tab_manager.get_active_tab()
-        if tab:
-            tab.engine = value
+        if hasattr(self, 'tab_manager'):
+            tab = self.tab_manager.get_active_tab()
+            if tab:
+                tab.engine = value
     
     @property
     def context(self):
@@ -1785,9 +1801,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
     @context.setter
     def context(self, value):
         self._fallback_context = value
-        tab = self.tab_manager.get_active_tab()
-        if tab:
-            tab.context = value
+        if hasattr(self, 'tab_manager'):
+            tab = self.tab_manager.get_active_tab()
+            if tab:
+                tab.context = value
     
     @property
     def project_root(self):
@@ -1798,9 +1815,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
     @project_root.setter
     def project_root(self, value):
         self._fallback_project_root = value
-        tab = self.tab_manager.get_active_tab()
-        if tab:
-            tab.project_root = value
+        if hasattr(self, 'tab_manager'):
+            tab = self.tab_manager.get_active_tab()
+            if tab:
+                tab.project_root = value
     
     @property
     def file_path(self):
@@ -1811,9 +1829,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
     @file_path.setter
     def file_path(self, value):
         self._fallback_file_path = value
-        tab = self.tab_manager.get_active_tab()
-        if tab:
-            tab.file_path = value
+        if hasattr(self, 'tab_manager'):
+            tab = self.tab_manager.get_active_tab()
+            if tab:
+                tab.file_path = value
     
     @property
     def command_manager(self):
@@ -1824,12 +1843,25 @@ class BehaviorTreeEditor(ctk.CTkFrame):
     @command_manager.setter
     def command_manager(self, value):
         self._fallback_command_manager = value
+        if hasattr(self, 'tab_manager'):
+            tab = self.tab_manager.get_active_tab()
+            if tab:
+                tab.command_manager = value
+    
+    @property
+    def project_manager(self):
         tab = self.tab_manager.get_active_tab()
-        if tab:
-            tab.command_manager = value
+        return tab.project_manager if tab else self._fallback_project_manager
+    
+    @project_manager.setter
+    def project_manager(self, value):
+        self._fallback_project_manager = value
+        if hasattr(self, 'tab_manager'):
+            tab = self.tab_manager.get_active_tab()
+            if tab:
+                tab.project_manager = value
     
     def _on_tab_switched(self, tab_id: str, instance: TreeInstance):
-        """Tab 切换回调"""
         if not instance or not instance.canvas:
             return
         
@@ -1837,6 +1869,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         if current_tab and current_tab.canvas:
             selected = list(current_tab.canvas.selected_nodes) if current_tab.canvas.selected_nodes else []
             current_tab.selected_node_id = selected[0] if selected else None
+        
+        self._fallback_project_root = instance.project_root
+        self._fallback_file_path = instance.file_path
+        self._fallback_project_manager = instance.project_manager
         
         instance.canvas.tkraise()
         
@@ -1868,21 +1904,26 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         self.tab_bar.remove_tab(tab_id)
     
     def new_project(self, name: str, location: str, description: str = "", script_path: str = None):
-        """创建新项目
-        
-        Args:
-            name: 项目名称
-            location: 项目保存位置
-            description: 项目描述
-            script_path: 可选，要导入的旧脚本路径
-        """
         from bt_utils.project_manager import ProjectManager
         
-        self.project_root = os.path.join(location, name)
-        self.project_manager = ProjectManager(self.project_root)
-        self.project_manager.create_project(name, description)
+        project_root = os.path.join(location, name)
+        pm = ProjectManager(project_root)
+        pm.create_project(name, description)
         
-        self.canvas.clear_canvas(force=True)
+        active_tab = self.tab_manager.get_active_tab()
+        need_new_tab = active_tab is not None and (active_tab.modified or active_tab.project_root)
+        
+        if need_new_tab:
+            tab_id = self._create_new_tab(name, project_root)
+            self.tab_manager.switch_tab(tab_id)
+            self.tab_bar.set_active(tab_id)
+            instance = self.tab_manager.get_tab(tab_id)
+            self._on_tab_switched(tab_id, instance)
+        else:
+            self.canvas.clear_canvas(force=True)
+        
+        self.project_root = project_root
+        self.project_manager = pm
         
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
@@ -1909,7 +1950,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             self._import_old_script(script_path)
         else:
             tree_data = self.canvas.get_tree_data()
-            self.project_manager.save_project(tree_data)
+            pm.save_project(tree_data)
         
         self._update_title(name)
         
@@ -1919,21 +1960,40 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         self.toolbar.set_project_path(self.project_root)
     
     def open_project(self, project_root: str):
-        """打开项目"""
         from bt_utils.project_manager import ProjectManager
         
-        self.project_root = project_root
-        self.project_manager = ProjectManager(project_root)
+        for existing_id, existing_instance in self.tab_manager._trees.items():
+            if existing_instance.project_root and os.path.samefile(existing_instance.project_root, project_root):
+                self.tab_manager.switch_tab(existing_id)
+                self.tab_bar.set_active(existing_id)
+                instance = self.tab_manager.get_tab(existing_id)
+                self._on_tab_switched(existing_id, instance)
+                return
         
-        if not self.project_manager.validate_project():
+        pm = ProjectManager(project_root)
+        
+        if not pm.validate_project():
             raise ValueError("项目文件不完整或损坏")
         
-        config = self.project_manager.load_project()
+        config = pm.load_project()
+        project_name = config["project_info"]["name"]
+        
+        active_tab = self.tab_manager.get_active_tab()
+        need_new_tab = active_tab is not None and (active_tab.modified or active_tab.project_root)
+        
+        if need_new_tab:
+            tab_id = self._create_new_tab(project_name, project_root)
+            self.tab_manager.switch_tab(tab_id)
+            self.tab_bar.set_active(tab_id)
+            instance = self.tab_manager.get_tab(tab_id)
+            self._on_tab_switched(tab_id, instance)
+        
+        self.project_root = project_root
+        self.project_manager = pm
         
         tree_file = os.path.join(project_root, "tree.json")
-        self.load_tree(tree_file)
+        self.load_tree(tree_file, skip_clear=need_new_tab)
         
-        project_name = config["project_info"]["name"]
         self._update_title(project_name)
         
         active_tab = self.tab_manager.get_active_tab()

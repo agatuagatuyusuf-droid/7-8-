@@ -29,6 +29,7 @@ class TreeInstance:
     modified: bool = False
     command_manager: Optional[Any] = None
     selected_node_id: Optional[str] = None
+    project_manager: Optional[Any] = None
 
     def to_dict(self) -> dict:
         """导出为字典"""
