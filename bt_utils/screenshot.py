@@ -31,4 +31,4 @@ class ScreenshotManager:
         Returns:
             PIL.Image 截图对象
         """
-        return ImageGrab.grab(bbox=region)
+        return ImageGrab.grab(bbox=region, all_screens=True)

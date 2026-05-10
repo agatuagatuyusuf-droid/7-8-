@@ -54,7 +54,7 @@ NODE_CONFIG_SCHEMAS = {
     "KeyPressNode": [
         {"key": "key", "label": "按键", "type": "key"},
         {"key": "action", "label": "动作", "type": "select", "options": ["press", "down", "up"], "default": "press"},
-        {"key": "duration", "label": "按住时长(ms)", "type": "number", "default": 0, "hide_if": {"field": "action", "value": ["down", "up"]}},
+        {"key": "duration", "label": "按住时长(ms)", "type": "number", "default": 100, "hide_if": {"field": "action", "value": ["down", "up"]}},
         {"key": "duration_random", "label": "时长随机范围(±ms)", "type": "number", "min": 0, "default": 0, "hide_if": {"field": "action", "value": ["down", "up"]}},
     ],
     "MouseClickNode": [
@@ -71,7 +71,7 @@ NODE_CONFIG_SCHEMAS = {
     ],
     "MouseMoveNode": [
         {"key": "position", "label": "起点位置(相对移动值)", "type": "position"},
-        {"key": "use_blackboard", "label": "移动到最近检测点", "type": "bool", "default": False},
+        {"key": "use_blackboard", "label": "使用最近检测点", "type": "bool", "default": False},
         {"key": "position_key", "label": "黑板变量名", "type": "text", "default": "last_detection_position"},
         {"key": "relative", "label": "相对移动", "type": "bool", "default": False},
         {"key": "smooth", "label": "平滑移动", "type": "bool", "default": True},
@@ -2471,9 +2471,9 @@ class PropertyPanel(ctk.CTkFrame):
                     return ctx._screenshot
                 else:
                     if ctx._screenshot is None:
-                        ctx._screenshot = ImageGrab.grab()
+                        ctx._screenshot = ImageGrab.grab(all_screens=True)
                     if region:
-                        return ctx._screenshot.crop(region)
+                        return ImageGrab.grab(bbox=region, all_screens=True)
                     return ctx._screenshot
             
             def get_full_screenshot(ctx):
@@ -2482,7 +2482,7 @@ class PropertyPanel(ctk.CTkFrame):
                         from bt_utils.window_capture import WindowCapture
                         ctx._screenshot = WindowCapture.capture_window(ctx._bound_window)
                     else:
-                        ctx._screenshot = ImageGrab.grab()
+                        ctx._screenshot = ImageGrab.grab(all_screens=True)
                 return ctx._screenshot
             
             def get_bound_window(ctx):
@@ -2525,6 +2525,15 @@ class PropertyPanel(ctk.CTkFrame):
         images_dir = self._get_preview_images_dir()
         if images_dir and context._screenshot:
             screenshot = context._screenshot.copy()
+            
+            try:
+                import screeninfo
+                monitors = screeninfo.get_monitors()
+                offset_x = -min(monitor.x for monitor in monitors)
+                offset_y = -min(monitor.y for monitor in monitors)
+            except Exception:
+                offset_x, offset_y = 0, 0
+            
             draw = ImageDraw.Draw(screenshot)
             
             region = config.get("region")
@@ -2544,7 +2553,11 @@ class PropertyPanel(ctk.CTkFrame):
                     region = None
             
             if region and len(region) == 4:
-                draw.rectangle([region[0], region[1], region[2], region[3]], outline="red", width=2)
+                draw.rectangle(
+                    [region[0] + offset_x, region[1] + offset_y,
+                     region[2] + offset_x, region[3] + offset_y],
+                    outline="red", width=2
+                )
             
             timestamp = int(time.time() * 1000)
             image_path = os.path.join(images_dir, f"preview_{timestamp}.png")
