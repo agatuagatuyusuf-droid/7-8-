@@ -1,4 +1,4 @@
-from PIL import Image
+from PIL import ImageGrab, Image
 from typing import Tuple
 
 
@@ -6,7 +6,6 @@ class ScreenshotManager:
     """截图管理器
 
     提供全屏和区域截图功能，使用单例模式。
-    内部委托给 ScreenService 实现。
     """
     _instance = None
 
@@ -21,8 +20,7 @@ class ScreenshotManager:
         Returns:
             PIL.Image 截图对象
         """
-        from bt_utils.screen_service import ScreenService
-        return ScreenService.capture_screen()
+        return ImageGrab.grab(all_screens=True)
 
     def get_region_screenshot(self, region: Tuple[int, int, int, int]) -> Image.Image:
         """获取区域截图
@@ -33,5 +31,4 @@ class ScreenshotManager:
         Returns:
             PIL.Image 截图对象
         """
-        from bt_utils.screen_service import ScreenService
-        return ScreenService.capture_screen(region=region)
+        return ImageGrab.grab(bbox=region, all_screens=True)
