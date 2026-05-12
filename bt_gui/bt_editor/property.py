@@ -2526,13 +2526,16 @@ class PropertyPanel(ctk.CTkFrame):
         if images_dir and context._screenshot:
             screenshot = context._screenshot.copy()
             
-            try:
-                import screeninfo
-                monitors = screeninfo.get_monitors()
-                offset_x = -min(monitor.x for monitor in monitors)
-                offset_y = -min(monitor.y for monitor in monitors)
-            except Exception:
+            if context._bound_window:
                 offset_x, offset_y = 0, 0
+            else:
+                try:
+                    import screeninfo
+                    monitors = screeninfo.get_monitors()
+                    offset_x = -min(monitor.x for monitor in monitors)
+                    offset_y = -min(monitor.y for monitor in monitors)
+                except Exception:
+                    offset_x, offset_y = 0, 0
             
             draw = ImageDraw.Draw(screenshot)
             
