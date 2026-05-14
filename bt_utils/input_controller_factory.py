@@ -255,7 +255,6 @@ class InputController:
                     pass
             
             mouse_controller.release(mouse.Button.left)
-            mouse_controller.release(mouse.Button.right)
             mouse_controller.release(mouse.Button.middle)
             
         except Exception:

@@ -1623,6 +1623,13 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             self.toolbar.set_running(True)
 
     def _stop_running(self):
+        # ★ 通知DD输入控制器停止所有操作
+        try:
+            from bt_utils.dd_input import DDVirtualInput
+            DDVirtualInput.request_stop()
+        except Exception:
+            pass
+        
         stopped_count = 0
         for tab_id in list(self.tab_manager._trees.keys()):
             instance = self.tab_manager.get_tab(tab_id)

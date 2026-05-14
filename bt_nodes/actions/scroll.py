@@ -26,7 +26,12 @@ class MouseScrollNode(ActionNode):
             elif self.direction == "向右":
                 scroll_distance = abs(self.distance)
             
-            for _ in range(self.clicks):
+            for click_num in range(self.clicks):
+                # ★ 检查是否应该停止（F12或超时后）
+                if not context.is_running:
+                    print(f"[MouseScroll] ⚠️ 检测到停止信号，中断第{click_num+1}/{self.clicks}次点击")
+                    break
+                
                 context.execute_mouse_scroll(scroll_distance)
             
             LogManager.instance().log_success(
