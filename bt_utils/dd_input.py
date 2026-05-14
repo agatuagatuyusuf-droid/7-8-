@@ -175,18 +175,18 @@ class DDVirtualInput(BaseInputController):
         通过DD_todc函数动态转换Windows VK码到DD码
         """
         key_lower = key.lower()
-        
+
         if key_lower in self._vk_cache:
             return self._vk_cache[key_lower]
-        
+
         vk_code = VK_CODE_MAP.get(key_lower)
-        
+
         if vk_code is None:
             if len(key_lower) == 1 and key_lower.isalpha():
                 vk_code = ord(key_lower.upper())
             else:
                 return 0
-        
+
         if self._available and self._dd_dll:
             try:
                 dd_code = self._dd_dll.DD_todc(vk_code)
@@ -195,7 +195,23 @@ class DDVirtualInput(BaseInputController):
                     return dd_code
             except Exception:
                 pass
-        
+
+        fallback_map = {
+            'altleft': 0x12, 'alt_l': 0x12, 'altright': 0x12, 'alt_r': 0x12,
+            'ctrlleft': 0x11, 'ctrl_l': 0x11, 'ctrlright': 0x11, 'ctrl_r': 0x11,
+            'shiftleft': 0x10, 'shift_l': 0x10, 'shiftright': 0x10, 'shift_r': 0x10,
+        }
+
+        fallback_vk = fallback_map.get(key_lower)
+        if fallback_vk and self._available and self._dd_dll:
+            try:
+                dd_code = self._dd_dll.DD_todc(fallback_vk)
+                if dd_code > 0:
+                    self._vk_cache[key_lower] = dd_code
+                    return dd_code
+            except Exception:
+                pass
+
         return 0
     
     def key_press(self, key: str, action: str = "press", duration: int = 0) -> None:

@@ -229,7 +229,6 @@ class BehaviorTreeEditor(ctk.CTkFrame):
                 pass
     
     def _on_tab_engine_status_change(self, tab_id: str, status: str, node_status=None):
-        """Tab 引擎状态变化回调"""
         instance = self.tab_manager.get_tab(tab_id)
         if not instance:
             return
@@ -243,16 +242,6 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             
             if instance.canvas:
                 instance.canvas.after(100, lambda: instance.canvas.clear_all_node_status() if instance.canvas else None)
-            
-            any_running = False
-            for tid, inst in self.tab_manager._trees.items():
-                if inst.is_running:
-                    any_running = True
-                    break
-            
-            if not any_running:
-                self._is_running = False
-                self.toolbar.set_running(False)
     
     def _handle_import_project(self):
         from tkinter import filedialog
@@ -1893,11 +1882,16 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             )
     
     def _on_tab_status_changed(self, tab_id: str, running: bool):
-        """Tab 状态变更回调"""
         self.tab_bar.set_running(tab_id, running)
-        active_tab = self.tab_manager.get_active_tab()
-        if active_tab and active_tab.tab_id == tab_id:
-            self.toolbar.set_running(running)
+        
+        any_running = False
+        for tid, inst in self.tab_manager._trees.items():
+            if inst.is_running:
+                any_running = True
+                break
+        
+        self._is_running = any_running
+        self.toolbar.set_running(any_running)
     
     def _on_tab_removed(self, tab_id: str):
         """Tab 移除回调"""
@@ -1911,7 +1905,8 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         pm.create_project(name, description)
         
         active_tab = self.tab_manager.get_active_tab()
-        need_new_tab = active_tab is not None and (active_tab.modified or active_tab.project_root)
+        need_new_tab = (active_tab is not None and 
+                       (active_tab.modified or active_tab.project_root)) or active_tab is None
         
         if need_new_tab:
             tab_id = self._create_new_tab(name, project_root)
@@ -1979,7 +1974,8 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         project_name = config["project_info"]["name"]
         
         active_tab = self.tab_manager.get_active_tab()
-        need_new_tab = active_tab is not None and (active_tab.modified or active_tab.project_root)
+        need_new_tab = (active_tab is not None and 
+                       (active_tab.modified or active_tab.project_root)) or active_tab is None
         
         if need_new_tab:
             tab_id = self._create_new_tab(project_name, project_root)
