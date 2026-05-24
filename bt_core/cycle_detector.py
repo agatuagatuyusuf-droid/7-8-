@@ -88,8 +88,9 @@ class CycleDetector:
         """从节点树中提取所有子树引用路径"""
         refs = []
 
-        if hasattr(node, 'subtree_path') and node.subtree_path:
-            refs.append(node.subtree_path)
+        subtree_path = node.config.get("subtree_path", "") if hasattr(node, 'config') else ""
+        if subtree_path:
+            refs.append(subtree_path)
 
         for child in getattr(node, 'children', []):
             refs.extend(self._extract_subtree_refs(child))

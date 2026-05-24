@@ -57,11 +57,18 @@ class OCRConditionNode(ConditionNode):
                 return False
 
             from bt_utils.direction import SearchDirection
-            direction = SearchDirection.VALUE_MAP.get(self.search_direction, SearchDirection.TOP_LEFT)
-            
+            search_direction = self.config.get("search_direction", "左上")
+            direction = SearchDirection.VALUE_MAP.get(search_direction, SearchDirection.TOP_LEFT)
+
+            keywords = self.config.get("keywords", "")
+            language_display = self.config.get("language", "简体中文")
+            language = LANGUAGE_MAP.get(language_display, "chi_sim")
+            preprocess_display = self.config.get("preprocess_mode", "默认")
+            preprocess_mode = PREPROCESS_MODE_MAP.get(preprocess_display, "normal")
+
             found, position, all_text = OCRManager().recognize(
-                screenshot, self.keywords, self.language,
-                preprocess_mode=self.preprocess_mode, region=self.region,
+                screenshot, keywords, language,
+                preprocess_mode=preprocess_mode, region=self._parse_region(self.config.get("region", None)),
                 search_direction=direction
             )
 
@@ -70,7 +77,7 @@ class OCRConditionNode(ConditionNode):
                 self._log_condition_result(True)
                 return True
             else:
-                reason = f"未找到关键词: {self.keywords}"
+                reason = f"未找到关键词: {keywords}"
                 extra = f"识别到的文本: {all_text}" if all_text else None
                 self._log_condition_result(False, reason, extra)
                 return False
@@ -80,13 +87,4 @@ class OCRConditionNode(ConditionNode):
             self._log_condition_result(False, "检测异常，详情见终端日志")
             return False
 
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["region"] = list(self.region) if self.region else None
-        data["config"]["keywords"] = self.keywords
-        data["config"]["language"] = LANGUAGE_REVERSE_MAP.get(self.language, self.language)
-        data["config"]["preprocess_mode"] = PREPROCESS_MODE_REVERSE_MAP.get(self.preprocess_mode, "默认")
-        data["config"]["search_direction"] = self.search_direction
-        data["config"]["position_key"] = self.position_key
-        data["config"]["offset"] = list(self.offset)
-        return data
+

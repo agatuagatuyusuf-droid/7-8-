@@ -557,16 +557,18 @@ class RegionField(FieldWidget):
             editor = self.app.behavior_tree
             if hasattr(editor, 'get_start_node'):
                 start_node = editor.get_start_node()
-                if start_node and hasattr(start_node, 'bind_window') and start_node.bind_window:
-                    window_title = getattr(start_node, 'window_title', '')
-                    window_pid = getattr(start_node, 'window_pid', 0)
-                    if window_title or window_pid:
-                        from bt_utils.window_manager import WindowManager
-                        hwnd, _ = WindowManager.find_window_smart(
-                            window_pid if window_pid > 0 else None,
-                            window_title
-                        )
-                        return hwnd
+                if start_node and hasattr(start_node, 'config'):
+                    bind_window = start_node.config.get_bool("bind_window", False)
+                    if bind_window:
+                        window_title = start_node.config.get("window_title", "")
+                        window_pid = start_node.config.get_int("window_pid", 0)
+                        if window_title or window_pid:
+                            from bt_utils.window_manager import WindowManager
+                            hwnd, _ = WindowManager.find_window_smart(
+                                window_pid if window_pid > 0 else None,
+                                window_title
+                            )
+                            return hwnd
         return None
     
     def set_value(self, value: Any):
@@ -629,6 +631,28 @@ class FileField(FieldWidget):
             editor = self.app.behavior_tree
             if hasattr(editor, 'project_root') and editor.project_root:
                 return editor.project_root
+            
+            if hasattr(editor, 'file_path') and editor.file_path:
+                project_root = self._find_project_root(editor.file_path)
+                if project_root:
+                    return project_root
+        
+        return None
+    
+    def _find_project_root(self, file_path: str):
+        """向上查找项目根目录"""
+        current_dir = os.path.dirname(file_path)
+        
+        while current_dir:
+            project_json_path = os.path.join(current_dir, "project.json")
+            if os.path.exists(project_json_path):
+                return current_dir
+            
+            parent_dir = os.path.dirname(current_dir)
+            if parent_dir == current_dir:
+                break
+            current_dir = parent_dir
+        
         return None
     
     def _get_editor(self):
@@ -694,6 +718,12 @@ class FileField(FieldWidget):
             self.var.set(filename)
             self.on_change(self.key, relative_path)
         else:
+            from tkinter import messagebox
+            messagebox.showwarning(
+                "导入警告",
+                "无法将文件复制到项目文件夹，将使用原始绝对路径。\n"
+                "注意：使用绝对路径可能导致项目迁移后文件丢失。"
+            )
             self.full_path = file_path
             filename = file_path.split("/")[-1].split("\\")[-1]
             self.var.set(filename)
@@ -965,6 +995,12 @@ class ScreenshotField(FieldWidget):
             self.var.set(filename)
             self.on_change(self.key, relative_path)
         else:
+            from tkinter import messagebox
+            messagebox.showwarning(
+                "导入警告",
+                "无法将文件复制到项目文件夹，将使用原始绝对路径。\n"
+                "注意：使用绝对路径可能导致项目迁移后文件丢失。"
+            )
             self.full_path = file_path
             filename = file_path.split("/")[-1].split("\\")[-1]
             self.var.set(filename)
@@ -1120,6 +1156,12 @@ class ScreenshotField(FieldWidget):
                 self.app.deiconify()
                 messagebox.showerror("错误", "请先保存项目，再进行截图操作")
                 return
+            
+            # 将旧模板文件移到缓存目录
+            old_path = self.full_path if self.full_path else None
+            if old_path:
+                from bt_utils.resource_service import ResourceService
+                ResourceService.move_to_cache(old_path, project_root)
             
             image_dir = os.path.join(project_root, "images", "templates")
             
@@ -1509,16 +1551,18 @@ class PositionField(FieldWidget):
             editor = self.app.behavior_tree
             if hasattr(editor, 'get_start_node'):
                 start_node = editor.get_start_node()
-                if start_node and hasattr(start_node, 'bind_window') and start_node.bind_window:
-                    window_title = getattr(start_node, 'window_title', '')
-                    window_pid = getattr(start_node, 'window_pid', 0)
-                    if window_title or window_pid:
-                        from bt_utils.window_manager import WindowManager
-                        hwnd, _ = WindowManager.find_window_smart(
-                            window_pid if window_pid > 0 else None,
-                            window_title
-                        )
-                        return hwnd
+                if start_node and hasattr(start_node, 'config'):
+                    bind_window = start_node.config.get_bool("bind_window", False)
+                    if bind_window:
+                        window_title = start_node.config.get("window_title", "")
+                        window_pid = start_node.config.get_int("window_pid", 0)
+                        if window_title or window_pid:
+                            from bt_utils.window_manager import WindowManager
+                            hwnd, _ = WindowManager.find_window_smart(
+                                window_pid if window_pid > 0 else None,
+                                window_title
+                            )
+                            return hwnd
         return None
 
 

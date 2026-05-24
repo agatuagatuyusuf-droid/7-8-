@@ -55,9 +55,9 @@ class ScriptNode(ActionNode):
     def _execute_action(self, context) -> NodeStatus:
         with self._lock:
             self._aborted = False
-        
+
         try:
-            script_path = self.script_path
+            script_path = self.config.get("script_path", "")
             
             if not script_path:
                 LogManager().log_failure(
@@ -205,7 +205,7 @@ class ScriptNode(ActionNode):
                 )
 
         self._executor = self._get_or_create_executor()
-        use_loop = self.loop and self.config.repeat_count == 0
+        use_loop = self.config.get_bool("loop", False) and self.config.repeat_count == 0
         self._executor.run_script(self._script_content, loop=use_loop)
         self._script_started = True
 
@@ -270,12 +270,6 @@ class ScriptNode(ActionNode):
                 pass
         
         super().reset(reset_counters=reset_counters)
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["script_path"] = self.script_path
-        data["config"]["loop"] = self.loop
-        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ScriptNode":

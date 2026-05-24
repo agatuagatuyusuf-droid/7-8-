@@ -108,11 +108,12 @@ class CodeNode(ActionNode):
         self._stderr_thread: Optional[threading.Thread] = None
 
     def _detect_code_type(self) -> str:
-        if self.code_type != "auto":
-            return self.code_type
+        code_type = self.config.get("code_type", "auto")
+        if code_type != "auto":
+            return code_type
 
-        _, ext = os.path.splitext(self.code_path.lower())
-        
+        _, ext = os.path.splitext(self.config.get("code_path", "").lower())
+
         for code_type, extensions in self.CODE_TYPE_EXTENSIONS.items():
             if ext in extensions:
                 return code_type
@@ -134,10 +135,10 @@ class CodeNode(ActionNode):
 
     def _build_command(self, code_path: str = None) -> List[str]:
         if code_path is None:
-            code_path = self.code_path
-        
+            code_path = self.config.get("code_path", "")
+
         code_type = self._detect_code_type()
-        
+
         if code_type == "python":
             cmd = [self._get_python_executable(), "-u", code_path]
         elif code_type == "batch":
@@ -147,8 +148,9 @@ class CodeNode(ActionNode):
         else:
             cmd = [self._get_python_executable(), "-u", code_path]
 
-        if self.args:
-            cmd.extend([str(arg) for arg in self.args])
+        args = self.config.get("args", [])
+        if args:
+            cmd.extend([str(arg) for arg in args])
 
         return cmd
 
@@ -200,12 +202,12 @@ class CodeNode(ActionNode):
 
     def _execute_action(self, context) -> NodeStatus:
         from bt_utils.log_manager import LogManager
-        
+
         with self._lock:
             self._aborted = False
-        
+
         try:
-            code_path = self.code_path
+            code_path = self.config.get("code_path", "")
             
             if not code_path:
                 LogManager.instance().log_failure(
@@ -263,7 +265,7 @@ class CodeNode(ActionNode):
                     )
                     return NodeStatus.FAILURE
 
-            if not self.wait_complete:
+            if not self.config.get_bool("wait_complete", True):
                 cmd = self._build_command(absolute_code_path)
                 subprocess.Popen(
                     cmd,
@@ -395,14 +397,6 @@ class CodeNode(ActionNode):
         self._stdout_thread = None
         self._stderr_thread = None
         super().reset(reset_counters=reset_counters)
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["code_path"] = self.code_path
-        data["config"]["code_type"] = self.code_type
-        data["config"]["args"] = self.args
-        data["config"]["wait_complete"] = self.wait_complete
-        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "CodeNode":

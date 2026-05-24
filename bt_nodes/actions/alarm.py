@@ -42,9 +42,10 @@ class AlarmNode(ActionNode):
                     node_name=self.name
                 )
                 return NodeStatus.ABORTED
-            
+
             if not self._sound_started:
-                resolved_sound_path = context.resolve_path(self.sound_path)
+                sound_path = self.config.get("sound_path", "")
+                resolved_sound_path = context.resolve_path(sound_path)
                 
                 if not resolved_sound_path:
                     LogManager.instance().log_failure(
@@ -70,7 +71,7 @@ class AlarmNode(ActionNode):
                 
                 try:
                     sound = pygame.mixer.Sound(resolved_sound_path)
-                    sound.set_volume(self.volume / 100)
+                    sound.set_volume(self.config.get_int("volume", 70) / 100)
                     sound.play()
                     
                     self._sound_started = True
@@ -92,7 +93,7 @@ class AlarmNode(ActionNode):
                     )
                     return NodeStatus.FAILURE
             
-            if self.wait_complete:
+            if self.config.get_bool("wait_complete", True):
                 if self._sound_start_time is None or self._sound_duration is None:
                     self._stop_sound()
                     return NodeStatus.FAILURE
@@ -151,13 +152,6 @@ class AlarmNode(ActionNode):
         """重置节点状态"""
         self._stop_sound()
         super().reset(reset_counters=reset_counters)
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["sound_path"] = self.sound_path
-        data["config"]["volume"] = self.volume
-        data["config"]["wait_complete"] = self.wait_complete
-        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AlarmNode":

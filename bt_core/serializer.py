@@ -308,13 +308,14 @@ class Serializer:
     @staticmethod
     def _collect_subtree_refs(node: Node, refs: Dict[str, Any], project_root: str) -> None:
         """递归收集子树引用信息"""
-        if hasattr(node, 'subtree_path') and node.subtree_path:
-            resolved_path = node.subtree_path
+        subtree_path = node.config.get("subtree_path", "") if hasattr(node, 'config') else ""
+        if subtree_path:
+            resolved_path = subtree_path
             if not os.path.isabs(resolved_path):
                 resolved_path = os.path.join(project_root, resolved_path)
 
             refs[node.node_id] = {
-                "path": node.subtree_path,
+                "path": subtree_path,
                 "resolved_path": os.path.normpath(os.path.abspath(resolved_path)),
                 "node_count": Serializer._count_nodes_in_file(resolved_path) if os.path.exists(resolved_path) else 0
             }

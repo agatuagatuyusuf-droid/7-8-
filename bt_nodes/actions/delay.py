@@ -19,7 +19,9 @@ class DelayNode(ActionNode):
 
     def _execute_action(self, context) -> NodeStatus:
         if self._delay_start_time is None:
-            self._actual_duration = get_random_duration(self.duration_ms, self.duration_ms_random)
+            duration_ms = self.config.get_int("duration_ms", 1000)
+            duration_ms_random = self.config.get_int("duration_ms_random", 0)
+            self._actual_duration = get_random_duration(duration_ms, duration_ms_random)
             self._delay_start_time = time.time()
 
         elapsed = (time.time() - self._delay_start_time) * 1000
@@ -45,12 +47,6 @@ class DelayNode(ActionNode):
         super().reset(reset_counters=reset_counters)
         self._delay_start_time = None
         self._actual_duration = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["duration_ms"] = self.duration_ms
-        data["config"]["duration_ms_random"] = self.duration_ms_random
-        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DelayNode":

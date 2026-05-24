@@ -49,29 +49,43 @@ class TextExtractNode(ConditionNode):
             if screenshot is None:
                 return False
 
+            language_display = self.config.get("language", "简体中文")
+            language = LANGUAGE_MAP.get(language_display, "chi_sim")
+            preprocess_display = self.config.get("preprocess_mode", "默认")
+            preprocess_mode = "game" if preprocess_display == "复杂色彩" else "normal"
+
             ocr_manager = OCRManager()
             all_text = ocr_manager.get_all_text(
-                screenshot, self.language, self.preprocess_mode
+                screenshot, language, preprocess_mode
             )
 
             if not all_text:
                 self._log_condition_result(False, "未识别到文本")
                 return False
 
-            if self.extract_mode == "all":
+            extract_mode_display = self.config.get("extract_mode", "全部")
+            extract_mode = EXTRACT_MODE_MAP.get(extract_mode_display, "all")
+            keywords = self.config.get("keywords", "")
+
+            if extract_mode == "all":
                 extracted_text = all_text
             else:
-                extracted_text = self._extract_keywords_text(all_text, self.keywords)
+                extracted_text = self._extract_keywords_text(all_text, keywords)
 
-            context.blackboard.set(self.output_key, extracted_text)
+            output_key = self.config.get("output_key", "last_extracted_text")
+            context.blackboard.set(output_key, extracted_text)
 
-            if self.save_all_text:
-                context.blackboard.set(self.all_text_key, all_text)
+            if self.config.get_bool("save_all_text", False):
+                all_text_key = self.config.get("all_text_key", "all_ocr_text")
+                context.blackboard.set(all_text_key, all_text)
 
-            if self.save_position and self.region:
-                center_x = (self.region[0] + self.region[2]) // 2
-                center_y = (self.region[1] + self.region[3]) // 2
-                context.blackboard.set(self.position_key, (center_x, center_y))
+            save_position = self.config.get_bool("save_position", True)
+            region = self._parse_region(self.config.get("region", None))
+            if save_position and region:
+                center_x = (region[0] + region[2]) // 2
+                center_y = (region[1] + region[3]) // 2
+                position_key = self.config.get("position_key", "last_detection_position")
+                context.blackboard.set(position_key, (center_x, center_y))
 
             if extracted_text:
                 self._log_condition_result(True)
@@ -101,23 +115,6 @@ class TextExtractNode(ConditionNode):
                 matched_lines.append(line)
 
         return '\n'.join(matched_lines)
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        reverse_extract_mode = {"all": "全部", "keywords": "关键词"}
-        data["config"]["extract_mode"] = reverse_extract_mode.get(self.extract_mode, self.extract_mode)
-        data["config"]["region"] = list(self.region) if self.region else None
-        data["config"]["keywords"] = self.keywords
-        reverse_language_map = {"eng": "English", "chi_sim": "简体中文", "chi_tra": "繁体中文"}
-        data["config"]["language"] = reverse_language_map.get(self.language, self.language)
-        data["config"]["preprocess_mode"] = "复杂色彩" if self.preprocess_mode == "game" else "默认"
-        data["config"]["output_key"] = self.output_key
-        data["config"]["save_all_text"] = self.save_all_text
-        data["config"]["all_text_key"] = self.all_text_key
-        data["config"]["save_position"] = self.save_position
-        data["config"]["position_key"] = self.position_key
-        data["config"]["offset"] = list(self.offset)
-        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TextExtractNode":

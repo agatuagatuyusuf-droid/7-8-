@@ -25,15 +25,20 @@ class KeyPressNode(ActionNode):
     def _execute_action(self, context) -> NodeStatus:
         try:
             self._context = context
-            
-            if not self.key:
+
+            key = self.config.get("key", "space")
+            action = self.config.get("action", "press")
+            duration = self.config.get_int("duration", 0)
+            duration_random = self.config.get_int("duration_random", 0)
+
+            if not key:
                 LogManager.instance().log_failure(
                     node_type="按键节点",
                     node_name=self.name,
                     reason="未配置按键"
                 )
                 return NodeStatus.FAILURE
-            
+
             if self._abort_flag or not context.check_running():
                 self._release_key()
                 LogManager.instance().log_aborted(
@@ -41,12 +46,12 @@ class KeyPressNode(ActionNode):
                     node_name=self.name
                 )
                 return NodeStatus.ABORTED
-            
-            if self.action == "press" and self.duration > 0:
+
+            if action == "press" and duration > 0:
                 return self._non_blocking_press(context)
             else:
-                actual_duration = get_random_duration(self.duration, self.duration_random)
-                context.execute_key_press(self.key, self.action, actual_duration)
+                actual_duration = get_random_duration(duration, duration_random)
+                context.execute_key_press(key, action, actual_duration)
                 LogManager.instance().log_success(
                     node_type="按键节点",
                     node_name=self.name
@@ -64,12 +69,16 @@ class KeyPressNode(ActionNode):
             return NodeStatus.FAILURE
 
     def _non_blocking_press(self, context) -> NodeStatus:
+        key = self.config.get("key", "space")
+        duration = self.config.get_int("duration", 0)
+        duration_random = self.config.get_int("duration_random", 0)
+
         if not self._key_started:
-            context.execute_key_press(self.key, "down", 0)
+            context.execute_key_press(key, "down", 0)
             self._key_started = True
             self._start_time = time.time() * 1000
-            self._actual_duration = get_random_duration(self.duration, self.duration_random)
-        
+            self._actual_duration = get_random_duration(duration, duration_random)
+
         if self._abort_flag or not context.check_running():
             self._release_key()
             LogManager.instance().log_aborted(
@@ -77,15 +86,15 @@ class KeyPressNode(ActionNode):
                 node_name=self.name
             )
             return NodeStatus.ABORTED
-        
+
         current_time = time.time() * 1000
-        
+
         if current_time - self._start_time < self._actual_duration:
             return NodeStatus.RUNNING
-        
-        context.execute_key_press(self.key, "up", 0)
+
+        context.execute_key_press(key, "up", 0)
         self._reset_key_state()
-        
+
         LogManager.instance().log_success(
             node_type="按键节点",
             node_name=self.name
@@ -94,9 +103,10 @@ class KeyPressNode(ActionNode):
 
     def _release_key(self) -> None:
         """释放按键"""
+        key = self.config.get("key", "space")
         if self._key_started and self._context:
             try:
-                self._context.execute_key_press(self.key, "up", 0)
+                self._context.execute_key_press(key, "up", 0)
             except Exception:
                 pass
         self._reset_key_state()
@@ -118,14 +128,6 @@ class KeyPressNode(ActionNode):
         self._release_key()
         self._context = None
         super().reset(reset_counters=reset_counters)
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["key"] = self.key
-        data["config"]["action"] = self.action
-        data["config"]["duration"] = self.duration
-        data["config"]["duration_random"] = self.duration_random
-        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "KeyPressNode":

@@ -945,30 +945,51 @@ class ConditionNode(Node):
 
     def _apply_offset(self, position: tuple) -> tuple:
         """应用坐标偏移
-        
+
         Args:
             position: 原始位置 (x, y)
-            
+
         Returns:
             tuple: 偏移后的位置
         """
         if position is None:
             return None
-        
-        return (position[0] + self.offset[0], position[1] + self.offset[1])
-    
+
+        offset = self._get_offset()
+        return (position[0] + offset[0], position[1] + offset[1])
+
+    def _get_offset(self) -> tuple:
+        """从配置读取坐标偏移"""
+        offset = self.config.get("offset", None)
+        if offset is not None:
+            if isinstance(offset, (list, tuple)) and len(offset) >= 2:
+                return (int(offset[0]), int(offset[1]))
+            else:
+                return (0, 0)
+        else:
+            offset_x = self.config.get_int("offset_x", 0)
+            offset_y = self.config.get_int("offset_y", 0)
+            return (offset_x, offset_y)
+
     def _save_position(self, context, position: tuple):
         """保存位置到黑板（应用偏移）
-        
+
         坐标转换由 ExecutionContext 的 execute_mouse_* 方法自动处理。
-        
+
         Args:
             context: 执行上下文
             position: 原始位置（窗口相对坐标或屏幕绝对坐标）
         """
-        if position and self.save_position:
+        save_position = self.config.get_bool("save_position", True)
+        if position and save_position:
             final_position = self._apply_offset(position)
-            context.blackboard.set(self.position_key, final_position)
+            try:
+                from config.settings_manager import get_default_position_key
+                default_position_key = get_default_position_key()
+            except ImportError:
+                default_position_key = "last_detection_position"
+            position_key = self.config.get("position_key", default_position_key)
+            context.blackboard.set(position_key, final_position)
 
     def tick(self, context: "ExecutionContext") -> NodeStatus:
         return self._execute_with_decorators(context, self._tick_internal)
@@ -982,14 +1003,15 @@ class ConditionNode(Node):
                 f"(id={self.node_id}) _children_running=True, executing children"
             )
             return self._execute_children(context)
-        
+
+        check_interval_ms = self.config.get_int("check_interval_ms", 300)
         current_time = context.elapsed_time * 1000
         time_since_last = current_time - self._last_check_time
-        if time_since_last < self.check_interval_ms:
+        if time_since_last < check_interval_ms:
             LogManager.debug_print(
                 f"[DEBUG] ConditionNode._tick_internal: {self.NODE_TYPE} '{self.name}' "
                 f"(id={self.node_id}) CHECK_INTERVAL_CACHE HIT: "
-                f"time_since_last={time_since_last:.1f}ms < check_interval={self.check_interval_ms}ms, "
+                f"time_since_last={time_since_last:.1f}ms < check_interval={check_interval_ms}ms, "
                 f"returning cached status={self.status.name}"
             )
             return self.status
@@ -997,7 +1019,7 @@ class ConditionNode(Node):
         LogManager.debug_print(
             f"[DEBUG] ConditionNode._tick_internal: {self.NODE_TYPE} '{self.name}' "
             f"(id={self.node_id}) CHECK_INTERVAL_CACHE MISS: "
-            f"time_since_last={time_since_last:.1f}ms >= check_interval={self.check_interval_ms}ms, "
+            f"time_since_last={time_since_last:.1f}ms >= check_interval={check_interval_ms}ms, "
             f"current_status={self.status.name}, _last_check_time={self._last_check_time}, "
             f"current_time={current_time:.1f}"
         )
@@ -1005,7 +1027,8 @@ class ConditionNode(Node):
         self._last_check_time = current_time
         result = self._check_condition(context)
 
-        if self.invert:
+        invert = self.config.get_bool("invert", False)
+        if invert:
             result = not result
 
         status = NodeStatus.SUCCESS if result else NodeStatus.FAILURE
@@ -1060,7 +1083,8 @@ class ConditionNode(Node):
             PIL.Image 或 None
         """
         try:
-            return context.get_screenshot(self.region)
+            region = self._parse_region(self.config.get("region", None))
+            return context.get_screenshot(region)
         except Exception as e:
             from bt_utils.exception_handler import log_exception
             log_exception(e, f"{self.NODE_TYPE} '{self.name}' 截图失败")
@@ -1093,7 +1117,8 @@ class ConditionNode(Node):
 
     def reset(self, reset_counters: bool = True) -> None:
         super().reset(reset_counters)
-        self._last_check_time = -self.check_interval_ms - 1
+        check_interval_ms = self.config.get_int("check_interval_ms", 300)
+        self._last_check_time = -check_interval_ms - 1
 
 
 class ActionNode(Node):
@@ -1219,7 +1244,9 @@ class StartNode(CompositeNode):
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
         from bt_utils.log_manager import LogManager
 
-        if self.bind_window and self.window_title and not self._window_bound:
+        bind_window = self.config.get_bool("bind_window", False)
+        window_title = self.config.get("window_title", "")
+        if bind_window and window_title and not self._window_bound:
             self._bind_window_to_context(context)
             self._window_bound = True
 
@@ -1287,31 +1314,34 @@ class StartNode(CompositeNode):
     def _bind_window_to_context(self, context: "ExecutionContext") -> None:
         from bt_utils.window_manager import WindowManager
         from bt_utils.log_manager import LogManager
-        
+
+        window_pid = self.config.get_int("window_pid", 0)
+        window_title = self.config.get("window_title", "")
+
         hwnd, find_method = WindowManager.find_window_smart(
-            pid=self.window_pid if self.window_pid > 0 else None,
-            title_keyword=self.window_title
+            pid=window_pid if window_pid > 0 else None,
+            title_keyword=window_title
         )
-        
+
         if hwnd:
             context.bind_window(hwnd)
             rect = WindowManager.get_window_rect(hwnd)
             title = WindowManager.get_window_title(hwnd)
             actual_pid = WindowManager.get_window_pid(hwnd)
-            
+
             if find_method == "pid":
-                LogManager.debug_print(f"[DEBUG] StartNode 通过PID绑定窗口: pid={self.window_pid}, hwnd={hwnd}, title='{title}', rect={rect}")
+                LogManager.debug_print(f"[DEBUG] StartNode 通过PID绑定窗口: pid={window_pid}, hwnd={hwnd}, title='{title}', rect={rect}")
             else:
-                LogManager.debug_print(f"[DEBUG] StartNode 通过标题绑定窗口: title='{self.window_title}', hwnd={hwnd}, actual_title='{title}', pid={actual_pid}, rect={rect}")
-                if actual_pid and actual_pid != self.window_pid:
-                    LogManager.debug_print(f"[DEBUG] StartNode 提示: 窗口PID已变更 ({self.window_pid} -> {actual_pid})，建议重新选择窗口")
+                LogManager.debug_print(f"[DEBUG] StartNode 通过标题绑定窗口: title='{window_title}', hwnd={hwnd}, actual_title='{title}', pid={actual_pid}, rect={rect}")
+                if actual_pid and actual_pid != window_pid:
+                    LogManager.debug_print(f"[DEBUG] StartNode 提示: 窗口PID已变更 ({window_pid} -> {actual_pid})，建议重新选择窗口")
         else:
             LogManager.instance().log_failure(
                 node_type="开始节点",
                 node_name=self.name,
-                reason=f"未找到窗口: pid={self.window_pid}, title='{self.window_title}'"
+                reason=f"未找到窗口: pid={window_pid}, title='{window_title}'"
             )
-            LogManager.debug_print(f"[DEBUG] StartNode 未找到窗口: pid={self.window_pid}, title='{self.window_title}'")
+            LogManager.debug_print(f"[DEBUG] StartNode 未找到窗口: pid={window_pid}, title='{window_title}'")
     
     def _reset_for_retry(self) -> None:
         """重试时重置状态（保留重试计数器）"""
@@ -1434,7 +1464,7 @@ class SubtreeNode(CompositeNode):
             )
             return False
 
-        if self._subtree_root and not self.auto_reload:
+        if self._subtree_root and not self.config.get_bool("auto_reload", False):
             if self._loaded_path == tree_file:
                 if not self._has_file_changed(tree_file):
                     if self._subtree_context is None:
@@ -1489,22 +1519,24 @@ class SubtreeNode(CompositeNode):
 
         subtree_project_dir = getattr(self, '_subtree_project_dir', None) or parent_context.project_root
 
-        if self.blackboard_mode == "inherit":
+        blackboard_mode = self.config.get("blackboard_mode", "inherit")
+
+        if blackboard_mode == "inherit":
             sub_context = ExecutionContext(subtree_project_dir)
             sub_context.blackboard = parent_context.blackboard
             sub_context._subtree_stack = parent_context._subtree_stack.copy()
             sub_context._parent_context = parent_context
             return sub_context
 
-        elif self.blackboard_mode == "isolated":
+        elif blackboard_mode == "isolated":
             sub_context = ExecutionContext(subtree_project_dir)
             sub_context._subtree_stack = parent_context._subtree_stack.copy()
             sub_context._parent_context = parent_context
             return sub_context
 
-        elif self.blackboard_mode == "namespaced":
+        elif blackboard_mode == "namespaced":
             sub_context = ExecutionContext(subtree_project_dir)
-            namespace = self.namespace or self.name or self.node_id
+            namespace = self.config.get("namespace", "") or self.name or self.node_id
             sub_context.blackboard = NamespacedBlackboard(
                 parent_context.blackboard,
                 namespace
@@ -1520,13 +1552,14 @@ class SubtreeNode(CompositeNode):
 
         subtree_path 现在指向项目文件夹而非 JSON 文件。
         """
-        if not self.subtree_path:
+        subtree_path = self.config.get("subtree_path", "")
+        if not subtree_path:
             return None
 
-        if os.path.isabs(self.subtree_path):
-            return self.subtree_path
+        if os.path.isabs(subtree_path):
+            return subtree_path
 
-        return os.path.join(context.project_root, self.subtree_path)
+        return os.path.join(context.project_root, subtree_path)
 
     def _find_tree_file(self, project_dir: str) -> Optional[str]:
         """在子树项目文件夹中查找行为树文件
@@ -1600,13 +1633,4 @@ class SubtreeNode(CompositeNode):
         if self._subtree_root:
             self._subtree_root.reset(False)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """序列化为字典"""
-        data = super().to_dict()
-        data["config"]["subtree_path"] = self.subtree_path
-        data["config"]["blackboard_mode"] = self.blackboard_mode
-        if self.namespace:
-            data["config"]["namespace"] = self.namespace
-        if self.auto_reload:
-            data["config"]["auto_reload"] = self.auto_reload
-        return data
+

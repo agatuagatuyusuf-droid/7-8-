@@ -52,4 +52,4 @@ class PathResolver:
         real_abs_path = os.path.realpath(abs_path)
         real_project_root = os.path.realpath(self.project_root)
         
-        return real_abs_path.startswith(real_project_root)
+        return real_abs_path.startswith(real_project_root + os.sep) or real_abs_path == real_project_root

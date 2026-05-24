@@ -42,12 +42,12 @@ class MouseClickNode(ActionNode):
         try:
             self._context = context
             click_position = self._get_position(context)
-            
+
             if not self._click_started:
                 self._click_started = True
                 self._current_click = 0
                 self._last_click_time = None
-            
+
             if self._abort_flag or not context.check_running():
                 self._release_button()
                 LogManager.instance().log_aborted(
@@ -55,8 +55,9 @@ class MouseClickNode(ActionNode):
                     node_name=self.name
                 )
                 return NodeStatus.ABORTED
-            
-            if self.click_count == -1:
+
+            click_count = self.config.get_int("click_count", 1)
+            if click_count == -1:
                 return self._non_blocking_infinite_click(context, click_position)
             else:
                 return self._non_blocking_finite_click(context, click_position)
@@ -72,41 +73,51 @@ class MouseClickNode(ActionNode):
             return NodeStatus.FAILURE
 
     def _get_position(self, context) -> Optional[Tuple[int, int]]:
-        if self.use_blackboard:
-            bb_position = context.blackboard.get(self.position_key)
+        if self.config.get_bool("use_blackboard", False):
+            position_key = self.config.get("position_key", _get_default_position_key())
+            bb_position = context.blackboard.get(position_key)
             if bb_position:
                 return bb_position
-        return self.position
+        return self.config.get("position", None)
 
     def _non_blocking_finite_click(self, context, position: Optional[Tuple[int, int]]) -> NodeStatus:
         current_time = time.time() * 1000
-        
+
+        click_interval = self.config.get_int("click_interval", 100)
+        click_interval_random = self.config.get_int("click_interval_random", 0)
+
         if self._actual_interval is None:
-            self._actual_interval = get_random_interval(self.click_interval, self.click_interval_random)
-        
+            self._actual_interval = get_random_interval(click_interval, click_interval_random)
+
         if self._last_click_time is not None and self._actual_interval > 0:
             elapsed = current_time - self._last_click_time
             if elapsed < self._actual_interval:
                 return NodeStatus.RUNNING
-        
-        if self._current_click < self.click_count:
+
+        click_count = self.config.get_int("click_count", 1)
+        if self._current_click < click_count:
             if self._abort_flag or not context.check_running():
                 self._release_button()
                 return NodeStatus.ABORTED
-            
+
+            button = self.config.get("button", "left")
+            action = self.config.get("action", "press")
+            duration = self.config.get_int("duration", 100)
+            duration_random = self.config.get_int("duration_random", 0)
+
             if self._actual_duration is None:
-                self._actual_duration = get_random_duration(self.duration, self.duration_random)
-            context.execute_mouse_click(self.button, position, self.action, self._actual_duration)
-            
-            if self.action == "down":
+                self._actual_duration = get_random_duration(duration, duration_random)
+            context.execute_mouse_click(button, position, action, self._actual_duration)
+
+            if action == "down":
                 self._button_pressed = True
-            
+
             self._current_click += 1
             self._last_click_time = time.time() * 1000
             self._actual_interval = None
             self._actual_duration = None
-            
-            if self._current_click < self.click_count:
+
+            if self._current_click < click_count:
                 return NodeStatus.RUNNING
         
         self._reset_click_state()
@@ -118,15 +129,18 @@ class MouseClickNode(ActionNode):
 
     def _non_blocking_infinite_click(self, context, position: Optional[Tuple[int, int]]) -> NodeStatus:
         current_time = time.time() * 1000
-        
+
+        click_interval = self.config.get_int("click_interval", 100)
+        click_interval_random = self.config.get_int("click_interval_random", 0)
+
         if self._actual_interval is None:
-            self._actual_interval = get_random_interval(self.click_interval, self.click_interval_random)
-        
+            self._actual_interval = get_random_interval(click_interval, click_interval_random)
+
         if self._last_click_time is not None and self._actual_interval > 0:
             elapsed = current_time - self._last_click_time
             if elapsed < self._actual_interval:
                 return NodeStatus.RUNNING
-        
+
         if self._abort_flag or not context.check_running():
             self._release_button()
             LogManager.instance().log_aborted(
@@ -134,12 +148,17 @@ class MouseClickNode(ActionNode):
                 node_name=self.name
             )
             return NodeStatus.ABORTED
-        
+
+        button = self.config.get("button", "left")
+        action = self.config.get("action", "press")
+        duration = self.config.get_int("duration", 100)
+        duration_random = self.config.get_int("duration_random", 0)
+
         if self._actual_duration is None:
-            self._actual_duration = get_random_duration(self.duration, self.duration_random)
-        context.execute_mouse_click(self.button, position, self.action, self._actual_duration)
-        
-        if self.action == "down":
+            self._actual_duration = get_random_duration(duration, duration_random)
+        context.execute_mouse_click(button, position, action, self._actual_duration)
+
+        if action == "down":
             self._button_pressed = True
         
         self._current_click += 1
@@ -152,7 +171,8 @@ class MouseClickNode(ActionNode):
     def _release_button(self) -> None:
         if self._button_pressed and self._context:
             try:
-                self._context.execute_mouse_click(self.button, None, "up", 0)
+                button = self.config.get("button", "left")
+                self._context.execute_mouse_click(button, None, "up", 0)
             except Exception:
                 pass
         self._reset_click_state()
@@ -175,20 +195,6 @@ class MouseClickNode(ActionNode):
         self._release_button()
         self._context = None
         super().reset(reset_counters=reset_counters)
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["button"] = self.button
-        data["config"]["position"] = self.position
-        data["config"]["action"] = self.action
-        data["config"]["duration"] = self.duration
-        data["config"]["use_blackboard"] = self.use_blackboard
-        data["config"]["position_key"] = self.position_key
-        data["config"]["click_count"] = self.click_count
-        data["config"]["click_interval"] = self.click_interval
-        data["config"]["duration_random"] = self.duration_random
-        data["config"]["click_interval_random"] = self.click_interval_random
-        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MouseClickNode":
@@ -237,7 +243,7 @@ class MouseMoveNode(ActionNode):
     def _execute_action(self, context) -> NodeStatus:
         try:
             start_pos = self._get_start_position(context)
-            
+
             if not start_pos:
                 LogManager.instance().log_failure(
                     node_type="鼠标移动节点",
@@ -245,10 +251,11 @@ class MouseMoveNode(ActionNode):
                     reason="未指定起点位置"
                 )
                 return NodeStatus.FAILURE
-            
+
             end_pos = self._get_end_position(context, start_pos)
-            
-            if self.move_type == "拖拽":
+
+            move_type = self.config.get("move_type", "移动")
+            if move_type == "拖拽":
                 return self._execute_drag(context, start_pos, end_pos)
             else:
                 return self._execute_move(context, start_pos, end_pos)
@@ -262,28 +269,33 @@ class MouseMoveNode(ActionNode):
                 reason="执行异常，详情见终端日志"
             )
             try:
-                context.execute_mouse_click(self.drag_button, None, "up", 0)
+                context.execute_mouse_click(self.config.get("drag_button", "left"), None, "up", 0)
             except Exception:
                 pass
             return NodeStatus.FAILURE
 
     def _get_start_position(self, context) -> Optional[Tuple[int, int]]:
-        if self.use_blackboard:
-            bb_position = context.blackboard.get(self.position_key)
+        if self.config.get_bool("use_blackboard", False):
+            position_key = self.config.get("position_key", _get_default_position_key())
+            bb_position = context.blackboard.get(position_key)
             if bb_position:
                 return bb_position
-        return self.position
+        return self.config.get("position", (0, 0))
 
     def _get_end_position(self, context, start_pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:
-        if self.relative:
-            return (start_pos[0] + self.offset[0], start_pos[1] + self.offset[1])
-        
-        if self.use_blackboard_end:
-            bb_position = context.blackboard.get(self.position_key_end)
+        if self.config.get_bool("relative", False):
+            offset = self.config.get("offset", None)
+            if offset is not None and isinstance(offset, (list, tuple)) and len(offset) >= 2:
+                return (start_pos[0] + int(offset[0]), start_pos[1] + int(offset[1]))
+            return start_pos
+
+        if self.config.get_bool("use_blackboard_end", False):
+            position_key_end = self.config.get("position_key_end", "")
+            bb_position = context.blackboard.get(position_key_end)
             if bb_position:
                 return bb_position
-        
-        return self.end_position
+
+        return self.config.get("end_position", None)
 
     def _smoothstep(self, t: float) -> float:
         return t * t * (3 - 2 * t)
@@ -296,8 +308,10 @@ class MouseMoveNode(ActionNode):
                 node_name=self.name
             )
             return NodeStatus.SUCCESS
-        
-        actual_duration = get_random_duration(self.move_duration, self.move_duration_random)
+
+        move_duration = self.config.get_int("move_duration", 0)
+        move_duration_random = self.config.get_int("move_duration_random", 0)
+        actual_duration = get_random_duration(move_duration, move_duration_random)
         
         context.execute_mouse_move(start_pos, relative=False)
         time.sleep(0.01)
@@ -343,16 +357,22 @@ class MouseMoveNode(ActionNode):
                 reason="未指定拖拽终点"
             )
             return NodeStatus.FAILURE
-        
+
+        move_duration = self.config.get_int("move_duration", 0)
+        move_duration_random = self.config.get_int("move_duration_random", 0)
+        drag_duration = self.config.get_int("drag_duration", 0)
+        drag_duration_random = self.config.get_int("drag_duration_random", 0)
+        drag_button = self.config.get("drag_button", "left")
+
         actual_duration = get_random_duration(
-            self.move_duration if self.move_duration > 0 else self.drag_duration,
-            self.move_duration_random if self.move_duration_random > 0 else self.drag_duration_random
+            move_duration if move_duration > 0 else drag_duration,
+            move_duration_random if move_duration_random > 0 else drag_duration_random
         )
-        
+
         context.execute_mouse_move(start_pos, relative=False)
         time.sleep(0.02)
-        
-        context.execute_mouse_click(self.drag_button, start_pos, "down", 0)
+
+        context.execute_mouse_click(drag_button, start_pos, "down", 0)
         time.sleep(0.02)
         
         if actual_duration > 0:
@@ -365,7 +385,7 @@ class MouseMoveNode(ActionNode):
             
             for i in range(steps):
                 if not context.check_running():
-                    context.execute_mouse_click(self.drag_button, end_pos, "up", 0)
+                    context.execute_mouse_click(drag_button, end_pos, "up", 0)
                     return NodeStatus.ABORTED
                 
                 elapsed = time.time() - start_time
@@ -384,31 +404,13 @@ class MouseMoveNode(ActionNode):
             context.execute_mouse_move(end_pos, relative=False)
         
         time.sleep(0.02)
-        context.execute_mouse_click(self.drag_button, end_pos, "up", 0)
-        
+        context.execute_mouse_click(drag_button, end_pos, "up", 0)
+
         LogManager.instance().log_success(
             node_type="鼠标移动节点",
             node_name=self.name
         )
         return NodeStatus.SUCCESS
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["position"] = self.position
-        data["config"]["use_blackboard"] = self.use_blackboard
-        data["config"]["position_key"] = self.position_key
-        data["config"]["move_type"] = self.move_type
-        data["config"]["drag_button"] = self.drag_button
-        data["config"]["end_position"] = self.end_position
-        data["config"]["relative"] = self.relative
-        data["config"]["offset"] = list(self.offset)
-        data["config"]["use_blackboard_end"] = self.use_blackboard_end
-        data["config"]["position_key_end"] = self.position_key_end
-        data["config"]["move_duration"] = self.move_duration
-        data["config"]["move_duration_random"] = self.move_duration_random
-        data["config"]["drag_duration"] = self.drag_duration
-        data["config"]["drag_duration_random"] = self.drag_duration_random
-        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MouseMoveNode":

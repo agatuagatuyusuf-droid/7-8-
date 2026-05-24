@@ -1150,7 +1150,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
                 abs_project_root = os.path.abspath(self.project_root)
                 abs_source_path = os.path.abspath(absolute_path)
                 
-                if abs_source_path.startswith(abs_project_root):
+                if ResourceService.is_path_in_project(abs_source_path, abs_project_root):
                     continue
                 
                 resource_type = self._detect_resource_type(key, value)
@@ -1270,6 +1270,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
                     self.canvas.load_tree(tree_data)
             
             self.project_manager.save_project(tree_data)
+            
+            # 清理未被引用的资源文件
+            referenced_files = ResourceService.get_all_referenced_files(tree_data, self.project_root)
+            ResourceService.cleanup_unreferenced_files(self.project_root, referenced_files)
             
             active_tab = self.tab_manager.get_active_tab()
             if active_tab and hasattr(active_tab, '_autosave_manager') and active_tab._autosave_manager:

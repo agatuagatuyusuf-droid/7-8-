@@ -26,17 +26,21 @@ class ImageConditionNode(ConditionNode):
             if screenshot is None:
                 return False
 
+            template_path = self.config.get("template_path", "")
             if not os.path.exists(resolved_path):
-                self._log_condition_result(False, f"模板文件不存在: {self.template_path}")
+                self._log_condition_result(False, f"模板文件不存在: {template_path}")
                 return False
 
             template = Image.open(resolved_path)
             if template is None:
-                self._log_condition_result(False, f"无法加载模板文件: {self.template_path}")
+                self._log_condition_result(False, f"无法加载模板文件: {template_path}")
                 return False
 
+            raw_threshold = self.config.get_float("threshold", 80)
+            threshold = raw_threshold / 100.0 if raw_threshold > 1 else raw_threshold
+
             found, position, confidence = ImageProcessor.find_template(
-                screenshot, template, self.threshold
+                screenshot, template, threshold
             )
 
             if found:
@@ -45,7 +49,7 @@ class ImageConditionNode(ConditionNode):
                 self._log_condition_result(True)
                 return True
             else:
-                self._log_condition_result(False, f"未找到匹配模板 (阈值: {self.threshold}, 最高置信度: {confidence:.2f})")
+                self._log_condition_result(False, f"未找到匹配模板 (阈值: {threshold}, 最高置信度: {confidence:.2f})")
                 return False
         except Exception as e:
             from bt_utils.exception_handler import log_exception
@@ -62,14 +66,15 @@ class ImageConditionNode(ConditionNode):
         Returns:
             解析后的绝对路径，或None
         """
-        if not self.template_path:
+        template_path = self.config.get("template_path", "")
+        if not template_path:
             self._log_condition_result(False, "未设置模板路径")
             return None
 
-        if self.template_path.startswith("./") and hasattr(context, 'resolve_path'):
-            return context.resolve_path(self.template_path)
+        if template_path.startswith("./") and hasattr(context, 'resolve_path'):
+            return context.resolve_path(template_path)
 
-        return self.template_path
+        return template_path
 
     def _adjust_position(self, position: tuple) -> tuple:
         """调整坐标（加上区域偏移）
@@ -82,14 +87,9 @@ class ImageConditionNode(ConditionNode):
         """
         if position is None:
             return None
-        if self.region:
-            return (position[0] + self.region[0], position[1] + self.region[1])
+        region = self._parse_region(self.config.get("region", None))
+        if region:
+            return (position[0] + region[0], position[1] + region[1])
         return position
 
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["region"] = list(self.region) if self.region else None
-        data["config"]["template_path"] = self.template_path
-        data["config"]["threshold"] = self.threshold
-        data["config"]["offset"] = list(self.offset)
-        return data
+

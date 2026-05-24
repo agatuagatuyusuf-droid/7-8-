@@ -53,7 +53,7 @@ class TextInputNode(ActionNode):
                 )
                 return NodeStatus.FAILURE
 
-            if self.clear_before_input:
+            if self.config.get_bool("clear_before_input", False):
                 context.execute_key_press("ctrl", "down", 0)
                 context.execute_key_press("a", "press", 0)
                 context.execute_key_press("ctrl", "up", 0)
@@ -61,8 +61,8 @@ class TextInputNode(ActionNode):
 
             self._input_text(context, text)
 
-            if self.save_input_text:
-                context.blackboard.set(self.output_key, text)
+            if self.config.get_bool("save_input_text", False):
+                context.blackboard.set(self.config.get("output_key", "last_input_text"), text)
 
             LogManager.instance().log_success(
                 node_type="文本输入节点",
@@ -82,50 +82,53 @@ class TextInputNode(ActionNode):
             return NodeStatus.FAILURE
 
     def _get_text(self, context) -> str:
-        if self.input_mode == "preset":
-            if not self.preset_texts:
+        input_mode = INPUT_MODE_MAP.get(self.config.get("input_mode", "文本提取值"), "extracted")
+        if input_mode == "preset":
+            preset_texts = self.config.get("preset_texts", [])
+            if not preset_texts:
                 return ""
-            if self.execution_mode == "sequential":
-                return self._get_next_preset_text(context)
+            execution_mode = EXECUTION_MODE_MAP.get(self.config.get("execution_mode", "顺序"), "sequential")
+            if execution_mode == "sequential":
+                return self._get_next_preset_text(context, preset_texts)
             else:
-                return self._get_random_preset_text()
+                return self._get_random_preset_text(preset_texts)
 
-        elif self.input_mode == "extracted":
-            return context.blackboard.get(self.blackboard_key, "")
+        elif input_mode == "extracted":
+            return context.blackboard.get(self.config.get("blackboard_key", "last_extracted_text"), "")
 
-        elif self.input_mode == "file":
+        elif input_mode == "file":
             return self._read_file(context)
 
         return ""
 
-    def _get_next_preset_text(self, context) -> str:
+    def _get_next_preset_text(self, context, preset_texts: List[str]) -> str:
         index_key = f"{self.node_id}_text_index"
         current_index = context.blackboard.get(index_key, 0)
-        
-        text = self.preset_texts[current_index % len(self.preset_texts)]
-        
-        next_index = (current_index + 1) % len(self.preset_texts)
+
+        text = preset_texts[current_index % len(preset_texts)]
+
+        next_index = (current_index + 1) % len(preset_texts)
         context.blackboard.set(index_key, next_index)
-        
+
         return text
 
-    def _get_random_preset_text(self) -> str:
-        selected_index = random.randint(0, len(self.preset_texts) - 1)
-        return self.preset_texts[selected_index]
+    def _get_random_preset_text(self, preset_texts: List[str]) -> str:
+        selected_index = random.randint(0, len(preset_texts) - 1)
+        return preset_texts[selected_index]
 
     def _read_file(self, context) -> str:
-        if not self.file_path:
+        file_path = self.config.get("file_path", "")
+        if not file_path:
             return ""
-        
-        file_path = self.file_path
+
         if not os.path.isabs(file_path):
             file_path = context.resolve_path(file_path)
-        
+
         if not os.path.exists(file_path):
             LogManager.instance().log_failure(
                 node_type="文本输入节点",
                 node_name=self.name,
-                reason=f"文件不存在: {self.file_path}"
+                reason=f"文件不存在: {self.config.get('file_path', '')}"
             )
             return ""
         
@@ -137,12 +140,12 @@ class TextInputNode(ActionNode):
 
     def _input_text(self, context, text: str) -> None:
         import pyautogui
-        
+
         original_pause = pyautogui.PAUSE
         pyautogui.PAUSE = 0
-        
+
         try:
-            if self.input_delay == 0:
+            if self.config.get_int("input_delay", 0) == 0:
                 self._input_text_fast(context, text)
             else:
                 self._input_text_slow(context, text)
@@ -181,22 +184,7 @@ class TextInputNode(ActionNode):
                 
                 time.sleep(PASTE_COMPLETE_DELAY)
 
-            time.sleep(self.input_delay / 1000.0)
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        reverse_input_mode = {"extracted": "文本提取值", "preset": "预设文本", "file": "文件"}
-        data["config"]["input_mode"] = reverse_input_mode.get(self.input_mode, self.input_mode)
-        data["config"]["preset_texts"] = self.preset_texts
-        reverse_execution_mode = {"sequential": "顺序", "random": "随机"}
-        data["config"]["execution_mode"] = reverse_execution_mode.get(self.execution_mode, self.execution_mode)
-        data["config"]["blackboard_key"] = self.blackboard_key
-        data["config"]["file_path"] = self.file_path
-        data["config"]["input_delay"] = self.input_delay
-        data["config"]["clear_before_input"] = self.clear_before_input
-        data["config"]["save_input_text"] = self.save_input_text
-        data["config"]["output_key"] = self.output_key
-        return data
+            time.sleep(self.config.get_int("input_delay", 0) / 1000.0)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TextInputNode":

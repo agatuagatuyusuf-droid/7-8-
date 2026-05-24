@@ -25,20 +25,24 @@ class SetVariableNode(ActionNode):
 
     def _execute_action(self, context) -> NodeStatus:
         try:
-            if not self.variable_name:
+            variable_name = self.config.get("variable_name", "")
+            value = self.config.get("value", "")
+            operation = self.config.get("operation", "set")
+
+            if not variable_name:
                 LogManager.instance().log_failure(
                     node_type="变量节点",
                     node_name=self.name,
                     reason="未配置变量名"
                 )
                 return NodeStatus.FAILURE
-            
-            if self.operation == "set":
-                context.blackboard.set(self.variable_name, self.value)
-            elif self.operation == "increment":
-                context.blackboard.increment(self.variable_name, self.value)
-            elif self.operation == "delete":
-                context.blackboard.delete(self.variable_name)
+
+            if operation == "set":
+                context.blackboard.set(variable_name, value)
+            elif operation == "increment":
+                context.blackboard.increment(variable_name, value)
+            elif operation == "delete":
+                context.blackboard.delete(variable_name)
             
             LogManager.instance().log_success(
                 node_type="变量节点",
@@ -54,13 +58,6 @@ class SetVariableNode(ActionNode):
                 reason="执行异常，详情见终端日志"
             )
             return NodeStatus.FAILURE
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["variable_name"] = self.variable_name
-        data["config"]["value"] = self.value
-        data["config"]["operation"] = self.operation
-        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SetVariableNode":

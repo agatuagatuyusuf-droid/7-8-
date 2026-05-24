@@ -15,7 +15,8 @@ class ColorConditionNode(ConditionNode):
 
     def _check_condition(self, context) -> bool:
         try:
-            if self.region is None:
+            region = self._parse_region(self.config.get("region", None))
+            if region is None:
                 self._log_condition_result(False, "请先设置检测区域")
                 return False
 
@@ -26,13 +27,17 @@ class ColorConditionNode(ConditionNode):
             from PIL import Image
             import numpy as np
 
+            target_color = self._parse_color(self.config.get("target_color", None))
+            tolerance = self.config.get_int("tolerance", 30)
+            match_mode = self.config.get("match_mode", "any")
+
             img_array = np.array(screenshot)
-            target = np.array(self.target_color)
+            target = np.array(target_color)
 
             diff = np.abs(img_array[:, :, :3].astype(int) - target.astype(int))
-            matches = np.all(diff <= self.tolerance, axis=2)
+            matches = np.all(diff <= tolerance, axis=2)
 
-            if self.match_mode == "all":
+            if match_mode == "all":
                 result = bool(np.all(matches))
             else:
                 result = bool(np.any(matches))
@@ -42,14 +47,14 @@ class ColorConditionNode(ConditionNode):
                 if len(match_positions) > 0:
                     center_idx = len(match_positions) // 2
                     y, x = match_positions[center_idx]
-                    position = (int(x) + self.region[0], int(y) + self.region[1])
+                    position = (int(x) + region[0], int(y) + region[1])
                     self._save_position(context, position)
 
                 self._log_condition_result(True)
                 return True
             else:
                 self._log_condition_result(False,
-                    f"未找到匹配颜色 RGB{self.target_color} (容差: {self.tolerance})")
+                    f"未找到匹配颜色 RGB{target_color} (容差: {tolerance})")
                 return False
         except Exception as e:
             from bt_utils.exception_handler import log_exception
@@ -57,11 +62,4 @@ class ColorConditionNode(ConditionNode):
             self._log_condition_result(False, "检测异常，详情见终端日志")
             return False
 
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["region"] = list(self.region) if self.region else None
-        data["config"]["target_color"] = list(self.target_color) if self.target_color else None
-        data["config"]["tolerance"] = self.tolerance
-        data["config"]["match_mode"] = self.match_mode
-        data["config"]["offset"] = list(self.offset)
-        return data
+

@@ -41,6 +41,21 @@ class ResourceService:
     }
     
     @classmethod
+    def is_path_in_project(cls, abs_path: str, abs_project_root: str) -> bool:
+        """判断绝对路径是否在项目根目录内（确保目录边界，兼容 Windows 大小写）
+        
+        Args:
+            abs_path: 文件的绝对路径
+            abs_project_root: 项目根目录的绝对路径
+            
+        Returns:
+            是否在项目根目录内
+        """
+        norm_root = os.path.normpath(os.path.normcase(abs_project_root))
+        norm_path = os.path.normpath(os.path.normcase(abs_path))
+        return norm_path.startswith(norm_root + os.sep) or norm_path == norm_root
+    
+    @classmethod
     def collect_external_resources(cls, tree_data: Dict[str, Any], project_root: str) -> List[Dict[str, str]]:
         external_resources = []
         
@@ -69,7 +84,7 @@ class ResourceService:
                         if not os.path.exists(abs_path):
                             continue
                         
-                        if not abs_path.startswith(abs_project_root):
+                        if not cls.is_path_in_project(abs_path, abs_project_root):
                             resource_type = cls.RESOURCE_TYPE_MAP.get(key, 'other')
                             
                             external_resources.append({
@@ -286,7 +301,7 @@ class ResourceService:
         if not os.path.exists(abs_file_path):
             return None
         
-        if not abs_file_path.startswith(abs_project_root):
+        if not cls.is_path_in_project(abs_file_path, abs_project_root):
             return None
         
         cache_dir = os.path.join(project_root, cls.CACHE_DIR)
@@ -321,7 +336,18 @@ class ResourceService:
         abs_project_root = os.path.abspath(project_root)
         abs_source_path = os.path.abspath(source_path)
         
-        if abs_source_path.startswith(abs_project_root):
+        # 先处理旧文件：无论新文件是否在项目内，都应将旧文件移到缓存
+        # 但如果旧文件和新文件是同一个，则跳过移动
+        if old_path:
+            abs_old_path = old_path
+            if old_path.startswith("./"):
+                abs_old_path = os.path.normpath(os.path.join(project_root, old_path[2:]))
+            else:
+                abs_old_path = os.path.abspath(old_path)
+            if os.path.normcase(abs_old_path) != os.path.normcase(abs_source_path):
+                cls.move_to_cache(old_path, project_root)
+        
+        if cls.is_path_in_project(abs_source_path, abs_project_root):
             if source_path.startswith("./"):
                 return source_path
             
@@ -330,9 +356,6 @@ class ResourceService:
                 return f"./{rel_path.replace(os.sep, '/')}"
             except Exception:
                 return source_path
-        
-        if old_path:
-            cls.move_to_cache(old_path, project_root)
         
         if resource_type is None:
             resource_type = cls.detect_resource_type(source_path)

@@ -15,23 +15,27 @@ class MouseScrollNode(ActionNode):
 
     def _execute_action(self, context) -> NodeStatus:
         try:
-            scroll_distance = self.distance
-            
-            if self.direction == "向上":
-                scroll_distance = abs(self.distance)
-            elif self.direction == "向下":
-                scroll_distance = -abs(self.distance)
-            elif self.direction == "向左":
-                scroll_distance = -abs(self.distance)
-            elif self.direction == "向右":
-                scroll_distance = abs(self.distance)
-            
-            for click_num in range(self.clicks):
+            distance = self.config.get_int("distance", 5)
+            clicks = self.config.get_int("clicks", 1)
+            direction = self.config.get("direction", "向上")
+
+            scroll_distance = distance
+
+            if direction == "向上":
+                scroll_distance = abs(distance)
+            elif direction == "向下":
+                scroll_distance = -abs(distance)
+            elif direction == "向左":
+                scroll_distance = -abs(distance)
+            elif direction == "向右":
+                scroll_distance = abs(distance)
+
+            for click_num in range(clicks):
                 # ★ 检查是否应该停止（F12或超时后）
                 if not context.is_running:
-                    print(f"[MouseScroll] ⚠️ 检测到停止信号，中断第{click_num+1}/{self.clicks}次点击")
+                    print(f"[MouseScroll] ⚠️ 检测到停止信号，中断第{click_num+1}/{clicks}次点击")
                     break
-                
+
                 context.execute_mouse_scroll(scroll_distance)
             
             LogManager.instance().log_success(
@@ -49,13 +53,6 @@ class MouseScrollNode(ActionNode):
                 reason="执行异常，详情见终端日志"
             )
             return NodeStatus.FAILURE
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["config"]["distance"] = self.distance
-        data["config"]["clicks"] = self.clicks
-        data["config"]["direction"] = self.direction
-        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MouseScrollNode":
