@@ -17,7 +17,7 @@ if errorlevel 1 (
 
 echo.
 echo Checking required modules...
-python -c "import customtkinter; import pytesseract; import pygame; import PIL; print('All modules OK')"
+python -c "import customtkinter; import rapidocr; import pygame; import PIL; print('All modules OK')"
 if errorlevel 1 (
     echo Error: Required modules not installed!
     echo Please run: pip install -r requirements.txt
