@@ -60,6 +60,7 @@ backup/
 bt_utils/build_info.json
 build_cython/
 *.pyd
+*.c
 
 # Worktrees
 .worktrees/
