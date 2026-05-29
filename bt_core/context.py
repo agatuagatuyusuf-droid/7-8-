@@ -106,6 +106,9 @@ class ExecutionContext:
     def check_running(self) -> bool:
         if self._is_paused:
             self._wait_if_paused()
+        if self._parent_context and not self._parent_context._is_running:
+            self._is_running = False
+            return False
         return self._is_running
     
     def _wait_if_paused(self, check_interval: float = 0.1) -> None:

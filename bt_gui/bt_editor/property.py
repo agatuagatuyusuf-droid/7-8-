@@ -254,7 +254,10 @@ class TextField(FieldWidget):
         return "break"
     
     def set_value(self, value: Any):
-        self.var.set(str(value or ""))
+        if value is not None:
+            self.var.set(str(value))
+        else:
+            self.var.set("")
     
     def get_value(self) -> Any:
         return self.var.get()
@@ -363,7 +366,12 @@ class SelectField(FieldWidget):
 
 class BoolField(FieldWidget):
     def __init__(self, master, label: str, key: str, on_change: Callable, default: bool = False, **kwargs):
-        self._default = default
+        if default is None or default == "" or (not isinstance(default, bool) and str(default).lower() not in ("true", "false", "1", "0")):
+            self._default = False
+        elif isinstance(default, bool):
+            self._default = default
+        else:
+            self._default = str(default).lower() in ("true", "1")
         super().__init__(master, label, key, on_change, **kwargs)
         self._create_widget()
     
@@ -2724,7 +2732,8 @@ class PropertyPanel(ctk.CTkFrame):
             field_widget = TextListField(container, label, key, self._on_field_change)
         
         if field_widget:
-            field_widget.set_value(value)
+            display_value = value if value is not None else field.get("default")
+            field_widget.set_value(display_value)
             field_widget.pack(fill="x", pady=Theme.DIMENSIONS['spacing_xs'])
             self.widgets[key] = field_widget
             self.field_containers[key] = container
@@ -2732,9 +2741,12 @@ class PropertyPanel(ctk.CTkFrame):
             self._update_single_field_visibility(key, field)
     
     def _on_field_change(self, key: str, value: Any):
+        if self._is_loading:
+            return
+
         if key in self._hidden_values:
             self._hidden_values[key] = value
-        
+
         if self.on_change and self.current_node_id:
             self.on_change(self.current_node_id, key, value)
         self._update_dependent_fields_visibility(key)

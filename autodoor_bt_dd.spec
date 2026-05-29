@@ -6,7 +6,22 @@ import os
 import sys
 import json
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+
 project_root = os.path.abspath('.')
+
+def collect_local_modules(package_name):
+    package_path = os.path.join(project_root, package_name.replace('.', os.sep))
+    if not os.path.exists(package_path):
+        return []
+    result = []
+    for root, dirs, files in os.walk(package_path):
+        for file in files:
+            if file.endswith('.py'):
+                src_path = os.path.join(root, file)
+                rel_path = os.path.relpath(src_path, project_root)
+                dst_path = os.path.dirname(rel_path)
+                result.append((src_path, dst_path))
+    return result
 
 def get_version():
     """从 build_config.json 读取版本号"""
@@ -41,6 +56,22 @@ data_files = [
     (os.path.join(project_root, 'drivers/DD64.dll'), 'drivers'),
     (os.path.join(project_root, 'bt_utils/build_info.json'), 'bt_utils'),
 ] + collect_data_files('rapidocr')
+
+for pkg in ['bt_core', 'bt_gui', 'bt_nodes', 'bt_utils', 'config']:
+    data_files.extend(collect_local_modules(pkg))
+
+try:
+    import rapidocr
+    rapidocr_path = os.path.dirname(rapidocr.__file__)
+    for root, dirs, files in os.walk(rapidocr_path):
+        for file in files:
+            if file.endswith('.py') or file.endswith('.onnx') or file.endswith('.json'):
+                src_path = os.path.join(root, file)
+                rel_path = os.path.relpath(src_path, rapidocr_path)
+                dst_path = os.path.join('rapidocr', os.path.dirname(rel_path))
+                data_files.append((src_path, dst_path))
+except ImportError:
+    pass
 
 binaries = []
 
@@ -101,6 +132,7 @@ a = Analysis(
         'bt_utils.image_processor',
         'bt_utils.input_controller',
         'bt_utils.input_controller_factory',
+        'bt_utils.log_manager',
         'bt_utils.ocr_manager',
         'bt_utils.recorder',
         'bt_utils.screenshot',
@@ -141,7 +173,7 @@ a = Analysis(
         'pywintypes',
         'pythoncom',
         'ctypes',
-    ] + collect_submodules('bt_core') + collect_submodules('bt_gui') + collect_submodules('bt_nodes') + collect_submodules('bt_utils'),
+    ] + collect_submodules('bt_core') + collect_submodules('bt_gui') + collect_submodules('bt_nodes') + collect_submodules('bt_utils') + collect_submodules('rapidocr'),
     hookspath=['hooks'],
     hooksconfig={},
     runtime_hooks=['hooks/hook_dd_input.py'],

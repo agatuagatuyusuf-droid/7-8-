@@ -54,13 +54,11 @@ backup/
 # Project specific
 /examples/
 /md/
-/doc/01_架构文档.md
 
 # Build artifacts
 bt_utils/build_info.json
 build_cython/
 *.pyd
-*.c
 
 # Worktrees
 .worktrees/

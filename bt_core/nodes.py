@@ -7,6 +7,7 @@ import time
 from .status import NodeStatus
 from .config import NodeConfig
 from bt_utils.helpers import get_random_interval
+from bt_utils.log_manager import LogManager
 
 if TYPE_CHECKING:
     from .context import ExecutionContext
@@ -71,7 +72,6 @@ class Node(ABC):
                 context.notify_node_status(self.node_id, "failure")
                 context.record_node_stats(self.node_id, self.NODE_TYPE, self.name, "failure", timeout_ms)
                 
-                from bt_utils.log_manager import LogManager
                 LogManager.instance().log_timeout(
                     node_type=self.NODE_TYPE,
                     node_name=self.name,
@@ -85,7 +85,6 @@ class Node(ABC):
         duration_ms = (time.perf_counter() - start_time) * 1000
         self.status = status
 
-        from bt_utils.log_manager import LogManager
         LogManager.debug_print(
             f"[DEBUG] _execute_with_decorators: {self.NODE_TYPE} '{self.name}' "
             f"(id={self.node_id}) execute_func returned {status.name}, "
@@ -160,7 +159,6 @@ class Node(ABC):
         return status
 
     def _reset_for_retry(self) -> None:
-        from bt_utils.log_manager import LogManager
         LogManager.debug_print(
             f"[DEBUG] _reset_for_retry: {self.NODE_TYPE} '{self.name}' (id={self.node_id}) "
             f"BEFORE: status={self.status.name}, current_index={getattr(self, 'current_index', 'N/A')}, "
@@ -364,7 +362,6 @@ class SequenceNode(CompositeNode):
         return self._execute_with_decorators(context, self._tick_internal)
 
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
-        from bt_utils.log_manager import LogManager
 
         if not self.children:
             return NodeStatus.SUCCESS
@@ -468,7 +465,6 @@ class SelectorNode(CompositeNode):
         return self._execute_with_decorators(context, self._tick_internal)
 
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
-        from bt_utils.log_manager import LogManager
         
         if not self.children:
             LogManager.instance().log_failure(
@@ -546,7 +542,6 @@ class ParallelNode(CompositeNode):
         return self._execute_with_decorators(context, self._tick_internal)
 
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
-        from bt_utils.log_manager import LogManager
         
         if not self.children:
             LogManager.instance().log_success(
@@ -682,7 +677,6 @@ class RandomNode(CompositeNode):
         return self._execute_with_decorators(context, self._tick_internal)
 
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
-        from bt_utils.log_manager import LogManager
         import random
         
         if not self.children:
@@ -794,7 +788,6 @@ class RandomNode(CompositeNode):
         Returns:
             最终节点状态
         """
-        from bt_utils.log_manager import LogManager
         
         enabled_count = len(self._enabled_indices)
         success_count = len(self._success_indices)
@@ -995,7 +988,6 @@ class ConditionNode(Node):
         return self._execute_with_decorators(context, self._tick_internal)
 
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
-        from bt_utils.log_manager import LogManager
 
         if self._children_running and self.children:
             LogManager.debug_print(
@@ -1099,7 +1091,6 @@ class ConditionNode(Node):
             reason: 失败原因（成功时为None）
             extra_info: 额外信息
         """
-        from bt_utils.log_manager import LogManager
         if success:
             LogManager.instance().log_success(
                 node_type=self.NODE_TYPE,
@@ -1139,7 +1130,6 @@ class ActionNode(Node):
         return self._execute_with_decorators(context, self._tick_internal)
 
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
-        from bt_utils.log_manager import LogManager
         bound_window = context.get_bound_window()
 
         if bound_window and not self.SKIP_WINDOW_SWITCH:
@@ -1242,7 +1232,6 @@ class StartNode(CompositeNode):
         return self._execute_with_decorators(context, self._tick_internal)
     
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
-        from bt_utils.log_manager import LogManager
 
         bind_window = self.config.get_bool("bind_window", False)
         window_title = self.config.get("window_title", "")
@@ -1313,7 +1302,6 @@ class StartNode(CompositeNode):
 
     def _bind_window_to_context(self, context: "ExecutionContext") -> None:
         from bt_utils.window_manager import WindowManager
-        from bt_utils.log_manager import LogManager
 
         window_pid = self.config.get_int("window_pid", 0)
         window_title = self.config.get("window_title", "")
@@ -1408,7 +1396,6 @@ class SubtreeNode(CompositeNode):
         return self._execute_with_decorators(context, self._tick_internal)
 
     def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
-        from bt_utils.log_manager import LogManager
 
         if not self._ensure_loaded(context):
             return NodeStatus.FAILURE
@@ -1435,7 +1422,6 @@ class SubtreeNode(CompositeNode):
 
     def _ensure_loaded(self, context: "ExecutionContext") -> bool:
         """确保子树已加载，返回是否成功"""
-        from bt_utils.log_manager import LogManager
         from .cycle_detector import CycleDetector
 
         subtree_project_dir = self._resolve_path(context)
