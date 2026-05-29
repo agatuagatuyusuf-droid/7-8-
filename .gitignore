@@ -1,3 +1,4 @@
+# Python
 venv/
 __pycache__/
 *.py[cod]
@@ -20,35 +21,45 @@ wheels/
 .installed.cfg
 *.egg
 
+# Testing
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 .hypothesis/
 
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
+# Logs and temp
 *.log
 *.tmp
 .DS_Store
 Thumbs.db
 
+# Environment
 .env
 .venv
 env/
 ENV/
 
+# Backup
 *.bak
 backup/
 
+# Project specific
 /examples/
 /md/
 /doc/01_架构文档.md
 
+# Build artifacts
 bt_utils/build_info.json
+build_cython/
+*.pyd
 
+# Worktrees
 .worktrees/
