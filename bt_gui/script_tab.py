@@ -7,6 +7,7 @@ import time
 
 from .theme import Theme
 from .widgets import CardFrame, AnimatedButton, NumericEntry, create_divider
+from bt_utils.key_name_resolver import resolve_key_name
 
 
 def center_window_on_parent(window, parent):
@@ -70,23 +71,6 @@ def askyesno_centered(parent, title, message):
     
     dialog.wait_window()
     return result[0]
-
-
-PYNPUT_TO_PYAUTOGUI_MAP = {
-    'page_up': 'pageup',
-    'page_down': 'pagedown',
-    'ctrl_l': 'ctrlleft',
-    'ctrl_r': 'ctrlright',
-    'shift_l': 'shiftleft',
-    'shift_r': 'shiftright',
-    'alt_l': 'altleft',
-    'alt_r': 'altright',
-    'cmd': 'win',
-    'cmd_l': 'win',
-    'cmd_r': 'win',
-    'win_l': 'win',
-    'win_r': 'win',
-}
 
 
 class ScriptTab(ctk.CTkFrame):
@@ -383,84 +367,92 @@ class ScriptTab(ctk.CTkFrame):
     def _start_key_listening(self):
         self.set_key_btn.configure(text="请按键...", fg_color=Theme.COLORS['warning'])
         
-        def on_key_press(event):
-            key_name = event.keysym
-            
-            key_mappings = {
-                "Control_L": "ctrl", "Control_R": "ctrl",
-                "Alt_L": "alt", "Alt_R": "alt",
-                "Shift_L": "shift", "Shift_R": "shift",
-                "Super_L": "win", "Super_R": "win",
-                "Return": "enter", "BackSpace": "backspace",
-                "Tab": "tab", "Escape": "escape",
-                "space": "space", "Delete": "delete",
-            }
-            
-            if key_name in key_mappings:
-                key_name = key_mappings[key_name]
-            elif len(key_name) == 1:
-                key_name = key_name.lower()
-            
-            self.key_var.set(key_name)
-            self.set_key_btn.configure(text="修改", fg_color=Theme.COLORS['primary'])
-            
-            toplevel = self.winfo_toplevel()
-            toplevel.unbind("<KeyPress>")
-            
-            return "break"
+        from pynput import keyboard
         
-        toplevel = self.winfo_toplevel()
-        toplevel.bind("<KeyPress>", on_key_press)
+        def on_press(key):
+            key_name = resolve_key_name(key)
+            if key_name:
+                try:
+                    self.after(0, lambda: self._apply_captured_key(key_name, 'single'))
+                except Exception:
+                    pass
+                return False
+        
+        self._single_key_listener = keyboard.Listener(on_press=on_press)
+        self._single_key_listener.start()
         
         def reset_listening():
+            self._stop_single_key_listener()
             try:
                 self.set_key_btn.configure(text="修改", fg_color=Theme.COLORS['primary'])
-                toplevel.unbind("<KeyPress>")
             except Exception:
                 pass
         
-        self.after(10000, reset_listening)
+        self._single_key_timeout = self.after(10000, reset_listening)
+    
+    def _stop_single_key_listener(self):
+        if hasattr(self, '_single_key_listener') and self._single_key_listener:
+            try:
+                self._single_key_listener.stop()
+            except Exception:
+                pass
+            self._single_key_listener = None
+        if hasattr(self, '_single_key_timeout') and self._single_key_timeout:
+            self.after_cancel(self._single_key_timeout)
+            self._single_key_timeout = None
     
     def _start_combo_key_listening(self):
         self.set_combo_key_btn.configure(text="请按键...", fg_color=Theme.COLORS['warning'])
         
-        def on_key_press(event):
-            key_name = event.keysym
-            
-            key_mappings = {
-                "Control_L": "ctrl", "Control_R": "ctrl",
-                "Alt_L": "alt", "Alt_R": "alt",
-                "Shift_L": "shift", "Shift_R": "shift",
-                "Super_L": "win", "Super_R": "win",
-                "Return": "enter", "BackSpace": "backspace",
-                "Tab": "tab", "Escape": "escape",
-                "space": "space", "Delete": "delete",
-            }
-            
-            if key_name in key_mappings:
-                key_name = key_mappings[key_name]
-            elif len(key_name) == 1:
-                key_name = key_name.lower()
-            
-            self.combo_key_var.set(key_name)
-            self.set_combo_key_btn.configure(text="修改", fg_color=Theme.COLORS['primary'])
-            
-            toplevel = self.winfo_toplevel()
-            toplevel.unbind("<KeyPress>")
-            
-            return "break"
+        from pynput import keyboard
         
-        toplevel = self.winfo_toplevel()
-        toplevel.bind("<KeyPress>", on_key_press)
+        def on_press(key):
+            key_name = resolve_key_name(key)
+            if key_name:
+                try:
+                    self.after(0, lambda: self._apply_captured_key(key_name, 'combo'))
+                except Exception:
+                    pass
+                return False
+        
+        self._combo_key_listener = keyboard.Listener(on_press=on_press)
+        self._combo_key_listener.start()
         
         def reset_listening():
+            self._stop_combo_key_listener()
             try:
                 self.set_combo_key_btn.configure(text="修改", fg_color=Theme.COLORS['primary'])
-                toplevel.unbind("<KeyPress>")
             except Exception:
                 pass
         
-        self.after(10000, reset_listening)
+        self._combo_key_timeout = self.after(10000, reset_listening)
+    
+    def _stop_combo_key_listener(self):
+        if hasattr(self, '_combo_key_listener') and self._combo_key_listener:
+            try:
+                self._combo_key_listener.stop()
+            except Exception:
+                pass
+            self._combo_key_listener = None
+        if hasattr(self, '_combo_key_timeout') and self._combo_key_timeout:
+            self.after_cancel(self._combo_key_timeout)
+            self._combo_key_timeout = None
+    
+    def _apply_captured_key(self, key_name, listener_type):
+        if listener_type == 'single':
+            self.key_var.set(key_name)
+            self._stop_single_key_listener()
+            try:
+                self.set_key_btn.configure(text="修改", fg_color=Theme.COLORS['primary'])
+            except Exception:
+                pass
+        elif listener_type == 'combo':
+            self.combo_key_var.set(key_name)
+            self._stop_combo_key_listener()
+            try:
+                self.set_combo_key_btn.configure(text="修改", fg_color=Theme.COLORS['primary'])
+            except Exception:
+                pass
     
     def _insert_key_command(self):
         key = self.key_var.get().strip()
@@ -633,7 +625,7 @@ class ScriptTab(ctk.CTkFrame):
         if not self._is_recording:
             return
         
-        key_name = self._get_key_name(key)
+        key_name = resolve_key_name(key)
         if not key_name:
             return
         
@@ -653,7 +645,7 @@ class ScriptTab(ctk.CTkFrame):
         if not self._is_recording:
             return
         
-        key_name = self._get_key_name(key)
+        key_name = resolve_key_name(key)
         if not key_name:
             return
         
@@ -703,32 +695,6 @@ class ScriptTab(ctk.CTkFrame):
                 "time": delay
             })
         self._last_event_time = current_time
-    
-    def _get_key_name(self, key) -> str:
-        if hasattr(key, 'char') and key.char is not None:
-            if isinstance(key.char, str) and len(key.char) == 1:
-                char_code = ord(key.char)
-                if char_code < 32 or char_code == 127:
-                    if hasattr(key, 'vk') and key.vk is not None:
-                        from bt_utils.vk_mapping import vk_to_char
-                        vk_char = vk_to_char(key.vk)
-                        if vk_char:
-                            return vk_char
-                        return str(key.vk)
-                else:
-                    return key.char
-            else:
-                return key.char
-        if hasattr(key, 'name') and key.name:
-            key_name = key.name
-            return PYNPUT_TO_PYAUTOGUI_MAP.get(key_name, key_name)
-        if hasattr(key, 'vk') and key.vk is not None:
-            from bt_utils.vk_mapping import vk_to_char
-            vk_char = vk_to_char(key.vk)
-            if vk_char:
-                return vk_char
-            return str(key.vk)
-        return None
     
     def _generate_recorded_script(self):
         script_content = ""

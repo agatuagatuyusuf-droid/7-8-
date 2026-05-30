@@ -3,6 +3,7 @@ import time
 import logging
 from typing import Callable, Dict, Optional
 from pynput import keyboard
+from .key_name_resolver import resolve_key_name
 
 
 logger = logging.getLogger(__name__)
@@ -164,30 +165,19 @@ class GlobalHotkeyManager:
         pass
     
     def _get_key_name(self, key) -> str:
-        """获取按键名称
-        
-        Args:
-            key: pynput 按键对象
-            
-        Returns:
-            标准化的按键名称
-        """
-        if hasattr(key, 'char') and key.char:
-            return key.char.lower()
-        elif hasattr(key, 'name'):
-            name = key.name.lower()
-            if name.startswith('ctrl'):
-                return 'ctrl'
-            elif name.startswith('alt'):
-                return 'alt'
-            elif name.startswith('shift'):
-                return 'shift'
-            elif name.startswith('cmd') or name.startswith('super'):
-                return 'cmd'
-            elif name.startswith('f') and name[1:].isdigit():
-                return name
-            return name
-        return str(key).lower()
+        key_name = resolve_key_name(key)
+        if not key_name:
+            return None
+        key_name = key_name.lower()
+        if key_name.startswith('ctrl'):
+            return 'ctrl'
+        elif key_name.startswith('alt'):
+            return 'alt'
+        elif key_name.startswith('shift'):
+            return 'shift'
+        elif key_name.startswith('cmd') or key_name.startswith('super') or key_name == 'win':
+            return 'cmd'
+        return key_name
     
     def _check_hotkey(self, key_name: str):
         """检查是否触发了注册的热键

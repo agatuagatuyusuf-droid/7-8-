@@ -349,25 +349,9 @@ class BehaviorTreeApp(ctk.CTk):
             self.bind(key, lambda e, cb=callback, k=key: self._handle_shortcut(e, cb, k))
     
     def _handle_shortcut(self, event, callback, key_name):
-        if key_name in ("<Delete>", "<BackSpace>"):
-            if hasattr(self, '_keyfield_listening') and self._keyfield_listening:
-                if hasattr(self, '_keyfield_callback') and self._keyfield_callback:
-                    key_mappings = {
-                        "<Delete>": "delete",
-                        "<BackSpace>": "backspace",
-                    }
-                    mapped_name = key_mappings.get(key_name, key_name)
-                    self._keyfield_callback(mapped_name)
-                return "break"
-        
         if callable(callback):
             callback()
         return "break"
-    
-    def set_keyfield_listening(self, listening: bool, callback=None):
-        """设置 KeyField 是否正在监听按键"""
-        self._keyfield_listening = listening
-        self._keyfield_callback = callback
     
     def _undo(self):
         if hasattr(self.behavior_tree, 'undo'):

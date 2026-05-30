@@ -181,13 +181,6 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         if self.property_panel:
             self.property_panel.force_save_current_field()
         
-        try:
-            toplevel = self.winfo_toplevel()
-            if hasattr(toplevel, 'set_keyfield_listening'):
-                toplevel.set_keyfield_listening(False, None)
-        except Exception:
-            pass
-        
         self.canvas.focus_set()
         
         x = (self.canvas.canvasx(event.x) - self.pan_x) / self.zoom

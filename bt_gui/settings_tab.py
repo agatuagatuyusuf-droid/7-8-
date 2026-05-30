@@ -240,52 +240,52 @@ class SettingsTab(ctk.CTkFrame):
     def _start_key_listening(self, entry, btn):
         btn.configure(text="请按键...", fg_color=Theme.COLORS['warning'])
         
-        def on_key_press(event):
-            key_name = event.keysym
-            
-            key_mappings = {
-                "Control_L": "ctrl", "Control_R": "ctrl",
-                "Alt_L": "alt", "Alt_R": "alt",
-                "Shift_L": "shift", "Shift_R": "shift",
-                "Super_L": "win", "Super_R": "win",
-                "Return": "enter", "BackSpace": "backspace",
-                "Tab": "tab", "Escape": "escape",
-                "space": "space", "Delete": "delete",
-                "F1": "F1", "F2": "F2", "F3": "F3", "F4": "F4",
-                "F5": "F5", "F6": "F6", "F7": "F7", "F8": "F8",
-                "F9": "F9", "F10": "F10", "F11": "F11", "F12": "F12",
-            }
-            
-            if key_name in key_mappings:
-                key_name = key_mappings[key_name]
-            elif len(key_name) == 1:
-                key_name = key_name.upper()
-            
-            entry.configure(state="normal")
-            entry.delete(0, "end")
-            entry.insert(0, key_name)
-            entry.configure(state="disabled")
-            
-            btn.configure(text="修改", fg_color=Theme.COLORS['primary'])
-            
-            toplevel = self.winfo_toplevel()
-            toplevel.unbind("<KeyPress>")
-            
-            self._update_editor_shortcuts()
-            
-            return "break"
+        from pynput import keyboard
+        from bt_utils.key_name_resolver import resolve_key_name
         
-        toplevel = self.winfo_toplevel()
-        toplevel.bind("<KeyPress>", on_key_press)
+        def on_press(key):
+            key_name = resolve_key_name(key)
+            if key_name:
+                display_name = key_name.upper() if len(key_name) > 1 else key_name
+                try:
+                    self.after(0, lambda: self._apply_settings_captured_key(entry, btn, display_name))
+                except Exception:
+                    pass
+                return False
+        
+        self._settings_listener = keyboard.Listener(on_press=on_press)
+        self._settings_listener.start()
         
         def reset_listening():
+            self._stop_settings_listener()
             try:
                 btn.configure(text="修改", fg_color=Theme.COLORS['primary'])
-                toplevel.unbind("<KeyPress>")
             except Exception:
                 pass
         
-        self.after(10000, reset_listening)
+        self._settings_timeout = self.after(10000, reset_listening)
+    
+    def _apply_settings_captured_key(self, entry, btn, key_name):
+        entry.configure(state="normal")
+        entry.delete(0, "end")
+        entry.insert(0, key_name)
+        entry.configure(state="disabled")
+        
+        btn.configure(text="修改", fg_color=Theme.COLORS['primary'])
+        
+        self._stop_settings_listener()
+        self._update_editor_shortcuts()
+    
+    def _stop_settings_listener(self):
+        if hasattr(self, '_settings_listener') and self._settings_listener:
+            try:
+                self._settings_listener.stop()
+            except Exception:
+                pass
+            self._settings_listener = None
+        if hasattr(self, '_settings_timeout') and self._settings_timeout:
+            self.after_cancel(self._settings_timeout)
+            self._settings_timeout = None
     
     def _update_editor_shortcuts(self):
         """更新编辑器的快捷键绑定"""

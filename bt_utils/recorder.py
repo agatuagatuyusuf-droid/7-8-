@@ -3,6 +3,7 @@ import threading
 from typing import List, Callable, Optional
 
 from pynput import mouse, keyboard
+from .key_name_resolver import resolve_key_name
 
 
 class ScriptRecorder:
@@ -128,11 +129,7 @@ class ScriptRecorder:
         self.last_event_time = current_time
 
     def _get_key_name(self, key) -> str:
-        if hasattr(key, 'char') and key.char:
-            return key.char
-        elif hasattr(key, 'name'):
-            return key.name
-        return str(key)
+        return resolve_key_name(key)
 
     def _format_event(self, event: dict) -> str:
         if event["type"] == "delay":

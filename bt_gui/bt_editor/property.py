@@ -1253,7 +1253,8 @@ class ScreenshotField(FieldWidget):
 class KeyField(FieldWidget):
     def __init__(self, master, label: str, key: str, on_change: Callable, **kwargs):
         self._listening = False
-        self._bound_key_ids = []
+        self._pynput_listener = None
+        self._timeout_id = None
         super().__init__(master, label, key, on_change, **kwargs)
         self._create_widget()
     
@@ -1289,117 +1290,58 @@ class KeyField(FieldWidget):
         self.btn.pack(side="right")
         self.btn.bind("<ButtonRelease-1>", lambda e: self._start_listening())
     
-    def _unbind_all_keys(self):
-        toplevel = self.winfo_toplevel()
+    def _start_listening(self):
+        if self._listening:
+            self._stop_listening()
+            return
         
-        for key_name, bind_id, bind_type in self._bound_key_ids:
-            try:
-                toplevel.unbind(key_name, bind_id)
-            except Exception:
-                pass
-        self._bound_key_ids = []
+        self._listening = True
+        self.btn.configure(text="取消", fg_color=self._dark_colors['warning'])
+        
+        from pynput import keyboard
+        from bt_utils.key_name_resolver import resolve_key_name
+        
+        def on_press(key):
+            key_name = resolve_key_name(key)
+            if key_name:
+                try:
+                    self.after(0, lambda: self._on_key_captured(key_name))
+                except Exception:
+                    pass
+                return False
+        
+        self._pynput_listener = keyboard.Listener(on_press=on_press)
+        self._pynput_listener.start()
+        
+        self._timeout_id = self.after(10000, self._stop_listening)
     
-    def _cancel_listening(self):
-        self._listening = False
-        self._unbind_all_keys()
-        try:
-            toplevel = self.winfo_toplevel()
-            if hasattr(toplevel, 'set_keyfield_listening'):
-                toplevel.set_keyfield_listening(False, None)
-        except Exception:
-            pass
-        try:
-            if self.winfo_exists():
-                self.btn.configure(text="修改", fg_color=self._dark_colors['primary'])
-        except Exception:
-            pass
-    
-    def _capture_key(self, key_name: str):
-        """捕获按键（从 app.py 的快捷键处理中调用）"""
+    def _on_key_captured(self, key_name: str):
         if not self._listening:
             return
         
         self.var.set(key_name)
         self.on_change(self.key, key_name)
-        
-        self._listening = False
-        if self.winfo_exists():
-            self.btn.configure(text="修改", fg_color=self._dark_colors['primary'])
-        
-        self._unbind_all_keys()
-        
-        try:
-            toplevel = self.winfo_toplevel()
-            if hasattr(toplevel, 'set_keyfield_listening'):
-                toplevel.set_keyfield_listening(False, None)
-        except Exception:
-            pass
+        self._stop_listening()
     
-    def _start_listening(self):
-        if self._listening:
-            self._cancel_listening()
-            return
+    def _stop_listening(self):
+        self._listening = False
         
-        self._listening = True
-        self._bound_key_ids = []
-        self.btn.configure(text="取消", fg_color=self._dark_colors['warning'])
-        
-        toplevel = self.winfo_toplevel()
-        if hasattr(toplevel, 'set_keyfield_listening'):
-            toplevel.set_keyfield_listening(True, self._capture_key)
-        
-        def on_key_press(event):
+        if self._pynput_listener:
             try:
-                if not self._listening:
-                    return
-                
-                key_name = event.keysym
-                
-                key_mappings = {
-                    "Control_L": "ctrl", "Control_R": "ctrl",
-                    "Alt_L": "alt", "Alt_R": "alt",
-                    "Shift_L": "shift", "Shift_R": "shift",
-                    "Super_L": "win", "Super_R": "win",
-                    "Win_L": "win", "Win_R": "win",
-                    "Win-L": "win", "Win-R": "win",
-                    "Return": "enter", "BackSpace": "backspace",
-                    "Tab": "tab", "Escape": "escape",
-                    "space": "space", "Delete": "delete",
-                    "Insert": "insert", "Home": "home",
-                    "End": "end", "Prior": "pageup",
-                    "Next": "pagedown", "Up": "up",
-                    "Down": "down", "Left": "left",
-                    "Right": "right",
-                }
-                
-                if key_name in key_mappings:
-                    key_name = key_mappings[key_name]
-                elif len(key_name) == 1:
-                    key_name = key_name.lower()
-                
-                self.var.set(key_name)
-                self.on_change(self.key, key_name)
-                
-                self._listening = False
-                if self.winfo_exists():
-                    self.btn.configure(text="修改", fg_color=self._dark_colors['primary'])
-                
-                self._unbind_all_keys()
-                
-                try:
-                    if hasattr(toplevel, 'set_keyfield_listening'):
-                        toplevel.set_keyfield_listening(False, None)
-                except Exception:
-                    pass
-                
-                return "break"
+                self._pynput_listener.stop()
             except Exception:
                 pass
+            self._pynput_listener = None
         
-        bind_id = toplevel.bind("<Key>", on_key_press)
-        self._bound_key_ids.append(("<Key>", bind_id, "widget"))
+        if self._timeout_id:
+            self.after_cancel(self._timeout_id)
+            self._timeout_id = None
         
-        self.after(10000, self._cancel_listening)
+        try:
+            if self.winfo_exists():
+                self.btn.configure(text="修改", fg_color=self._dark_colors['primary'])
+        except Exception:
+            pass
     
     def set_value(self, value: Any):
         self.var.set(str(value or ""))
