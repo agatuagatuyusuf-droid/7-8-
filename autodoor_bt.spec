@@ -54,6 +54,7 @@ data_files = [
     (os.path.join(project_root, 'assets/icons/autodoor.png'), 'assets/icons'),
     (os.path.join(project_root, 'config/settings.json'), 'config'),
     (os.path.join(project_root, 'bt_utils/build_info.json'), 'bt_utils'),
+    (os.path.join(project_root, 'drivers/DD64.dll'), 'drivers'),
 ] + collect_data_files('rapidocr')
 
 for pkg in ['bt_core', 'bt_gui', 'bt_nodes', 'bt_utils', 'config']:
@@ -171,6 +172,7 @@ a = Analysis(
         'win32process',
         'pywintypes',
         'pythoncom',
+        'ctypes',
     ] + collect_submodules('bt_core') + collect_submodules('bt_gui') + collect_submodules('bt_nodes') + collect_submodules('bt_utils') + collect_submodules('rapidocr'),
     hookspath=[],
     hooksconfig={},
@@ -214,7 +216,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name=f'autodoor-behaviortree-{VERSION}-normal',
+    name=f'autodoor-behaviortree-{VERSION}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -246,5 +248,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name=f'autodoor-behaviortree-{VERSION}-normal',
+    name=f'autodoor-behaviortree-{VERSION}',
 )

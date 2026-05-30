@@ -11,7 +11,19 @@ from typing import Optional, Tuple
 from .base_input import BaseInputController
 
 
-USE_DD_INPUT = os.environ.get('AUTODOOR_USE_DD', '0') == '1'
+def _get_input_method_from_settings() -> str:
+    try:
+        from config.settings_manager import SettingsManager
+        method = SettingsManager.get_instance().get("input.method", "pyautogui")
+    except Exception:
+        method = "pyautogui"
+    
+    if method == "dd":
+        from .app_restarter import is_dd_available
+        if not is_dd_available():
+            method = "pyautogui"
+    
+    return method
 
 _dd_input_instance = None
 
@@ -270,14 +282,10 @@ class InputController:
         self._init_implementation()
     
     def _init_implementation(self):
-        """初始化具体实现"""
         method = self._method
         
         if method is None:
-            if USE_DD_INPUT:
-                method = 'dd'
-            else:
-                method = 'pyautogui'
+            method = _get_input_method_from_settings()
         
         if method == 'dd':
             dd_instance = _get_dd_input(self.app)
@@ -286,12 +294,10 @@ class InputController:
                 self._method = 'dd'
                 return
             else:
-                # DD版本：如果DD不可用，不回退到PyAutoGUI，保持为None
-                self._impl = None
-                self._method = 'dd'
+                self._impl = PyAutoGUIInput(self.app)
+                self._method = 'pyautogui'
                 return
         
-        # 非DD版本：使用PyAutoGUI
         self._impl = PyAutoGUIInput(self.app)
         self._method = 'pyautogui'
     

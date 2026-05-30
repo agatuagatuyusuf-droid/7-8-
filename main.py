@@ -184,18 +184,76 @@ def initialize_ocr():
 
 
 def initialize_input():
-    """初始化输入控制器（预加载DD虚拟键盘）"""
+    """初始化输入控制器"""
     try:
         from bt_utils.input_controller_factory import InputController
-        # 预加载输入控制器，会自动加载DD虚拟键盘（如果启用）
         InputController()
         return True
     except Exception:
         return False
 
 
+def check_admin_for_dd():
+    """检查DD模式是否需要管理员权限，如需要则提权重启"""
+    from config.settings_manager import SettingsManager
+    from bt_utils.app_restarter import is_admin, is_dd_available, restart_as_admin
+    
+    settings = SettingsManager.get_instance()
+    input_method = settings.get("input.method", "pyautogui")
+    
+    if input_method != "dd":
+        return True
+    
+    if not is_dd_available():
+        write_log("DD64.dll not found, falling back to PyAutoGUI")
+        settings.set("input.method", "pyautogui")
+        return True
+    
+    if is_admin():
+        write_log("DD mode: already running as admin")
+        return True
+    
+    write_log("DD mode: not admin, requesting elevation")
+    
+    import tkinter as tk
+    from tkinter import messagebox
+    
+    root = tk.Tk()
+    root.withdraw()
+    
+    result = messagebox.askyesno(
+        "需要管理员权限",
+        "DD虚拟键盘需要管理员权限才能正常工作。\n\n"
+        "是否以管理员身份重新启动应用？\n\n"
+        "点击「否」将使用 PyAutoGUI 模式启动。",
+        icon='warning'
+    )
+    root.destroy()
+    
+    if result:
+        success = restart_as_admin()
+        if success:
+            write_log("Admin restart initiated, exiting current process")
+            sys.exit(0)
+        else:
+            write_log("Admin restart failed (UAC denied or error)")
+            root2 = tk.Tk()
+            root2.withdraw()
+            messagebox.showwarning(
+                "权限获取失败",
+                "无法获取管理员权限，将使用 PyAutoGUI 模式启动。"
+            )
+            root2.destroy()
+    
+    write_log("Falling back to PyAutoGUI mode")
+    settings.set("input.method", "pyautogui")
+    return True
+
+
 def main():
     ensure_workspace_exists()
+    
+    check_admin_for_dd()
     
     initialize_ocr()
     initialize_input()

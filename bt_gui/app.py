@@ -1,5 +1,6 @@
 import customtkinter as ctk
 import os
+import sys
 from tkinter import messagebox
 
 from .theme import Theme, init_theme
@@ -445,7 +446,7 @@ class BehaviorTreeApp(ctk.CTk):
             if hasattr(self.behavior_tree, '_duplicate_selected'):
                 self.behavior_tree._duplicate_selected()
     
-    def _on_close(self):
+    def _save_state(self):
         current_geometry = self.geometry()
         self._settings.set("session.window_geometry", current_geometry)
         
@@ -461,9 +462,6 @@ class BehaviorTreeApp(ctk.CTk):
                 self._settings.set("shortcuts.record", shortcuts.get("record", "F11"), auto_save=False)
         
         if hasattr(self, 'behavior_tree') and self.behavior_tree:
-            if hasattr(self.behavior_tree, 'property_panel'):
-                self.behavior_tree.property_panel.cleanup_preview_images()
-            
             if hasattr(self.behavior_tree, 'tab_manager'):
                 tabs_info = []
                 for tab_id, instance in self.behavior_tree.tab_manager._trees.items():
@@ -478,7 +476,44 @@ class BehaviorTreeApp(ctk.CTk):
                 active_tab = self.behavior_tree.tab_manager.get_active_tab()
                 if active_tab:
                     self._settings.set_active_tab_id(active_tab.tab_id)
-                
+    
+    def _restart_with_method(self, method: str, as_admin: bool) -> bool:
+        from bt_utils.app_restarter import restart_app
+        
+        if hasattr(self, 'behavior_tree') and self.behavior_tree:
+            engine = getattr(self.behavior_tree, 'engine', None)
+            if engine and getattr(engine, 'is_running', lambda: False)():
+                messagebox.showwarning(
+                    "无法重启",
+                    "行为树正在运行中，请先停止运行再切换输入方式。"
+                )
+                return False
+        
+        self._settings.set("input.method", method)
+        self._save_state()
+        self._settings.save_settings()
+        
+        success = restart_app(as_admin=as_admin)
+        
+        if success:
+            self.destroy()
+            sys.exit(0)
+        else:
+            self._settings.set("input.method", "pyautogui")
+            messagebox.showwarning(
+                "重启失败",
+                "无法以管理员身份重启应用，输入方式已恢复为 PyAutoGUI。"
+            )
+            return False
+    
+    def _on_close(self):
+        self._save_state()
+        
+        if hasattr(self, 'behavior_tree') and self.behavior_tree:
+            if hasattr(self.behavior_tree, 'property_panel'):
+                self.behavior_tree.property_panel.cleanup_preview_images()
+            
+            if hasattr(self.behavior_tree, 'tab_manager'):
                 for tab_id, instance in list(self.behavior_tree.tab_manager._trees.items()):
                     if instance.modified:
                         result = messagebox.askyesnocancel(

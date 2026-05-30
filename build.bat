@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ========================================
-echo AutoDoor Behavior Tree - Standard Build
+echo AutoDoor Behavior Tree - Unified Build
 echo ========================================
 echo.
 
@@ -33,7 +33,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo Starting PyInstaller build (Standard version)...
+echo Starting PyInstaller build (Unified version)...
 pyinstaller autodoor_bt.spec --clean
 
 if errorlevel 1 (
@@ -46,6 +46,6 @@ if errorlevel 1 (
 echo.
 echo ========================================
 echo Build completed successfully!
-echo Output: dist\autodoor-bt-*-normal\
+echo Output: dist\autodoor-behaviortree-*\
 echo ========================================
 pause

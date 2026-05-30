@@ -131,6 +131,9 @@ class SettingsManager:
             "default_color_key": "last_color_value",
             "default_image_match_key": "last_image_match"
         },
+        "input": {
+            "method": "pyautogui",
+        },
         "update": {
             "ignored_version": "",
             "last_check_time": "",

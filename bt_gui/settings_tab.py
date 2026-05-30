@@ -34,6 +34,11 @@ class SettingsTab(ctk.CTkFrame):
         self.start_shortcut_var = tk.StringVar(value="F10")
         self.stop_shortcut_var = tk.StringVar(value="F12")
         self.record_hotkey_var = tk.StringVar(value="F11")
+        
+        from config.settings_manager import SettingsManager
+        settings = SettingsManager()
+        self.input_method_var = tk.StringVar(value=settings.get("input.method", "pyautogui"))
+        self._current_input_method = settings.get("input.method", "pyautogui")
     
     def _get_default_project_path(self) -> str:
         """获取默认项目保存路径
@@ -57,6 +62,7 @@ class SettingsTab(ctk.CTkFrame):
         self._create_project_section(scroll_frame)
         self._create_alarm_section(scroll_frame)
         self._create_shortcut_section(scroll_frame)
+        self._create_input_method_section(scroll_frame)
     
     def _create_project_section(self, parent):
         project_frame = CardFrame(parent)
@@ -212,6 +218,125 @@ class SettingsTab(ctk.CTkFrame):
         
         ctk.CTkFrame(shortcut_frame, height=6, fg_color="transparent").pack()
     
+    def _create_input_method_section(self, parent):
+        from bt_utils.app_restarter import is_dd_available, is_admin
+        
+        input_frame = CardFrame(parent)
+        input_frame.pack(fill="x", pady=(0, Theme.DIMENSIONS['spacing_md']))
+        
+        input_header = ctk.CTkFrame(input_frame, fg_color="transparent")
+        input_header.pack(fill="x", padx=Theme.DIMENSIONS['spacing_md'], pady=(Theme.DIMENSIONS['spacing_md'], Theme.DIMENSIONS['spacing_sm']))
+        create_section_title(input_header, "输入方式", level=1).pack(side="left")
+        
+        create_divider(input_frame)
+        
+        dd_available = is_dd_available()
+        
+        method_row = ctk.CTkFrame(input_frame, fg_color="transparent")
+        method_row.pack(fill="x", padx=Theme.DIMENSIONS['spacing_md'], pady=Theme.DIMENSIONS['spacing_sm'])
+        
+        self.pyautogui_radio = ctk.CTkRadioButton(
+            method_row,
+            text="PyAutoGUI（标准模式）",
+            variable=self.input_method_var,
+            value="pyautogui",
+            font=Theme.get_font("sm"),
+            fg_color=Theme.COLORS['primary'],
+            hover_color=Theme.COLORS['primary_hover'],
+            command=self._on_input_method_changed
+        )
+        self.pyautogui_radio.pack(side="left", padx=(0, Theme.DIMENSIONS['spacing_md']))
+        
+        self.dd_radio = ctk.CTkRadioButton(
+            method_row,
+            text="DD虚拟键盘（驱动级）",
+            variable=self.input_method_var,
+            value="dd",
+            font=Theme.get_font("sm"),
+            fg_color=Theme.COLORS['primary'],
+            hover_color=Theme.COLORS['primary_hover'],
+            command=self._on_input_method_changed
+        )
+        self.dd_radio.pack(side="left")
+        
+        if not dd_available:
+            self.dd_radio.configure(state="disabled")
+        
+        desc_row = ctk.CTkFrame(input_frame, fg_color="transparent")
+        desc_row.pack(fill="x", padx=Theme.DIMENSIONS['spacing_md'], pady=(0, Theme.DIMENSIONS['spacing_sm']))
+        
+        ctk.CTkLabel(
+            desc_row,
+            text="PyAutoGUI: 基于软件模拟，兼容性好，无需管理员权限",
+            font=Theme.get_font("xs"),
+            text_color=self._dark_colors['text_secondary']
+        ).pack(anchor="w")
+        
+        dd_desc = "DD虚拟键盘: 驱动级模拟，绕过部分输入检测，需管理员权限"
+        if not dd_available:
+            dd_desc += "（DD64.dll 未找到）"
+        ctk.CTkLabel(
+            desc_row,
+            text=dd_desc,
+            font=Theme.get_font("xs"),
+            text_color=self._dark_colors['warning'] if not dd_available else self._dark_colors['text_secondary']
+        ).pack(anchor="w")
+        
+        status_row = ctk.CTkFrame(input_frame, fg_color="transparent")
+        status_row.pack(fill="x", padx=Theme.DIMENSIONS['spacing_md'], pady=(0, Theme.DIMENSIONS['spacing_sm']))
+        
+        current_method = self._current_input_method
+        admin_status = "管理员" if is_admin() else "普通用户"
+        status_text = f"当前状态: {'DD虚拟键盘' if current_method == 'dd' else 'PyAutoGUI'} 已加载 ({admin_status})"
+        ctk.CTkLabel(
+            status_row,
+            text=status_text,
+            font=Theme.get_font("xs"),
+            text_color=self._dark_colors['primary']
+        ).pack(anchor="w")
+        
+        warn_row = ctk.CTkFrame(input_frame, fg_color="transparent")
+        warn_row.pack(fill="x", padx=Theme.DIMENSIONS['spacing_md'], pady=(0, Theme.DIMENSIONS['spacing_md']))
+        
+        ctk.CTkLabel(
+            warn_row,
+            text="⚠ 切换输入方式后需要重启应用才能生效",
+            font=Theme.get_font("xs"),
+            text_color=self._dark_colors['warning']
+        ).pack(anchor="w")
+    
+    def _on_input_method_changed(self):
+        new_method = self.input_method_var.get()
+        
+        if new_method == self._current_input_method:
+            return
+        
+        if new_method == "dd":
+            result = messagebox.askyesno(
+                "切换输入方式",
+                "DD虚拟键盘需要管理员权限才能正常工作。\n"
+                "切换后应用将以管理员身份重新启动。\n\n"
+                "是否立即重启？",
+                icon='warning'
+            )
+            if result:
+                if hasattr(self.app, '_restart_with_method'):
+                    self.app._restart_with_method("dd", as_admin=True)
+            else:
+                self.input_method_var.set(self._current_input_method)
+        else:
+            result = messagebox.askyesno(
+                "切换输入方式",
+                "切换到 PyAutoGUI 模式后，应用将重新启动。\n\n"
+                "是否立即重启？",
+                icon='question'
+            )
+            if result:
+                if hasattr(self.app, '_restart_with_method'):
+                    self.app._restart_with_method("pyautogui", as_admin=False)
+            else:
+                self.input_method_var.set(self._current_input_method)
+    
     def _browse_project_path(self):
         folder_path = filedialog.askdirectory(
             title="选择默认项目保存位置"
@@ -315,7 +440,8 @@ class SettingsTab(ctk.CTkFrame):
                 "start": self.start_shortcut_var.get(),
                 "stop": self.stop_shortcut_var.get(),
                 "record": self.record_hotkey_var.get()
-            }
+            },
+            "input_method": self.input_method_var.get(),
         }
     
     def load_settings(self, settings):
@@ -355,3 +481,9 @@ class SettingsTab(ctk.CTkFrame):
                 self.stop_shortcut_var.set(shortcuts["stop"])
             if "record" in shortcuts:
                 self.record_hotkey_var.set(shortcuts["record"])
+        
+        if "input" in settings:
+            input_settings = settings["input"]
+            if "method" in input_settings:
+                self.input_method_var.set(input_settings["method"])
+                self._current_input_method = input_settings["method"]
