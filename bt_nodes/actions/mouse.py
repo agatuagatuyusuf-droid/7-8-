@@ -14,13 +14,21 @@ def _get_default_position_key() -> str:
         return "last_detection_position"
 
 
+def _ensure_tuple_position(value):
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        return (int(value[0]), int(value[1]))
+    return value
+
+
 class MouseClickNode(ActionNode):
     NODE_TYPE = "MouseClickNode"
 
     def __init__(self, node_id: str = None, config: NodeConfig = None):
         super().__init__(node_id, config)
         self.button = self.config.get("button", "left")
-        self.position: Optional[Tuple[int, int]] = self.config.get("position", None)
+        self.position: Optional[Tuple[int, int]] = _ensure_tuple_position(self.config.get("position", None))
         self.action = self.config.get("action", "press")
         self.duration = self.config.get_int("duration", 100)
         self.use_blackboard = self.config.get_bool("use_blackboard", False)
@@ -77,8 +85,8 @@ class MouseClickNode(ActionNode):
             position_key = self.config.get("position_key", "") or _get_default_position_key()
             bb_position = context.blackboard.get(position_key)
             if bb_position:
-                return bb_position
-        return self.config.get("position", None)
+                return _ensure_tuple_position(bb_position)
+        return _ensure_tuple_position(self.config.get("position", None))
 
     def _non_blocking_finite_click(self, context, position: Optional[Tuple[int, int]]) -> NodeStatus:
         current_time = time.time() * 1000
@@ -201,7 +209,7 @@ class MouseClickNode(ActionNode):
         config = NodeConfig.from_dict(data.get("config", {}))
         node = cls(node_id=data.get("id"), config=config)
         node.button = config.get("button", "left")
-        node.position = config.get("position", None)
+        node.position = _ensure_tuple_position(config.get("position", None))
         node.action = config.get("action", "press")
         node.duration = config.get_int("duration", 100)
         node.use_blackboard = config.get_bool("use_blackboard", False)
@@ -218,12 +226,12 @@ class MouseMoveNode(ActionNode):
 
     def __init__(self, node_id: str = None, config: NodeConfig = None):
         super().__init__(node_id, config)
-        self.position: Tuple[int, int] = self.config.get("position", (0, 0))
+        self.position: Tuple[int, int] = _ensure_tuple_position(self.config.get("position", (0, 0))) or (0, 0)
         self.use_blackboard = self.config.get_bool("use_blackboard", False)
         self.position_key = self.config.get("position_key", _get_default_position_key())
         self.move_type = self.config.get("move_type", "移动")
         self.drag_button = self.config.get("drag_button", "left")
-        self.end_position: Optional[Tuple[int, int]] = self.config.get("end_position", None)
+        self.end_position: Optional[Tuple[int, int]] = _ensure_tuple_position(self.config.get("end_position", None))
         self.relative = self.config.get_bool("relative", False)
         offset = self.config.get("offset", None)
         if offset is not None:
@@ -279,8 +287,8 @@ class MouseMoveNode(ActionNode):
             position_key = self.config.get("position_key", "") or _get_default_position_key()
             bb_position = context.blackboard.get(position_key)
             if bb_position:
-                return bb_position
-        return self.config.get("position", (0, 0))
+                return _ensure_tuple_position(bb_position)
+        return _ensure_tuple_position(self.config.get("position", (0, 0)))
 
     def _get_end_position(self, context, start_pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:
         if self.config.get_bool("relative", False):
@@ -293,9 +301,9 @@ class MouseMoveNode(ActionNode):
             position_key_end = self.config.get("position_key_end", "")
             bb_position = context.blackboard.get(position_key_end)
             if bb_position:
-                return bb_position
+                return _ensure_tuple_position(bb_position)
 
-        return self.config.get("end_position", None)
+        return _ensure_tuple_position(self.config.get("end_position", None))
 
     def _smoothstep(self, t: float) -> float:
         return t * t * (3 - 2 * t)
@@ -416,12 +424,12 @@ class MouseMoveNode(ActionNode):
     def from_dict(cls, data: Dict[str, Any]) -> "MouseMoveNode":
         config = NodeConfig.from_dict(data.get("config", {}))
         node = cls(node_id=data.get("id"), config=config)
-        node.position = config.get("position", (0, 0))
+        node.position = _ensure_tuple_position(config.get("position", (0, 0))) or (0, 0)
         node.use_blackboard = config.get_bool("use_blackboard", False)
         node.position_key = config.get("position_key", "last_detection_position")
         node.move_type = config.get("move_type", "移动")
         node.drag_button = config.get("drag_button", "left")
-        node.end_position = config.get("end_position", None)
+        node.end_position = _ensure_tuple_position(config.get("end_position", None))
         node.relative = config.get_bool("relative", False)
         offset = config.get("offset", None)
         if offset is not None:
