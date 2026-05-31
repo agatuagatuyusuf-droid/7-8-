@@ -1,5 +1,6 @@
 from typing import Callable, Optional, Tuple, List, TYPE_CHECKING
 import os
+import re
 import time
 
 from .blackboard import Blackboard
@@ -302,3 +303,26 @@ class ExecutionContext:
         result = WindowManager.set_foreground_window(self._previous_foreground_window)
         self._previous_foreground_window = None
         return result
+
+    def resolve_variable_refs(self, text: str) -> str:
+        """解析 ${variable_name} 变量引用
+
+        将文本中的 ${variable_name} 替换为黑板中对应变量的值。
+
+        Args:
+            text: 包含变量引用的文本
+
+        Returns:
+            解析后的文本
+        """
+        if not text or "${" not in text:
+            return text
+
+        pattern = r'\$\{(\w+)\}'
+
+        def replacer(match):
+            key = match.group(1)
+            value = self.blackboard.get(key)
+            return str(value) if value is not None else ""
+
+        return re.sub(pattern, replacer, text)

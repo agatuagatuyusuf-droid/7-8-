@@ -38,9 +38,15 @@ class SetVariableNode(ActionNode):
                 return NodeStatus.FAILURE
 
             if operation == "set":
-                context.blackboard.set(variable_name, value)
+                parsed_value = self._parse_value(value)
+                context.blackboard.set(variable_name, parsed_value)
             elif operation == "increment":
-                context.blackboard.increment(variable_name, value)
+                try:
+                    amount = float(value) if value else 1
+                    amount = int(amount) if amount == int(amount) else amount
+                except (ValueError, TypeError):
+                    amount = 1
+                context.blackboard.increment(variable_name, amount)
             elif operation == "delete":
                 context.blackboard.delete(variable_name)
             
@@ -58,6 +64,24 @@ class SetVariableNode(ActionNode):
                 reason="执行异常，详情见终端日志"
             )
             return NodeStatus.FAILURE
+
+    @staticmethod
+    def _parse_value(raw: str):
+        if raw.lower() == "true":
+            return True
+        if raw.lower() == "false":
+            return False
+        if raw.lower() == "none":
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            pass
+        try:
+            return float(raw)
+        except ValueError:
+            pass
+        return raw
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SetVariableNode":

@@ -14,7 +14,6 @@ class Blackboard:
     BUILTIN_VARS = {
         "last_detection_position": None,
         "last_number_value": None,
-        "execution_count": 0,
     }
 
     def __init__(self):
@@ -45,9 +44,15 @@ class Blackboard:
         with self._lock:
             old_value = self._data.get(key)
             self._data[key] = value
-            self._notify_subscribers(key, old_value, value)
+            subscribers = self._subscribers.get(key, [])[:] if key in self._subscribers else []
 
-    def increment(self, key: str, amount: int = 1) -> None:
+        for callback in subscribers:
+            try:
+                callback(old_value, value)
+            except Exception:
+                pass
+
+    def increment(self, key: str, amount=1) -> None:
         """递增变量
 
         Args:
@@ -55,9 +60,29 @@ class Blackboard:
             amount: 递增量
         """
         with self._lock:
+            old_value = self._data.get(key)
             current = self._data.get(key, 0)
-            if isinstance(current, (int, float)):
-                self._data[key] = current + amount
+            if not isinstance(current, (int, float)):
+                try:
+                    current = float(current)
+                except (ValueError, TypeError):
+                    current = 0
+            if not isinstance(amount, (int, float)):
+                try:
+                    amount = float(amount)
+                except (ValueError, TypeError):
+                    amount = 1
+            new_value = current + amount
+            if isinstance(new_value, float) and new_value == int(new_value):
+                new_value = int(new_value)
+            self._data[key] = new_value
+            subscribers = self._subscribers.get(key, [])[:] if key in self._subscribers else []
+
+        for callback in subscribers:
+            try:
+                callback(old_value, new_value)
+            except Exception:
+                pass
 
     def delete(self, key: str) -> None:
         """删除变量
@@ -113,22 +138,6 @@ class Blackboard:
                 del self._subscribers[key]
             elif callback in self._subscribers[key]:
                 self._subscribers[key].remove(callback)
-
-    def _notify_subscribers(self, key: str, old_value: Any, new_value: Any) -> None:
-        """通知订阅者
-
-        Args:
-            key: 变量名
-            old_value: 旧值
-            new_value: 新值
-        """
-        if key in self._subscribers:
-            subscribers = self._subscribers[key][:]
-            for callback in subscribers:
-                try:
-                    callback(old_value, new_value)
-                except Exception:
-                    pass
 
     def to_dict(self) -> Dict[str, Any]:
         """导出为字典
