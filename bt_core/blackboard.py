@@ -13,8 +13,34 @@ class Blackboard:
     """
     BUILTIN_VARS = {
         "last_detection_position": None,
+        "last_detection_x": None,
+        "last_detection_y": None,
         "last_number_value": None,
     }
+
+    BUILTIN_VAR_DISPLAY_NAMES = {
+        "last_detection_position": "最近检测点",
+        "last_detection_x": "最近检测点x值",
+        "last_detection_y": "最近检测点y值",
+        "last_number_value": "最近数字值",
+    }
+
+    @classmethod
+    def get_builtin_vars_info(cls) -> Dict[str, str]:
+        result = dict(cls.BUILTIN_VAR_DISPLAY_NAMES)
+        try:
+            from config.settings_manager import get_blackboard_config
+            config = get_blackboard_config()
+            config_mapping = {
+                config.default_position_key: "最近检测点",
+                config.default_value_key: "最近数字值",
+            }
+            for key, display_name in config_mapping.items():
+                if key not in result:
+                    result[key] = display_name
+        except ImportError:
+            pass
+        return result
 
     def __init__(self):
         self._data: Dict[str, Any] = dict(self.BUILTIN_VARS)

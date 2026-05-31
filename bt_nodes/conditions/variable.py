@@ -12,65 +12,69 @@ class VariableConditionNode(ConditionNode):
         self.comparison = self.config.get("comparison") or self.config.get("operator", "==")
         self.target_value = self.config.get("target_value") or self.config.get("compare_value", "")
 
-    def _check_condition(self, context) -> bool:
-        try:
-            variable_name = self.config.get("variable_name", "")
-            comparison = self.config.get("comparison") or self.config.get("operator", "==")
-            target_value = self.config.get("target_value") or self.config.get("compare_value", "")
+    def _check_condition(self, context):
+        var_name = self.config.get("variable_name", "")
+        operator = self.config.get("operator", "==")
 
-            if not variable_name:
-                self._log_condition_result(False, "未设置变量名")
-                return False
-
-            value = context.blackboard.get(variable_name)
-            exists = context.blackboard.exists(variable_name)
-
-            if comparison == "exists":
-                if exists:
-                    self._log_condition_result(True, extra_info=f"变量存在: {variable_name}")
-                    return True
-                else:
-                    self._log_condition_result(False, f"变量不存在: {variable_name}")
-                    return False
-
-            if comparison == "not_exists":
-                if not exists:
-                    self._log_condition_result(True, extra_info=f"变量不存在: {variable_name}")
-                    return True
-                else:
-                    self._log_condition_result(False, f"变量存在: {variable_name}")
-                    return False
-
-            if value is None:
-                self._log_condition_result(False, f"变量不存在: {variable_name}")
-                return False
-
-            result = self._compare_value(value, comparison, target_value)
-
-            if result:
-                self._log_condition_result(True, extra_info=f"值: {value}")
-                return True
-            else:
-                self._log_condition_result(False,
-                    f"变量比较失败: {value} {comparison} {target_value}")
-                return False
-        except Exception as e:
-            from bt_utils.exception_handler import log_exception
-            log_exception(e, f"VariableConditionNode '{self.name}'")
-            self._log_condition_result(False, "检测异常，详情见终端日志")
+        if not var_name:
+            self._log_condition_result(False, "未设置变量名")
             return False
 
+        if operator == "exists":
+            result = context.blackboard.exists(var_name)
+            self._log_condition_result(result, f"变量 '{var_name}' 存在性检查: {result}")
+            return result
+
+        if operator == "not_exists":
+            result = not context.blackboard.exists(var_name)
+            self._log_condition_result(result, f"变量 '{var_name}' 不存在检查: {result}")
+            return result
+
+        current_value = context.blackboard.get(var_name)
+        if current_value is None:
+            self._log_condition_result(False, f"变量 '{var_name}' 不存在")
+            return False
+
+        compare_type = self.config.get("compare_type", "constant")
+        if compare_type == "variable":
+            compare_var = self.config.get("compare_variable", "")
+            if compare_var:
+                target_value = context.blackboard.get(compare_var)
+                if target_value is None:
+                    self._log_condition_result(False,
+                        f"比较变量 '{compare_var}' 不存在或值为 None")
+                    return False
+            else:
+                self._log_condition_result(False, "未配置比较变量")
+                return False
+        else:
+            raw_value = self.config.get("compare_value", "")
+            target_value = self._parse_value(raw_value)
+
+        result = self._compare_value(current_value, operator, target_value)
+        self._log_condition_result(result,
+            f"变量 '{var_name}'({current_value}) {operator} {target_value}: {result}")
+        return result
+
+    @staticmethod
+    def _parse_value(raw: str):
+        if raw.lower() == "true":
+            return True
+        if raw.lower() == "false":
+            return False
+        if raw.lower() == "none":
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            pass
+        try:
+            return float(raw)
+        except ValueError:
+            pass
+        return raw
+
     def _compare_value(self, value, comparison: str, target_value) -> bool:
-        """比较变量值
-
-        Args:
-            value: 变量当前值
-            comparison: 比较运算符
-            target_value: 目标值
-
-        Returns:
-            比较结果
-        """
         try:
             ops = {
                 ">": lambda a, b: a > b,
@@ -110,5 +114,3 @@ class VariableConditionNode(ConditionNode):
                 return str_value == str_target
         except Exception:
             return False
-
-

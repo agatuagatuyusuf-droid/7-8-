@@ -984,6 +984,8 @@ class ConditionNode(Node):
                 default_position_key = "last_detection_position"
             position_key = self.config.get("position_key", "") or default_position_key
             context.blackboard.set(position_key, final_position)
+            context.blackboard.set("last_detection_x", final_position[0])
+            context.blackboard.set("last_detection_y", final_position[1])
 
     def tick(self, context: "ExecutionContext") -> NodeStatus:
         return self._execute_with_decorators(context, self._tick_internal)
@@ -1067,21 +1069,49 @@ class ConditionNode(Node):
         return False
 
     def _get_region_image(self, context):
-        """获取区域图像（截图+裁剪）
-
-        Args:
-            context: 执行上下文
-
-        Returns:
-            PIL.Image 或 None
-        """
         try:
-            region = self._parse_region(self.config.get("region", None))
+            region_mode = self.config.get("region_mode", "fixed")
+            if region_mode == "dynamic":
+                region = self._resolve_dynamic_region(context)
+            else:
+                region = self._parse_region(self.config.get("region", None))
             return context.get_screenshot(region)
         except Exception as e:
             from bt_utils.exception_handler import log_exception
             log_exception(e, f"{self.NODE_TYPE} '{self.name}' 截图失败")
             return None
+
+    def _resolve_dynamic_region(self, context):
+        use_last_pos = self.config.get_bool("region_use_last_pos", True)
+        if use_last_pos:
+            anchor_key = "last_detection_position"
+        else:
+            anchor_key = self.config.get("region_anchor", "") or "last_detection_position"
+
+        pos = context.blackboard.get(anchor_key)
+        if pos is None or not isinstance(pos, (tuple, list)) or len(pos) < 2:
+            from bt_utils.log_manager import LogManager
+            LogManager.instance().log_failure(
+                node_type=self.NODE_TYPE,
+                node_name=self.name,
+                reason=f"动态区域锚点 '{anchor_key}' 不存在或格式无效，使用全屏截图"
+            )
+            return None
+
+        cx, cy = int(pos[0]), int(pos[1])
+
+        offset = self.config.get("region_offset", [-50, -50, 50, 50])
+        if isinstance(offset, str):
+            try:
+                offset = [int(x.strip()) for x in offset.split(",")]
+            except (ValueError, AttributeError):
+                offset = [-50, -50, 50, 50]
+
+        if not isinstance(offset, (list, tuple)) or len(offset) < 4:
+            offset = [-50, -50, 50, 50]
+
+        return (cx + int(offset[0]), cy + int(offset[1]),
+                cx + int(offset[2]), cy + int(offset[3]))
 
     def _log_condition_result(self, success: bool, reason: str = None,
                                extra_info: str = None):

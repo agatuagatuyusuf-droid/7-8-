@@ -12,7 +12,11 @@ from bt_utils.log_manager import LogManager
 
 NODE_CONFIG_SCHEMAS = {
     "OCRConditionNode": [
-        {"key": "region", "label": "检测区域", "type": "region"},
+        {"key": "region_mode", "label": "区域选择方式", "type": "select", "options": ["fixed", "dynamic"], "display_names": {"fixed": "固定区域检测", "dynamic": "动态区域检测"}, "default": "fixed"},
+        {"key": "region", "label": "检测区域", "type": "region", "hide_if": {"field": "region_mode", "value": "dynamic"}},
+        {"key": "region_use_last_pos", "label": "锚点设置最近检测点", "type": "bool", "default": True, "hide_if": {"field": "region_mode", "value": "fixed"}},
+        {"key": "region_anchor", "label": "位置变量名", "type": "text", "default": "", "hide_if": {"field": "region_mode", "value": "fixed"}},
+        {"key": "region_offset", "label": "区域偏移量", "type": "region_offset", "default": [-50, -50, 50, 50], "hide_if": {"field": "region_mode", "value": "fixed"}},
         {"key": "keywords", "label": "关键词", "type": "text"},
         {"key": "language", "label": "语言", "type": "select", "options": ["简体中文", "English", "繁体中文"], "default": "简体中文"},
         {"key": "preprocess_mode", "label": "图像预处理", "type": "select", "options": ["默认", "复杂色彩", "自适应", "自动调优"], "default": "默认"},
@@ -21,14 +25,22 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "offset", "label": "坐标偏移", "type": "offset"},
     ],
     "ImageConditionNode": [
-        {"key": "region", "label": "检测区域", "type": "region"},
+        {"key": "region_mode", "label": "区域选择方式", "type": "select", "options": ["fixed", "dynamic"], "display_names": {"fixed": "固定区域检测", "dynamic": "动态区域检测"}, "default": "fixed"},
+        {"key": "region", "label": "检测区域", "type": "region", "hide_if": {"field": "region_mode", "value": "dynamic"}},
+        {"key": "region_use_last_pos", "label": "锚点设置最近检测点", "type": "bool", "default": True, "hide_if": {"field": "region_mode", "value": "fixed"}},
+        {"key": "region_anchor", "label": "位置变量名", "type": "text", "default": "", "hide_if": {"field": "region_mode", "value": "fixed"}},
+        {"key": "region_offset", "label": "区域偏移量", "type": "region_offset", "default": [-50, -50, 50, 50], "hide_if": {"field": "region_mode", "value": "fixed"}},
         {"key": "template_path", "label": "模板路径", "type": "screenshot", "width": 120, "filetypes": [("图像文件", "*.png *.jpg *.jpeg *.bmp"), ("所有文件", "*.*")]},
         {"key": "threshold", "label": "匹配阈值(%)", "type": "number", "min": 0, "max": 100, "default": 80},
         {"key": "position_key", "label": "位置变量名", "type": "text", "default": ""},
         {"key": "offset", "label": "坐标偏移", "type": "offset"},
     ],
     "ColorConditionNode": [
-        {"key": "region", "label": "检测区域", "type": "region"},
+        {"key": "region_mode", "label": "区域选择方式", "type": "select", "options": ["fixed", "dynamic"], "display_names": {"fixed": "固定区域检测", "dynamic": "动态区域检测"}, "default": "fixed"},
+        {"key": "region", "label": "检测区域", "type": "region", "hide_if": {"field": "region_mode", "value": "dynamic"}},
+        {"key": "region_use_last_pos", "label": "锚点设置最近检测点", "type": "bool", "default": True, "hide_if": {"field": "region_mode", "value": "fixed"}},
+        {"key": "region_anchor", "label": "位置变量名", "type": "text", "default": "", "hide_if": {"field": "region_mode", "value": "fixed"}},
+        {"key": "region_offset", "label": "区域偏移量", "type": "region_offset", "default": [-50, -50, 50, 50], "hide_if": {"field": "region_mode", "value": "fixed"}},
         {"key": "target_color", "label": "目标颜色", "type": "color"},
         {"key": "tolerance", "label": "容差", "type": "number", "min": 0, "max": 100, "default": 10},
         {"key": "min_pixels", "label": "最小像素数", "type": "number", "min": 1, "default": 1},
@@ -36,7 +48,11 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "offset", "label": "坐标偏移", "type": "offset"},
     ],
     "NumberConditionNode": [
-        {"key": "region", "label": "检测区域", "type": "region"},
+        {"key": "region_mode", "label": "区域选择方式", "type": "select", "options": ["fixed", "dynamic"], "display_names": {"fixed": "固定区域检测", "dynamic": "动态区域检测"}, "default": "fixed"},
+        {"key": "region", "label": "检测区域", "type": "region", "hide_if": {"field": "region_mode", "value": "dynamic"}},
+        {"key": "region_use_last_pos", "label": "锚点设置最近检测点", "type": "bool", "default": True, "hide_if": {"field": "region_mode", "value": "fixed"}},
+        {"key": "region_anchor", "label": "位置变量名", "type": "text", "default": "", "hide_if": {"field": "region_mode", "value": "fixed"}},
+        {"key": "region_offset", "label": "区域偏移量", "type": "region_offset", "default": [-50, -50, 50, 50], "hide_if": {"field": "region_mode", "value": "fixed"}},
         {"key": "preprocess_mode", "label": "图像预处理", "type": "select", "options": ["默认", "复杂色彩", "自适应", "自动调优"], "default": "默认"},
         {"key": "extract_mode", "label": "提取模式", "type": "select", "options": ["无规则", "x/y", "自定义"], "default": "无规则"},
         {"key": "extract_pattern", "label": "自定义模式", "type": "text", "hide_if": {"field": "extract_mode", "value": ["无规则", "x/y"]}},
@@ -48,11 +64,58 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "position_key", "label": "位置变量名", "type": "text", "default": ""},
         {"key": "offset", "label": "坐标偏移", "type": "offset"},
     ],
-    "VariableConditionNode": [
-        {"key": "variable_name", "label": "变量名", "type": "text"},
-        {"key": "operator", "label": "运算符", "type": "select", "options": ["==", "!=", ">", "<", ">=", "<=", "exists", "not_exists", "contains", "not_contains", "starts_with", "ends_with"], "default": "=="},
-        {"key": "compare_value", "label": "比较值", "type": "text", "hide_if": {"field": "operator", "value": ["exists", "not_exists"]}},
-    ],
+    "VariableConditionNode": {
+        "variable_name": {
+            "type": "text",
+            "label": "变量名",
+            "default": ""
+        },
+        "operator": {
+            "type": "select",
+            "label": "运算符",
+            "options": ["==", "!=", ">", ">=", "<", "<=", "exists", "not_exists"],
+            "display_names": {
+                "==": "等于",
+                "!=": "不等于",
+                ">": "大于",
+                ">=": "大于等于",
+                "<": "小于",
+                "<=": "小于等于",
+                "exists": "存在",
+                "not_exists": "不存在"
+            },
+            "default": "=="
+        },
+        "compare_type": {
+            "type": "select",
+            "label": "比较值类型",
+            "options": ["constant", "variable"],
+            "display_names": {
+                "constant": "常量值",
+                "variable": "变量名"
+            },
+            "default": "constant",
+            "hide_if": {"field": "operator", "value": ["exists", "not_exists"]}
+        },
+        "compare_value": {
+            "type": "text",
+            "label": "比较值",
+            "default": "",
+            "hide_if": [
+                {"field": "operator", "value": ["exists", "not_exists"]},
+                {"field": "compare_type", "value": "variable"}
+            ]
+        },
+        "compare_variable": {
+            "type": "variable_select",
+            "label": "比较变量",
+            "default": "",
+            "hide_if": [
+                {"field": "compare_type", "value": "constant"},
+                {"field": "operator", "value": ["exists", "not_exists"]}
+            ]
+        }
+    },
     "KeyPressNode": [
         {"key": "key", "label": "按键", "type": "key"},
         {"key": "action", "label": "动作", "type": "select", "options": ["press", "down", "up"], "default": "press"},
@@ -94,11 +157,55 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "duration_ms", "label": "延时时长(ms)", "type": "number", "default": 1000},
         {"key": "duration_ms_random", "label": "延时随机范围(±ms)", "type": "number", "min": 0, "default": 0},
     ],
-    "SetVariableNode": [
-        {"key": "variable_name", "label": "变量名", "type": "text"},
-        {"key": "operation", "label": "操作", "type": "select", "options": ["set", "increment", "delete", "clear"], "default": "set"},
-        {"key": "value", "label": "值", "type": "text"},
-    ],
+    "SetVariableNode": {
+        "variable_name": {
+            "type": "text",
+            "label": "变量名",
+            "default": ""
+        },
+        "operation": {
+            "type": "select",
+            "label": "操作",
+            "options": ["set", "increment", "delete"],
+            "display_names": {
+                "set": "赋值",
+                "increment": "递增",
+                "delete": "删除"
+            },
+            "default": "set"
+        },
+        "value_type": {
+            "type": "select",
+            "label": "赋值方式",
+            "options": ["constant", "variable"],
+            "display_names": {
+                "constant": "常量值",
+                "variable": "变量名"
+            },
+            "default": "constant",
+            "hide_if": [
+                {"field": "operation", "value": ["increment", "delete"]}
+            ]
+        },
+        "value": {
+            "type": "text",
+            "label": "常量值",
+            "default": "",
+            "hide_if": [
+                {"field": "operation", "value": "delete"},
+                {"field": "value_type", "value": "variable"}
+            ]
+        },
+        "source_variable": {
+            "type": "variable_select",
+            "label": "来源变量",
+            "default": "",
+            "hide_if": [
+                {"field": "value_type", "value": "constant"},
+                {"field": "operation", "value": ["increment", "delete"]}
+            ]
+        }
+    },
     "ScriptNode": [
         {"key": "script_path", "label": "脚本路径", "type": "file", "width": 120, "filetypes": [("所有文件", "*.*")]},
         {"key": "convert_coords", "label": "", "type": "script_convert"},
@@ -127,7 +234,11 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "output_key", "label": "输出变量名", "type": "text", "default": "last_input_text", "hide_if": {"field": "save_input_text", "value": False}},
     ],
     "TextExtractNode": [
-        {"key": "region", "label": "检测区域", "type": "region"},
+        {"key": "region_mode", "label": "区域选择方式", "type": "select", "options": ["fixed", "dynamic"], "display_names": {"fixed": "固定区域检测", "dynamic": "动态区域检测"}, "default": "fixed"},
+        {"key": "region", "label": "检测区域", "type": "region", "hide_if": {"field": "region_mode", "value": "dynamic"}},
+        {"key": "region_use_last_pos", "label": "锚点设置最近检测点", "type": "bool", "default": True, "hide_if": {"field": "region_mode", "value": "fixed"}},
+        {"key": "region_anchor", "label": "位置变量名", "type": "text", "default": "", "hide_if": {"field": "region_mode", "value": "fixed"}},
+        {"key": "region_offset", "label": "区域偏移量", "type": "region_offset", "default": [-50, -50, 50, 50], "hide_if": {"field": "region_mode", "value": "fixed"}},
         {"key": "extract_mode", "label": "提取模式", "type": "select", "options": ["all", "keywords"], "default": "all"},
         {"key": "keywords", "label": "关键词", "type": "text", "hide_if": {"field": "extract_mode", "value": "all"}},
         {"key": "language", "label": "语言", "type": "select", "options": ["简体中文", "English", "繁体中文"], "default": "简体中文"},
@@ -335,17 +446,20 @@ class NumberField(FieldWidget):
 
 
 class SelectField(FieldWidget):
-    def __init__(self, master, label: str, key: str, on_change: Callable, options: List[str] = None, **kwargs):
+    def __init__(self, master, label: str, key: str, on_change: Callable, options: List[str] = None, display_names: Dict[str, str] = None, **kwargs):
         self.options = options or []
+        self.display_names = display_names or {}
+        self._reverse_names = {v: k for k, v in self.display_names.items()}
+        self._display_options = [self.display_names.get(opt, opt) for opt in self.options]
         super().__init__(master, label, key, on_change, **kwargs)
         self._create_widget()
     
     def _create_widget(self):
-        self.var = tk.StringVar(value=self.options[0] if self.options else "")
+        self.var = tk.StringVar(value=self._display_options[0] if self._display_options else "")
         self.menu = ctk.CTkOptionMenu(
             self,
             variable=self.var,
-            values=self.options,
+            values=self._display_options,
             font=Theme.get_font('sm'),
             height=Theme.DIMENSIONS['input_height'],
             fg_color=self._dark_colors['bg_tertiary'],
@@ -353,16 +467,18 @@ class SelectField(FieldWidget):
             button_hover_color=self._dark_colors['node_selected'],
             text_color=self._dark_colors['text_primary'],
             corner_radius=Theme.DIMENSIONS['button_corner_radius'],
-            command=lambda choice: self.on_change(self.key, choice)
+            command=lambda choice: self.on_change(self.key, self._reverse_names.get(choice, choice))
         )
         self.menu.pack(fill="x")
     
     def set_value(self, value: Any):
-        if value in self.options:
-            self.var.set(str(value))
+        display = self.display_names.get(str(value), str(value))
+        if display in self._display_options:
+            self.var.set(display)
     
     def get_value(self) -> Any:
-        return self.var.get()
+        current = self.var.get()
+        return self._reverse_names.get(current, current)
 
 
 class BoolField(FieldWidget):
@@ -1674,6 +1790,207 @@ class OffsetField(FieldWidget):
             return [0, 0]
 
 
+class RegionOffsetField(FieldWidget):
+    def __init__(self, master, label, key, on_change, app, **kwargs):
+        self.app = app
+        super().__init__(master, label, key, on_change, **kwargs)
+        self._create_widget()
+
+    def _create_widget(self):
+        input_frame = ctk.CTkFrame(self, fg_color="transparent")
+        input_frame.pack(fill="x")
+
+        self.var = tk.StringVar(value="-50, -50, 50, 50")
+
+        self.entry = ctk.CTkEntry(
+            input_frame,
+            textvariable=self.var,
+            font=Theme.get_font('sm'),
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['bg_tertiary'],
+            border_color=self._dark_colors['border'],
+            text_color=self._dark_colors['text_primary'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius']
+        )
+        self.entry.pack(side="left", fill="x", expand=True,
+                        padx=(0, Theme.DIMENSIONS['spacing_xs']))
+        self.entry.bind("<FocusOut>", lambda e: self._parse_and_change())
+
+        self.btn = ctk.CTkButton(
+            input_frame,
+            text="测量",
+            font=Theme.get_font('sm'),
+            width=60,
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['primary'],
+            hover_color=self._dark_colors['primary_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+        )
+        self.btn.pack(side="right")
+        self.btn.bind("<ButtonRelease-1>", lambda e: self._measure_region_offset())
+
+    def _parse_and_change(self):
+        try:
+            parts = self.var.get().replace(" ", "").split(",")
+            if len(parts) >= 4:
+                value = [int(p) for p in parts[:4]]
+                self.on_change(self.key, value)
+        except (ValueError, AttributeError):
+            pass
+
+    def _measure_region_offset(self):
+        import time
+        try:
+            from bt_utils.magnifier import MagnifierWindow
+        except ImportError:
+            MagnifierWindow = None
+
+        try:
+            import screeninfo
+
+            self.app.iconify()
+            time.sleep(0.2)
+
+            monitors = screeninfo.get_monitors()
+            min_x = min(m.x for m in monitors)
+            min_y = min(m.y for m in monitors)
+            max_x = max(m.x + m.width for m in monitors)
+            max_y = max(m.y + m.height for m in monitors)
+
+            select_window = tk.Toplevel(self.app)
+            select_window.geometry(f"{max_x - min_x}x{max_y - min_y}+{min_x}+{min_y}")
+            select_window.overrideredirect(True)
+            select_window.attributes("-alpha", 0.3)
+            select_window.attributes("-topmost", True)
+            select_window.configure(cursor="crosshair")
+
+            canvas = tk.Canvas(select_window, bg=self._dark_colors['primary'],
+                               highlightthickness=0)
+            canvas.pack(fill=tk.BOTH, expand=True)
+
+            label = tk.Label(
+                canvas,
+                text="第一步：点击锚点（参考位置）",
+                font=("Microsoft YaHei", 24),
+                bg=self._dark_colors['primary'],
+                fg="#FFFFFF"
+            )
+            canvas.create_window((max_x - min_x) // 2, (max_y - min_y) // 2, window=label)
+
+            magnifier = MagnifierWindow(zoom_factor=4, size=150) if MagnifierWindow else None
+            magnifier_shown = [False]
+            reference_point = [None]
+            drag_start_abs = [None]
+            drag_start_rel = [None]
+            rect_id = [None]
+
+            def on_mouse_move(event):
+                if magnifier:
+                    if not magnifier_shown[0]:
+                        magnifier.show(event.x_root, event.y_root)
+                        magnifier_shown[0] = True
+                    else:
+                        magnifier.update(event.x_root, event.y_root)
+
+            def on_click(event):
+                if reference_point[0] is None:
+                    reference_point[0] = (event.x_root, event.y_root)
+                    label.config(text="第二步：按住并拖拽选择区域范围")
+                    if magnifier:
+                        magnifier.hide()
+                        magnifier_shown[0] = False
+                else:
+                    drag_start_abs[0] = (event.x_root, event.y_root)
+                    drag_start_rel[0] = (event.x_root - min_x, event.y_root - min_y)
+                    rect_id[0] = None
+
+            def on_drag(event):
+                if magnifier:
+                    if not magnifier_shown[0]:
+                        magnifier.show(event.x_root, event.y_root)
+                        magnifier_shown[0] = True
+                    else:
+                        magnifier.update(event.x_root, event.y_root)
+                if reference_point[0] and drag_start_rel[0]:
+                    current_x_rel = event.x_root - min_x
+                    current_y_rel = event.y_root - min_y
+                    if rect_id[0]:
+                        canvas.delete(rect_id[0])
+                    rect_id[0] = canvas.create_rectangle(
+                        drag_start_rel[0][0], drag_start_rel[0][1],
+                        current_x_rel, current_y_rel,
+                        outline="#000000", width=2, fill=""
+                    )
+
+            def on_release(event):
+                if reference_point[0] and drag_start_abs[0]:
+                    if magnifier:
+                        magnifier.hide()
+                        magnifier_shown[0] = False
+
+                    rx, ry = reference_point[0]
+                    sx, sy = drag_start_abs[0]
+                    ex, ey = event.x_root, event.y_root
+
+                    if abs(ex - sx) < 3 or abs(ey - sy) < 3:
+                        drag_start_abs[0] = None
+                        drag_start_rel[0] = None
+                        if rect_id[0]:
+                            canvas.delete(rect_id[0])
+                            rect_id[0] = None
+                        return
+
+                    offset_x1 = min(sx, ex) - rx
+                    offset_y1 = min(sy, ey) - ry
+                    offset_x2 = max(sx, ex) - rx
+                    offset_y2 = max(sy, ey) - ry
+
+                    self.var.set(f"{offset_x1}, {offset_y1}, {offset_x2}, {offset_y2}")
+                    self.on_change(self.key, [offset_x1, offset_y1, offset_x2, offset_y2])
+                    select_window.destroy()
+                    self.app.deiconify()
+
+            def on_escape(e):
+                if magnifier:
+                    magnifier.hide()
+                    magnifier_shown[0] = False
+                select_window.destroy()
+                self.app.deiconify()
+
+            canvas.bind("<Motion>", on_mouse_move)
+            canvas.bind("<Button-1>", on_click)
+            canvas.bind("<B1-Motion>", on_drag)
+            canvas.bind("<ButtonRelease-1>", on_release)
+            canvas.bind("<Escape>", on_escape)
+            canvas.focus_set()
+            canvas.grab_set()
+
+        except ImportError:
+            self.app.deiconify()
+            messagebox.showerror("错误", "screeninfo库未安装，无法支持区域偏移测量。")
+        except Exception as e:
+            self.app.deiconify()
+            messagebox.showerror("错误", f"区域偏移测量失败: {str(e)}")
+
+    def set_value(self, value):
+        if value is not None:
+            if isinstance(value, (list, tuple)) and len(value) >= 4:
+                self.var.set(f"{value[0]}, {value[1]}, {value[2]}, {value[3]}")
+            else:
+                self.var.set("-50, -50, 50, 50")
+        else:
+            self.var.set("-50, -50, 50, 50")
+
+    def get_value(self):
+        try:
+            parts = self.var.get().replace(" ", "").split(",")
+            if len(parts) >= 4:
+                return [int(p) for p in parts[:4]]
+            return [-50, -50, 50, 50]
+        except (ValueError, AttributeError):
+            return [-50, -50, 50, 50]
+
+
 class WindowSelectField(FieldWidget):
     def __init__(self, master, label: str, key: str, on_change: Callable, app, update_other_field: Callable = None, **kwargs):
         self.app = app
@@ -2146,6 +2463,61 @@ class TextListField(FieldWidget):
         return [line.strip() for line in text.split('\n') if line.strip()]
 
 
+class VariableSelectField(FieldWidget):
+    @classmethod
+    def _get_builtin_vars(cls) -> Dict[str, str]:
+        from bt_core.blackboard import Blackboard
+        return Blackboard.get_builtin_vars_info()
+
+    def __init__(self, master, label: str, key: str, on_change: Callable, **kwargs):
+        builtin_vars = self._get_builtin_vars()
+        self._REVERSE_NAMES = {v: k for k, v in builtin_vars.items()}
+        self._display_options = list(builtin_vars.values())
+        super().__init__(master, label, key, on_change, **kwargs)
+        self._create_widget()
+
+    def _create_widget(self):
+        self.var = tk.StringVar(value="")
+        self.combobox = ctk.CTkComboBox(
+            self,
+            variable=self.var,
+            values=self._display_options,
+            font=Theme.get_font('sm'),
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['bg_tertiary'],
+            border_color=self._dark_colors['border'],
+            button_color=self._dark_colors['border'],
+            button_hover_color=self._dark_colors['node_selected'],
+            text_color=self._dark_colors['text_primary'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+            command=self._on_dropdown_select
+        )
+        self.combobox.pack(fill="x")
+        self.combobox.bind("<FocusOut>", lambda e: self._on_value_change())
+        self.combobox.bind("<Return>", lambda e: self._on_value_change())
+
+    def _on_dropdown_select(self, choice: str):
+        internal_value = self._REVERSE_NAMES.get(choice, choice)
+        self.on_change(self.key, internal_value)
+
+    def _on_value_change(self):
+        current = self.var.get()
+        internal_value = self._REVERSE_NAMES.get(current, current)
+        self.on_change(self.key, internal_value)
+
+    def set_value(self, value: Any):
+        if value is None:
+            self.var.set("")
+            return
+        builtin_vars = self._get_builtin_vars()
+        display = builtin_vars.get(str(value), str(value))
+        self.var.set(display)
+
+    def get_value(self) -> Any:
+        current = self.var.get()
+        return self._REVERSE_NAMES.get(current, current)
+
+
 class PropertyPanel(ctk.CTkFrame):
     def __init__(self, master, app, on_change: Optional[Callable[[str, str, Any], None]] = None, **kwargs):
         super().__init__(master, **kwargs)
@@ -2324,12 +2696,24 @@ class PropertyPanel(ctk.CTkFrame):
             
             schema = NODE_CONFIG_SCHEMAS.get(node_type, [])
             if schema:
+                config_data = node_data.get("config", {})
+                if node_type == "SetVariableNode" and config_data.get("operation") == "clear":
+                    config_data["operation"] = "delete"
+                    config_data.pop("value", None)
+                    config_data.pop("value_type", None)
+                    config_data.pop("source_variable", None)
                 self._create_section_title("配置参数")
                 self.config_fields_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
                 self.config_fields_frame.pack(fill="x")
-                for field in schema:
-                    value = node_data.get("config", {}).get(field["key"])
-                    self._create_field(field, value, self.config_fields_frame)
+                if isinstance(schema, dict):
+                    for field_key, field_def in schema.items():
+                        value = config_data.get(field_key)
+                        field_with_key = {"key": field_key, **field_def}
+                        self._create_field(field_with_key, value, self.config_fields_frame)
+                else:
+                    for field in schema:
+                        value = config_data.get(field["key"])
+                        self._create_field(field, value, self.config_fields_frame)
             
             if node_type in CONDITION_NODES:
                 self._create_preview_section(node_type, node_data.get("config", {}))
@@ -2664,7 +3048,8 @@ class PropertyPanel(ctk.CTkFrame):
         elif field_type == "select":
             field_widget = SelectField(
                 container, label, key, self._on_field_change,
-                options=field.get("options", [])
+                options=field.get("options", []),
+                display_names=field.get("display_names")
             )
         elif field_type == "bool":
             field_widget = BoolField(container, label, key, self._on_field_change, default=field.get("default", False))
@@ -2698,12 +3083,16 @@ class PropertyPanel(ctk.CTkFrame):
             field_widget = ColorField(container, label, key, self._on_field_change, self.app)
         elif field_type == "offset":
             field_widget = OffsetField(container, label, key, self._on_field_change, self.app)
+        elif field_type == "region_offset":
+            field_widget = RegionOffsetField(container, label, key, self._on_field_change, self.app)
         elif field_type == "window_select":
             field_widget = WindowSelectField(container, label, key, self._on_field_change, self.app, self._update_widget_value)
         elif field_type == "script_convert":
             field_widget = ScriptConvertField(container, label, key, self._on_field_change, self.app)
         elif field_type == "text_list":
             field_widget = TextListField(container, label, key, self._on_field_change)
+        elif field_type == "variable_select":
+            field_widget = VariableSelectField(container, label, key, self._on_field_change)
         
         if field_widget:
             display_value = value if value is not None else field.get("default")
@@ -2731,31 +3120,33 @@ class PropertyPanel(ctk.CTkFrame):
             if hasattr(widget, 'set_value'):
                 widget.set_value(value)
     
+    def _check_hide_condition(self, condition: Dict[str, Any]) -> bool:
+        depend_field = condition.get("field")
+        hide_value = condition.get("value")
+        if not depend_field or depend_field not in self.widgets:
+            return False
+        depend_widget = self.widgets.get(depend_field)
+        if not depend_widget:
+            return False
+        current_value = depend_widget.get_value()
+        if isinstance(hide_value, list):
+            return current_value in hide_value
+        else:
+            return current_value == hide_value
+
     def _update_single_field_visibility(self, key: str, field: Dict[str, Any]):
         hide_if = field.get("hide_if")
         if not hide_if:
             return
-        
-        depend_field = hide_if.get("field")
-        hide_value = hide_if.get("value")
-        
-        if not depend_field or depend_field not in self.widgets:
-            return
-        
-        depend_widget = self.widgets.get(depend_field)
-        if not depend_widget:
-            return
-        
-        current_value = depend_widget.get_value()
-        
-        if isinstance(hide_value, list):
-            should_hide = current_value in hide_value
+
+        if isinstance(hide_if, list):
+            should_hide = any(self._check_hide_condition(cond) for cond in hide_if)
         else:
-            should_hide = (current_value == hide_value)
-        
+            should_hide = self._check_hide_condition(hide_if)
+
         widget = self.widgets.get(key)
         container = self.field_containers.get(key)
-        
+
         if widget and container:
             if should_hide:
                 widget.pack_forget()
@@ -2789,11 +3180,14 @@ class PropertyPanel(ctk.CTkFrame):
             hide_if = field.get("hide_if")
             if not hide_if:
                 continue
-            
-            depend_field = hide_if.get("field")
-            if depend_field != changed_key:
+
+            if isinstance(hide_if, list):
+                depend_fields = [cond.get("field") for cond in hide_if]
+            else:
+                depend_fields = [hide_if.get("field")]
+            if changed_key not in depend_fields:
                 continue
-            
+
             self._update_single_field_visibility(key, field)
         
         for key, field in self.field_schemas.items():
