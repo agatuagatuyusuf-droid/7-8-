@@ -21,9 +21,6 @@ class TextExtractNode(ConditionNode):
         super().__init__(node_id, config)
         extract_mode_display = self.config.get("extract_mode", "全部")
         self.extract_mode = EXTRACT_MODE_MAP.get(extract_mode_display, "all")
-        self.region: Optional[Tuple[int, int, int, int]] = self._parse_region(
-            self.config.get("region", None)
-        )
         self.keywords = self.config.get("keywords", "")
         language_display = self.config.get("language", "简体中文")
         self.language = LANGUAGE_MAP.get(language_display, "chi_sim")
@@ -78,7 +75,7 @@ class TextExtractNode(ConditionNode):
                 context.blackboard.set(all_text_key, all_text)
 
             save_position = self.config.get_bool("save_position", True)
-            region = self._parse_region(self.config.get("region", None))
+            region = self._get_effective_region(context)
             if save_position and region:
                 center_x = (region[0] + region[2]) // 2
                 center_y = (region[1] + region[3]) // 2

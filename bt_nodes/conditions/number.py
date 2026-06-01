@@ -10,7 +10,6 @@ class NumberConditionNode(ConditionNode):
 
     def __init__(self, node_id: str = None, config: NodeConfig = None):
         super().__init__(node_id, config)
-        self.region: Optional[Tuple[int, int, int, int]] = self._parse_region(self.config.get("region", None))
         self.comparison = self.config.get("compare_mode", ">=")
         self.target_value = self.config.get_float("threshold", 0)
         self.extract_mode = self.config.get("extract_mode", "无规则")
@@ -27,7 +26,7 @@ class NumberConditionNode(ConditionNode):
 
     def _check_condition(self, context) -> bool:
         try:
-            region = self._parse_region(self.config.get("region", None))
+            region = self._get_effective_region(context)
             if region is None:
                 self._log_condition_result(False, "请先设置检测区域")
                 return False

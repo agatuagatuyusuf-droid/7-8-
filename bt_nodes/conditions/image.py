@@ -11,7 +11,6 @@ class ImageConditionNode(ConditionNode):
 
     def __init__(self, node_id: str = None, config: NodeConfig = None):
         super().__init__(node_id, config)
-        self.region: Optional[Tuple[int, int, int, int]] = self._parse_region(self.config.get("region", None))
         self.template_path = self.config.get("template_path", "")
         raw_threshold = self.config.get_float("threshold", 80)
         self.threshold = raw_threshold / 100.0 if raw_threshold > 1 else raw_threshold
@@ -44,7 +43,7 @@ class ImageConditionNode(ConditionNode):
             )
 
             if found:
-                actual_position = self._adjust_position(position)
+                actual_position = self._adjust_position(position, context)
                 self._save_position(context, actual_position)
                 self._log_condition_result(True)
                 return True
@@ -76,18 +75,19 @@ class ImageConditionNode(ConditionNode):
 
         return template_path
 
-    def _adjust_position(self, position: tuple) -> tuple:
+    def _adjust_position(self, position: tuple, context=None) -> tuple:
         """调整坐标（加上区域偏移）
 
         Args:
             position: 相对位置
+            context: 执行上下文
 
         Returns:
             绝对位置
         """
         if position is None:
             return None
-        region = self._parse_region(self.config.get("region", None))
+        region = self._get_effective_region(context) if context else self._parse_region(self.config.get("region", None))
         if region:
             return (position[0] + region[0], position[1] + region[1])
         return position

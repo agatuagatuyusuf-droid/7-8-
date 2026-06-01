@@ -15,7 +15,6 @@ class OCRConditionNode(ConditionNode):
 
     def __init__(self, node_id: str = None, config: NodeConfig = None):
         super().__init__(node_id, config)
-        self.region: Optional[Tuple[int, int, int, int]] = self._parse_region(self.config.get("region", None))
         self.keywords = self.config.get("keywords", "")
         language_display = self.config.get("language", "简体中文")
         self.language = LANGUAGE_MAP.get(language_display, "chi_sim")
@@ -50,7 +49,7 @@ class OCRConditionNode(ConditionNode):
 
             found, position, all_text = OCRManager().recognize(
                 screenshot, keywords, language,
-                preprocess_mode=preprocess_mode, region=self._parse_region(self.config.get("region", None)),
+                preprocess_mode=preprocess_mode, region=self._get_effective_region(context),
                 search_direction=direction
             )
 

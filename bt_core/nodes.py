@@ -1081,6 +1081,13 @@ class ConditionNode(Node):
             log_exception(e, f"{self.NODE_TYPE} '{self.name}' 截图失败")
             return None
 
+    def _get_effective_region(self, context):
+        region_mode = self.config.get("region_mode", "fixed")
+        if region_mode == "dynamic":
+            return self._resolve_dynamic_region(context)
+        else:
+            return self._parse_region(self.config.get("region", None))
+
     def _resolve_dynamic_region(self, context):
         use_last_pos = self.config.get_bool("region_use_last_pos", True)
         if use_last_pos:

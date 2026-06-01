@@ -8,14 +8,13 @@ class ColorConditionNode(ConditionNode):
 
     def __init__(self, node_id: str = None, config: NodeConfig = None):
         super().__init__(node_id, config)
-        self.region: Optional[Tuple[int, int, int, int]] = self._parse_region(self.config.get("region", None))
         self.target_color = self._parse_color(self.config.get("target_color", None))
         self.tolerance = self.config.get_int("tolerance", 30)
         self.match_mode = self.config.get("match_mode", "any")
 
     def _check_condition(self, context) -> bool:
         try:
-            region = self._parse_region(self.config.get("region", None))
+            region = self._get_effective_region(context)
             if region is None:
                 self._log_condition_result(False, "请先设置检测区域")
                 return False
