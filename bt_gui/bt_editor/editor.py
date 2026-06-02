@@ -1274,6 +1274,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             tree_data = self.canvas.get_tree_data()
             
             from bt_utils.resource_service import ResourceService
+            
             external_resources = ResourceService.collect_external_resources(tree_data, self.project_root)
             
             if external_resources:

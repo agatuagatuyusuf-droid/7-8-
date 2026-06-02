@@ -2,7 +2,7 @@
     "version": "1.5.0",
     "expire_date": "2029-06-15",
     "force_update": false,
-    "build_type": "release",
+    "build_type": "debug",
     
     "github": {
         "owner": "wdhq4261761",

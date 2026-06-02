@@ -12,6 +12,7 @@ class ResourceService:
         'code_path',
         'sound_path',
         'file_path',
+        'subtree_path',
     ]
     
     RESOURCE_TYPE_MAP = {
@@ -20,6 +21,7 @@ class ResourceService:
         'code_path': 'code',
         'sound_path': 'audio',
         'file_path': 'data',
+        'subtree_path': 'subtree',
     }
     
     TYPE_DIR_MAP = {
@@ -28,6 +30,7 @@ class ResourceService:
         'code': 'scripts/code',
         'audio': 'audio/alarms',
         'data': 'data/config',
+        'subtree': 'subtrees',
         'other': 'data/other',
     }
     
@@ -74,6 +77,9 @@ class ResourceService:
                         path_value = config[key]
                         
                         if not path_value or not isinstance(path_value, str):
+                            continue
+                        
+                        if key == 'subtree_path':
                             continue
                         
                         if path_value.startswith("./"):
@@ -208,6 +214,18 @@ class ResourceService:
                         if not path_value or not isinstance(path_value, str):
                             continue
                         
+                        if key == 'subtree_path':
+                            if path_value.startswith("./"):
+                                abs_path = os.path.normpath(os.path.join(project_root, path_value[2:]))
+                            else:
+                                abs_path = os.path.abspath(path_value)
+                            
+                            if os.path.isdir(abs_path):
+                                for root, dirs, files in os.walk(abs_path):
+                                    for f in files:
+                                        referenced_files.add(os.path.normpath(os.path.join(root, f)))
+                            continue
+                        
                         if path_value.startswith("./"):
                             abs_path = os.path.normpath(os.path.join(project_root, path_value[2:]))
                         else:
@@ -222,7 +240,6 @@ class ResourceService:
     def get_project_resource_dirs(cls) -> List[str]:
         return [
             'images/templates',
-            'images/screenshots', 
             'scripts/script',
             'scripts/code',
             'audio/alarms',
@@ -239,26 +256,31 @@ class ResourceService:
             return removed_files
         
         abs_project_root = os.path.abspath(project_root)
-        abs_referenced = set(os.path.abspath(f) for f in referenced_files)
+        abs_referenced = set(os.path.normpath(os.path.abspath(f)) for f in referenced_files)
         
         resource_dirs = cls.get_project_resource_dirs()
         
         for rel_dir in resource_dirs:
-            abs_dir = os.path.join(abs_project_root, rel_dir)
+            abs_dir = os.path.normpath(os.path.join(abs_project_root, rel_dir))
             
             if not os.path.exists(abs_dir):
                 continue
             
             for root, dirs, files in os.walk(abs_dir):
                 for filename in files:
-                    abs_file_path = os.path.join(root, filename)
+                    abs_file_path = os.path.normpath(os.path.join(root, filename))
                     
                     if abs_file_path not in abs_referenced:
                         try:
-                            os.remove(abs_file_path)
-                            removed_files.append(abs_file_path)
+                            rel_path = os.path.relpath(abs_file_path, abs_project_root)
+                            relative_path = f"./{rel_path.replace(os.sep, '/')}"
+                            cache_result = cls.move_to_cache(relative_path, project_root)
+                            if cache_result:
+                                removed_files.append(abs_file_path)
+                            else:
+                                LogManager.debug_print(f"[WARN] 无法移动文件到缓存: {abs_file_path}")
                         except Exception as e:
-                            LogManager.debug_print(f"[WARN] 无法删除文件 {abs_file_path}: {e}")
+                            LogManager.debug_print(f"[WARN] 清理未引用文件失败 {abs_file_path}: {e}")
         
         return removed_files
     
@@ -336,9 +358,23 @@ class ResourceService:
         abs_project_root = os.path.abspath(project_root)
         abs_source_path = os.path.abspath(source_path)
         
-        # 先处理旧文件：无论新文件是否在项目内，都应将旧文件移到缓存
-        # 但如果旧文件和新文件是同一个，则跳过移动
-        if old_path:
+        relative_path = None
+        
+        if cls.is_path_in_project(abs_source_path, abs_project_root):
+            if source_path.startswith("./"):
+                relative_path = source_path
+            else:
+                try:
+                    rel_path = os.path.relpath(abs_source_path, abs_project_root)
+                    relative_path = f"./{rel_path.replace(os.sep, '/')}"
+                except Exception:
+                    relative_path = source_path
+        else:
+            if resource_type is None:
+                resource_type = cls.detect_resource_type(source_path)
+            relative_path = cls._import_single_resource(abs_source_path, project_root, resource_type)
+        
+        if relative_path and old_path:
             abs_old_path = old_path
             if old_path.startswith("./"):
                 abs_old_path = os.path.normpath(os.path.join(project_root, old_path[2:]))
@@ -347,20 +383,7 @@ class ResourceService:
             if os.path.normcase(abs_old_path) != os.path.normcase(abs_source_path):
                 cls.move_to_cache(old_path, project_root)
         
-        if cls.is_path_in_project(abs_source_path, abs_project_root):
-            if source_path.startswith("./"):
-                return source_path
-            
-            try:
-                rel_path = os.path.relpath(abs_source_path, abs_project_root)
-                return f"./{rel_path.replace(os.sep, '/')}"
-            except Exception:
-                return source_path
-        
-        if resource_type is None:
-            resource_type = cls.detect_resource_type(source_path)
-        
-        return cls._import_single_resource(abs_source_path, project_root, resource_type)
+        return relative_path
     
     @classmethod
     def ensure_project_structure(cls, project_root: str) -> bool:

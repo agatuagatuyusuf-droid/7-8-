@@ -1282,11 +1282,7 @@ class ScreenshotField(FieldWidget):
                 messagebox.showerror("错误", "请先保存项目，再进行截图操作")
                 return
             
-            # 将旧模板文件移到缓存目录
             old_path = self.full_path if self.full_path else None
-            if old_path:
-                from bt_utils.resource_service import ResourceService
-                ResourceService.move_to_cache(old_path, project_root)
             
             image_dir = os.path.join(project_root, "images", "templates")
             
@@ -1317,6 +1313,10 @@ class ScreenshotField(FieldWidget):
             self.full_path = relative_path
             self.var.set(filename)
             self.on_change(self.key, relative_path)
+            
+            if old_path:
+                from bt_utils.resource_service import ResourceService
+                ResourceService.move_to_cache(old_path, project_root)
             
             messagebox.showinfo("成功", f"截图已保存到:\n{relative_path}")
             
