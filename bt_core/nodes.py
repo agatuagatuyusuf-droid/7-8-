@@ -1486,16 +1486,23 @@ class SubtreeNode(CompositeNode):
             )
             return False
 
-        tree_file = self._find_tree_file(subtree_project_dir)
-        if not tree_file:
-            LogManager.instance().log_failure(
-                node_type="子树节点",
-                node_name=self.name,
-                reason=f"子树项目文件夹中未找到行为树文件: {subtree_project_dir}"
-            )
-            return False
+        is_encrypted, aut_file = self._check_encrypted_subtree(subtree_project_dir)
 
-        if self._subtree_root and not self.config.get_bool("auto_reload", False):
+        if is_encrypted:
+            tree_data = self._load_encrypted_subtree(subtree_project_dir, aut_file, context)
+            if not tree_data:
+                return False
+        else:
+            tree_file = self._find_tree_file(subtree_project_dir)
+            if not tree_file:
+                LogManager.instance().log_failure(
+                    node_type="子树节点",
+                    node_name=self.name,
+                    reason=f"子树项目文件夹中未找到行为树文件: {subtree_project_dir}"
+                )
+                return False
+
+        if not is_encrypted and self._subtree_root and not self.config.get_bool("auto_reload", False):
             if self._loaded_path == tree_file:
                 if not self._has_file_changed(tree_file):
                     if self._subtree_context is None:
@@ -1521,14 +1528,22 @@ class SubtreeNode(CompositeNode):
 
         try:
             from .serializer import Serializer
-            self._subtree_root, _, _ = Serializer.load_from_file(tree_file)
-            self._loaded_path = tree_file
-            self._subtree_project_dir = subtree_project_dir
-            self._file_modified_time = os.path.getmtime(tree_file)
 
+            if is_encrypted and tree_data:
+                self._subtree_root, _, _ = Serializer.deserialize(tree_data)
+                self._loaded_path = f"encrypted:{subtree_project_dir}"
+            else:
+                self._subtree_root, _, _ = Serializer.load_from_file(tree_file)
+                self._loaded_path = tree_file
+                self._file_modified_time = os.path.getmtime(tree_file)
+
+            self._subtree_project_dir = subtree_project_dir
             self._subtree_context = self._create_subtree_context(context)
 
-            LogManager.debug_print(f"[SubtreeNode] 加载子树成功: {tree_file} (项目: {subtree_project_dir})")
+            if is_encrypted:
+                self._inject_aut_parameters(self._subtree_context)
+
+            LogManager.debug_print(f"[SubtreeNode] 加载子树成功: {self._loaded_path} (项目: {subtree_project_dir})")
             return True
 
         except Exception as e:
@@ -1637,6 +1652,169 @@ class SubtreeNode(CompositeNode):
     def _on_subtree_complete(self, status: NodeStatus):
         """子树完成时的处理"""
         pass
+
+    def _check_encrypted_subtree(self, project_dir: str) -> tuple:
+        try:
+            project_json = os.path.join(project_dir, "project.json")
+            if not os.path.exists(project_json):
+                return False, None
+
+            with open(project_json, 'r', encoding='utf-8') as f:
+                import json as _json
+                proj_data = _json.load(f)
+
+            if proj_data.get("encrypted") and proj_data.get("aut_file"):
+                aut_path = os.path.join(project_dir, proj_data["aut_file"])
+                if os.path.exists(aut_path):
+                    return True, aut_path
+        except Exception:
+            pass
+
+        return False, None
+
+    def _load_encrypted_subtree(self, project_dir: str, aut_file: str,
+                                 context: "ExecutionContext") -> Optional[dict]:
+        try:
+            from bt_core.file_decoder import BtexeFileDecoder
+            decryption_key = self._get_decryption_key(aut_file, context)
+            if not decryption_key:
+                LogManager.instance().log_failure(
+                    node_type="子树节点",
+                    node_name=self.name,
+                    reason="无法获取解密密钥"
+                )
+                return None
+
+            decoder = BtexeFileDecoder()
+            parsed_data = decoder.decode(aut_file, decryption_key)
+
+            if not parsed_data:
+                return None
+
+            tree_data = parsed_data.get("tree_data", {})
+
+            resources = parsed_data.get("resources", {})
+            if resources:
+                import json as _json
+                subtree_name = os.path.basename(project_dir)
+                resource_dir = os.path.join(
+                    os.path.dirname(project_dir), "subtrees", subtree_name
+                )
+                os.makedirs(resource_dir, exist_ok=True)
+                for res_name, res_data in resources.items():
+                    try:
+                        import base64
+                        res_path = os.path.join(resource_dir, res_name)
+                        os.makedirs(os.path.dirname(res_path), exist_ok=True)
+                        with open(res_path, 'wb') as rf:
+                            rf.write(base64.b64decode(res_data))
+                    except Exception:
+                        pass
+
+            return tree_data
+
+        except ImportError:
+            LogManager.debug_print(f"[SubtreeNode] file_decoder 模块不可用，跳过加密子树加载")
+            return None
+        except Exception as e:
+            LogManager.instance().log_failure(
+                node_type="子树节点",
+                node_name=self.name,
+                reason=f"加载加密子树失败: {e}"
+            )
+            return None
+
+    def _get_decryption_key(self, aut_file: str, context: "ExecutionContext") -> Optional[bytes]:
+        try:
+            from bt_core.file_decoder import BtexeFileDecoder
+            decoder = BtexeFileDecoder()
+            metadata = decoder.read_metadata(aut_file)
+            file_hash = metadata.get("file_hash", "")
+            if not file_hash:
+                return None
+
+            api_client = getattr(context, '_api_client', None)
+            if not api_client:
+                return None
+
+            token = api_client.get_session_token()
+            response = api_client.get_decryption_key(file_hash, token)
+            if not response.get("success"):
+                return None
+
+            import base64
+            key_base64 = response.get("data", {}).get("key", "")
+            if not key_base64:
+                return None
+
+            return base64.b64decode(key_base64)
+        except ImportError:
+            return None
+        except Exception:
+            LogManager.debug_print(f"[SubtreeNode] 获取解密密钥失败")
+            return None
+
+    def _inject_aut_parameters(self, sub_context: "ExecutionContext"):
+        prefix = "_aut_param_"
+        if hasattr(self.config, 'extra'):
+            items = self.config.extra.items()
+        elif isinstance(self.config, dict):
+            items = self.config.items()
+        else:
+            return
+
+        node_params = {}
+        for key, value in items:
+            if key.startswith(prefix):
+                param_path = key[len(prefix):]
+                if "__" in param_path:
+                    node_id, param_name = param_path.split("__", 1)
+                    if node_id not in node_params:
+                        node_params[node_id] = {}
+                    node_params[node_id][param_name] = value
+
+        for node_id, params in node_params.items():
+            target_node = self._find_node_by_id(self._subtree_root, node_id)
+            if target_node:
+                for param_name, value in params.items():
+                    sub_context.blackboard.set(param_name, value)
+                    self._apply_param_to_node(target_node, param_name, value)
+
+    def _find_node_by_id(self, root: "Node", node_id: str):
+        if root is None:
+            return None
+        if root.node_id == node_id:
+            return root
+        for child in root.children:
+            result = self._find_node_by_id(child, node_id)
+            if result:
+                return result
+        return None
+
+    def _apply_param_to_node(self, node: "Node", param_name: str, value: Any):
+        if isinstance(value, str) and value.startswith('['):
+            try:
+                import json as _json
+                value = _json.loads(value)
+            except (_json.JSONDecodeError, ValueError):
+                pass
+
+        if isinstance(value, str):
+            try:
+                if value.lstrip('-').isdigit():
+                    value = int(value)
+                elif value.replace('.', '', 1).lstrip('-').isdigit():
+                    value = float(value)
+            except (ValueError, AttributeError):
+                pass
+
+        if hasattr(node.config, 'set'):
+            node.config.set(param_name, value)
+        elif hasattr(node.config, param_name):
+            setattr(node.config, param_name, value)
+
+        if hasattr(node, param_name):
+            setattr(node, param_name, value)
 
     def reset(self, reset_counters: bool = True) -> None:
         """重置节点状态"""
