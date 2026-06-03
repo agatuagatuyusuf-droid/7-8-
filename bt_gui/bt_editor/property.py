@@ -1,5 +1,6 @@
 from typing import Any, Callable, Dict, Optional, List
 import os
+import json
 
 import customtkinter as ctk
 import tkinter as tk
@@ -278,6 +279,7 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "blackboard_mode", "label": "黑板模式", "type": "select", "options": ["inherit", "isolated", "namespaced"], "default": "inherit"},
         {"key": "namespace", "label": "命名空间", "type": "text", "hide_if": {"field": "blackboard_mode", "value": ["inherit", "isolated"]}},
         {"key": "auto_reload", "label": "自动重载", "type": "bool", "default": False},
+        {"key": "_aut_parameter_file", "label": "加密参数文件", "type": "file", "width": 150, "filetypes": [("参数文件", "*.json"), ("所有文件", "*.*")], "hidden": True},
     ],
 }
 
@@ -2714,7 +2716,11 @@ class PropertyPanel(ctk.CTkFrame):
                     for field in schema:
                         value = config_data.get(field["key"])
                         self._create_field(field, value, self.config_fields_frame)
-            
+
+            config = node_data.get("config", {})
+            if node_type == "SubtreeNode" and isinstance(config, dict) and "_aut_parameter_file" in config:
+                self._create_aut_param_section(config)
+
             if node_type in CONDITION_NODES:
                 self._create_preview_section(node_type, node_data.get("config", {}))
             
@@ -3102,7 +3108,97 @@ class PropertyPanel(ctk.CTkFrame):
             self.field_containers[key] = container
             
             self._update_single_field_visibility(key, field)
-    
+
+    def _create_aut_param_section(self, config):
+        param_file = config.get("_aut_parameter_file", "")
+        if not param_file:
+            return
+
+        project_root = self._get_project_root()
+        if project_root and not os.path.isabs(param_file):
+            param_file = os.path.join(project_root, param_file)
+
+        if not os.path.exists(param_file):
+            return
+
+        try:
+            with open(param_file, "r", encoding="utf-8") as f:
+                aut_params = json.load(f)
+        except Exception:
+            return
+
+        if not isinstance(aut_params, dict) or not aut_params:
+            return
+
+        self._create_section_title("加密参数")
+        aut_fields_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        aut_fields_frame.pack(fill="x")
+
+        for node_id, node_data in aut_params.items():
+            if not isinstance(node_data, dict):
+                continue
+
+            node_name = node_data.get("nodeName", node_id)
+            params = node_data.get("params", {})
+
+            if not params:
+                continue
+
+            group_label = node_name
+
+            group_frame = ctk.CTkFrame(aut_fields_frame, fg_color="transparent")
+            group_frame.pack(fill="x", pady=(Theme.DIMENSIONS['spacing_xs'], 0))
+
+            group_title = ctk.CTkLabel(
+                group_frame,
+                text=group_label,
+                font=Theme.get_font('sm'),
+                text_color=Theme.COLORS['text_secondary'],
+                anchor="w"
+            )
+            group_title.pack(fill="x", padx=Theme.DIMENSIONS['spacing_sm'])
+
+            for param_key, param_def in params.items():
+                if not isinstance(param_def, dict):
+                    continue
+
+                field_key = f"_aut_param_{node_id}__{param_key}"
+                field_def = {
+                    "key": field_key,
+                    "label": param_def.get("label", param_key),
+                    "type": param_def.get("type", "text"),
+                    "default": param_def.get("default"),
+                }
+                if param_def.get("options"):
+                    field_def["options"] = param_def["options"]
+                if param_def.get("min") is not None:
+                    field_def["min"] = param_def["min"]
+                if param_def.get("max") is not None:
+                    field_def["max"] = param_def["max"]
+                if param_def.get("required"):
+                    field_def["label"] = field_def["label"] + " *"
+
+                param_default = param_def.get("default")
+                if isinstance(param_default, str) and param_default.startswith('['):
+                    try:
+                        param_default = json.loads(param_default)
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+
+                set_marker = f"_aut_param_set_{node_id}__{param_key}"
+                if set_marker in config:
+                    value = config.get(field_key, param_default)
+                else:
+                    value = param_default
+
+                if isinstance(value, str) and value.startswith('['):
+                    try:
+                        value = json.loads(value)
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+
+                self._create_field(field_def, value, group_frame)
+
     def _on_field_change(self, key: str, value: Any):
         if self._is_loading:
             return
@@ -3112,6 +3208,12 @@ class PropertyPanel(ctk.CTkFrame):
 
         if self.on_change and self.current_node_id:
             self.on_change(self.current_node_id, key, value)
+
+            if key.startswith("_aut_param_"):
+                param_name = key[len("_aut_param_"):]
+                set_marker = f"_aut_param_set_{param_name}"
+                self.on_change(self.current_node_id, set_marker, True)
+
         self._update_dependent_fields_visibility(key)
     
     def _update_widget_value(self, key: str, value: Any):
