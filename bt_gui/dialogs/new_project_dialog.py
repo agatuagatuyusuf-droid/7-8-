@@ -151,7 +151,7 @@ class NewProjectDialog(ctk.CTkToplevel):
             script_frame,
             width=270,
             height=35,
-            placeholder_text="可选，选择要导入的旧脚本"
+            placeholder_text="可选，选择要导入的json文件"
         )
         self.script_entry.pack(side="left", fill="x", expand=True)
         
