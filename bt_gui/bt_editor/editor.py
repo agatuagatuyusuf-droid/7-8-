@@ -258,6 +258,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         tree_data = instance.canvas.get_tree_data()
         
         if instance.project_root:
+            from bt_utils.resource_service import ResourceService
+            tree_data = ResourceService.save_with_cleanup(tree_data, instance.project_root)
+            instance.canvas.load_tree(tree_data)
+            
             if instance.project_manager:
                 instance.project_manager.save_project(tree_data)
             else:
@@ -1274,24 +1278,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             tree_data = self.canvas.get_tree_data()
             
             from bt_utils.resource_service import ResourceService
-            
-            external_resources = ResourceService.collect_external_resources(tree_data, self.project_root)
-            
-            if external_resources:
-                path_mapping = ResourceService.import_resources_to_project(
-                    external_resources, 
-                    self.project_root
-                )
-                
-                if path_mapping:
-                    tree_data = ResourceService.update_tree_paths(tree_data, path_mapping)
-                    self.canvas.load_tree(tree_data)
+            tree_data = ResourceService.save_with_cleanup(tree_data, self.project_root)
+            self.canvas.load_tree(tree_data)
             
             self.project_manager.save_project(tree_data)
-            
-            # 清理未被引用的资源文件
-            referenced_files = ResourceService.get_all_referenced_files(tree_data, self.project_root)
-            ResourceService.cleanup_unreferenced_files(self.project_root, referenced_files)
             
             active_tab = self.tab_manager.get_active_tab()
             if active_tab and hasattr(active_tab, '_autosave_manager') and active_tab._autosave_manager:
@@ -1396,18 +1386,8 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         tree_data = self.canvas.get_tree_data()
         
         from bt_utils.resource_service import ResourceService
-        
-        external_resources = ResourceService.collect_external_resources(tree_data, project_root)
-        
-        if external_resources:
-            path_mapping = ResourceService.import_resources_to_project(
-                external_resources, 
-                project_root
-            )
-            
-            if path_mapping:
-                tree_data = ResourceService.update_tree_paths(tree_data, path_mapping)
-                self.canvas.load_tree(tree_data)
+        tree_data = ResourceService.save_with_cleanup(tree_data, project_root)
+        self.canvas.load_tree(tree_data)
         
         if self.project_manager:
             self.project_manager.save_project(tree_data)
@@ -2037,6 +2017,12 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             raise RuntimeError("未打开项目")
         
         tree_data = self.canvas.get_tree_data()
+        
+        if self.project_root:
+            from bt_utils.resource_service import ResourceService
+            tree_data = ResourceService.save_with_cleanup(tree_data, self.project_root)
+            self.canvas.load_tree(tree_data)
+        
         self.project_manager.save_project(tree_data)
         
         self._set_modified(False)

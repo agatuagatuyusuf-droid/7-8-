@@ -828,15 +828,14 @@ class FileField(FieldWidget):
         
         from bt_utils.resource_service import ResourceService
         
-        old_path = self.full_path if self.full_path else None
-        
         resource_type = ResourceService.RESOURCE_TYPE_MAP.get(self.key)
         
+        # 不再传递 old_path：旧文件可能仍被其他复制节点引用
+        # 资源清理统一在保存时由 cleanup_unreferenced_files 处理
         relative_path = ResourceService.import_single_file_to_project(
             file_path,
             project_root,
-            resource_type=resource_type,
-            old_path=old_path
+            resource_type=resource_type
         )
         
         if relative_path:
@@ -972,7 +971,9 @@ class FolderField(FieldWidget):
                     self.var.set(folder_name)
                     self.on_change(self.key, rel_path)
                     return
-                shutil.rmtree(dest_dir)
+                # 将旧目录移到缓存而非直接删除，以便误操作时恢复
+                from bt_utils.resource_service import ResourceService
+                ResourceService.move_dir_to_cache(dest_dir, project_root)
 
             try:
                 shutil.copytree(folder_path, dest_dir)
@@ -1105,15 +1106,14 @@ class ScreenshotField(FieldWidget):
         
         from bt_utils.resource_service import ResourceService
         
-        old_path = self.full_path if self.full_path else None
-        
         resource_type = ResourceService.RESOURCE_TYPE_MAP.get(self.key)
         
+        # 不再传递 old_path：旧文件可能仍被其他复制节点引用
+        # 资源清理统一在保存时由 cleanup_unreferenced_files 处理
         relative_path = ResourceService.import_single_file_to_project(
             file_path,
             project_root,
-            resource_type=resource_type,
-            old_path=old_path
+            resource_type=resource_type
         )
         
         if relative_path:
@@ -1316,9 +1316,8 @@ class ScreenshotField(FieldWidget):
             self.var.set(filename)
             self.on_change(self.key, relative_path)
             
-            if old_path:
-                from bt_utils.resource_service import ResourceService
-                ResourceService.move_to_cache(old_path, project_root)
+            # 不再移动旧截图到缓存：旧截图可能仍被其他复制节点引用
+            # 资源清理统一在保存时由 cleanup_unreferenced_files 处理
             
             messagebox.showinfo("成功", f"截图已保存到:\n{relative_path}")
             

@@ -238,13 +238,8 @@ class ResourceService:
     
     @classmethod
     def get_project_resource_dirs(cls) -> List[str]:
-        return [
-            'images/templates',
-            'scripts/script',
-            'scripts/code',
-            'audio/alarms',
-            'data/config',
-        ]
+        """从 TYPE_DIR_MAP 自动生成资源目录列表，避免手动维护导致遗漏"""
+        return list(set(cls.TYPE_DIR_MAP.values()))
     
     @classmethod
     def cleanup_unreferenced_files(cls, 
@@ -344,11 +339,97 @@ class ResourceService:
             return None
     
     @classmethod
+    def cleanup_cache(cls, project_root: str, max_age_days: int = 7) -> List[str]:
+        """清理缓存目录中超过指定天数的文件
+        
+        Args:
+            project_root: 项目根目录
+            max_age_days: 最大保留天数，默认7天
+            
+        Returns:
+            被清理的文件路径列表
+        """
+        cleaned_files = []
+        
+        if not project_root or not os.path.exists(project_root):
+            return cleaned_files
+        
+        cache_dir = os.path.join(project_root, cls.CACHE_DIR)
+        if not os.path.exists(cache_dir):
+            return cleaned_files
+        
+        now = datetime.now().timestamp()
+        max_age_seconds = max_age_days * 24 * 60 * 60
+        
+        for filename in os.listdir(cache_dir):
+            file_path = os.path.join(cache_dir, filename)
+            
+            if not os.path.isfile(file_path):
+                continue
+            
+            try:
+                file_mtime = os.path.getmtime(file_path)
+                if now - file_mtime > max_age_seconds:
+                    os.remove(file_path)
+                    cleaned_files.append(file_path)
+            except Exception as e:
+                LogManager.debug_print(f"[WARN] 清理缓存文件失败 {file_path}: {e}")
+        
+        return cleaned_files
+    
+    @classmethod
+    def move_dir_to_cache(cls, dir_path: str, project_root: str) -> Optional[str]:
+        """将目录移动到缓存目录，而非直接删除
+        
+        Args:
+            dir_path: 要移动的目录路径（绝对路径或相对路径）
+            project_root: 项目根目录
+            
+        Returns:
+            缓存路径，失败返回 None
+        """
+        if not dir_path or not project_root:
+            return None
+        
+        abs_project_root = os.path.abspath(project_root)
+        
+        if dir_path.startswith("./"):
+            abs_dir_path = os.path.normpath(os.path.join(project_root, dir_path[2:]))
+        else:
+            abs_dir_path = os.path.abspath(dir_path)
+        
+        if not os.path.exists(abs_dir_path):
+            return None
+        
+        if not cls.is_path_in_project(abs_dir_path, abs_project_root):
+            return None
+        
+        cache_dir = os.path.join(project_root, cls.CACHE_DIR)
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        dir_name = os.path.basename(abs_dir_path)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        cached_dir_name = f"{dir_name}_{timestamp}"
+        
+        cache_path = os.path.join(cache_dir, cached_dir_name)
+        
+        try:
+            shutil.move(abs_dir_path, cache_path)
+            return cache_path
+        except Exception as e:
+            LogManager.debug_print(f"[WARN] 移动目录到缓存失败: {e}")
+            return None
+    
+    @classmethod
     def import_single_file_to_project(cls,
                                        source_path: str,
                                        project_root: str,
-                                       resource_type: str = None,
-                                       old_path: str = None) -> Optional[str]:
+                                       resource_type: str = None) -> Optional[str]:
+        """将外部文件导入项目目录，若文件已在项目内则直接返回相对路径
+        
+        注意：不再自动移动旧文件到缓存。旧文件可能仍被其他节点引用，
+        资源清理统一由 cleanup_unreferenced_files 在保存时处理。
+        """
         if not os.path.exists(source_path):
             return None
         
@@ -374,15 +455,6 @@ class ResourceService:
                 resource_type = cls.detect_resource_type(source_path)
             relative_path = cls._import_single_resource(abs_source_path, project_root, resource_type)
         
-        if relative_path and old_path:
-            abs_old_path = old_path
-            if old_path.startswith("./"):
-                abs_old_path = os.path.normpath(os.path.join(project_root, old_path[2:]))
-            else:
-                abs_old_path = os.path.abspath(old_path)
-            if os.path.normcase(abs_old_path) != os.path.normcase(abs_source_path):
-                cls.move_to_cache(old_path, project_root)
-        
         return relative_path
     
     @classmethod
@@ -401,3 +473,33 @@ class ResourceService:
         except Exception as e:
             LogManager.debug_print(f"[ERROR] 创建项目目录结构失败: {e}")
             return False
+    
+    @classmethod
+    def save_with_cleanup(cls, tree_data: Dict[str, Any], project_root: str) -> Dict[str, Any]:
+        """保存前的统一资源处理：导入外部资源 → 清理未引用文件 → 清理过期缓存
+        
+        Args:
+            tree_data: 行为树数据
+            project_root: 项目根目录
+            
+        Returns:
+            可能更新了路径的 tree_data
+        """
+        if not project_root or not os.path.exists(project_root):
+            return tree_data
+        
+        # 1. 导入项目外部的资源文件
+        external_resources = cls.collect_external_resources(tree_data, project_root)
+        if external_resources:
+            path_mapping = cls.import_resources_to_project(external_resources, project_root)
+            if path_mapping:
+                tree_data = cls.update_tree_paths(tree_data, path_mapping)
+        
+        # 2. 清理未被引用的资源文件（移到缓存）
+        referenced_files = cls.get_all_referenced_files(tree_data, project_root)
+        cls.cleanup_unreferenced_files(project_root, referenced_files)
+        
+        # 3. 清理超过7天的缓存文件
+        cls.cleanup_cache(project_root)
+        
+        return tree_data
