@@ -23,12 +23,17 @@ class UpdateTask:
 
 @singleton
 class UIUpdateDispatcher:
+    # 轮询间隔配置：运行时高频，空闲时低频
+    POLLING_INTERVAL_RUNNING = 10    # 引擎运行时：10ms高频轮询
+    POLLING_INTERVAL_IDLE = 100      # 空闲时：100ms低频轮询
+
     def __init__(self):
         self._task_queue: Queue = Queue()
         self._widget = None
         self._polling_active = False
-        self._polling_interval_ms = 30
+        self._polling_interval_ms = self.POLLING_INTERVAL_IDLE
         self._max_batch_size = 50
+        self._engine_running = False
     
     @classmethod
     def reset_instance(cls):
@@ -65,8 +70,28 @@ class UIUpdateDispatcher:
     def dispatch_engine_status(self, status: str, node_status: Any = None, callback: Callable = None):
         task = UpdateTask(UpdateType.ENGINE_STATUS, {"status": status, "node_status": node_status}, callback)
         self._task_queue.put(task)
-        
         self._schedule_process()
+
+        # 自适应轮询间隔：引擎运行时高频，空闲时低频
+        is_running = status in ("running", "paused")
+        if is_running != self._engine_running:
+            self._engine_running = is_running
+            self._polling_interval_ms = (
+                self.POLLING_INTERVAL_RUNNING if is_running
+                else self.POLLING_INTERVAL_IDLE
+            )
+
+    def set_engine_running(self, running: bool):
+        """手动设置引擎运行状态，用于自适应调整轮询间隔
+
+        Args:
+            running: 引擎是否正在运行
+        """
+        self._engine_running = running
+        self._polling_interval_ms = (
+            self.POLLING_INTERVAL_RUNNING if running
+            else self.POLLING_INTERVAL_IDLE
+        )
     
     def _schedule_process(self):
         pass

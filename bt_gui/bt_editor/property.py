@@ -2532,6 +2532,11 @@ class PropertyPanel(ctk.CTkFrame):
         self.field_containers: Dict[str, Any] = {}
         self._hidden_values: Dict[str, Any] = {}
         self._is_loading: bool = False
+        # 异步加载队列
+        self._async_load_queue: list = []
+        self._async_load_config: dict = {}
+        # Widget复用：同类型节点切换时仅更新值
+        self._last_node_type: Optional[str] = None
         
         self._dark_colors = Theme.get_dark_colors()
         self.configure(
@@ -2667,6 +2672,41 @@ class PropertyPanel(ctk.CTkFrame):
         )
         empty_text.pack()
     
+    def _update_values_only(self, node_data: Dict[str, Any]):
+        """同类型节点切换时仅更新字段值，不重建控件
+
+        当连续选择同类型节点时（如两个OCR节点），字段结构完全相同，
+        只需更新各字段的值即可，避免销毁+重建控件的开销。
+
+        Args:
+            node_data: 新节点的数据
+        """
+        config_data = node_data.get("config", {})
+
+        # 更新基本信息字段
+        name_widget = self.widgets.get("name")
+        if name_widget:
+            name_widget.set_value(node_data.get("name", ""))
+        enabled_widget = self.widgets.get("enabled")
+        if enabled_widget:
+            enabled_widget.set_value(node_data.get("enabled", True))
+
+        # 更新配置字段值
+        for key, widget in self.widgets.items():
+            if key in ("name", "enabled"):
+                continue  # 基本信息已单独处理
+
+            value = config_data.get(key)
+            if key in self._hidden_values:
+                self._hidden_values[key] = value
+            elif key in self.field_schemas:
+                field = self.field_schemas[key]
+                display_value = value if value is not None else field.get("default")
+                widget.set_value(display_value)
+                self._update_single_field_visibility(key, field)
+
+        self._is_loading = False
+
     def _clear_content(self):
         for widget in self.content_frame.winfo_children():
             widget.destroy()
@@ -2674,27 +2714,42 @@ class PropertyPanel(ctk.CTkFrame):
         self.field_schemas.clear()
         self.field_containers.clear()
         self._hidden_values.clear()
+        self._async_load_queue.clear()
     
     def save_and_clear(self):
         self.current_node_id = None
         self.current_node_type = None
         self._show_empty()
     
+    # 异步加载每批字段数
+    _ASYNC_FIELDS_PER_BATCH = 3
+
     def load_node(self, node_id: str, node_type: str, node_data: Dict[str, Any]):
         self._is_loading = True
-        
+
         try:
             self.current_node_id = node_id
             self.current_node_type = node_type
-            
+
+            # Widget复用优化：同类型节点切换时仅更新值，不重建控件
+            if self._last_node_type == node_type and self.widgets:
+                self._update_values_only(node_data)
+                return
+
+            self._last_node_type = node_type
+
             self._clear_content()
-            
+
             display_name = node_type.replace("Node", "").replace("Condition", "").replace("Action", "")
             self.title_label.configure(text="节点属性")
             self.node_type_label.configure(text=display_name)
-            
+
+            # 基本信息（少量字段，同步创建）
             self._create_base_fields(node_data)
-            
+
+            # 收集后续需要异步创建的字段列表
+            async_steps = []
+
             schema = NODE_CONFIG_SCHEMAS.get(node_type, [])
             if schema:
                 config_data = node_data.get("config", {})
@@ -2703,26 +2758,27 @@ class PropertyPanel(ctk.CTkFrame):
                     config_data.pop("value", None)
                     config_data.pop("value_type", None)
                     config_data.pop("source_variable", None)
+
                 self._create_section_title("配置参数")
                 self.config_fields_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
                 self.config_fields_frame.pack(fill="x")
+
                 if isinstance(schema, dict):
-                    for field_key, field_def in schema.items():
-                        value = config_data.get(field_key)
-                        field_with_key = {"key": field_key, **field_def}
-                        self._create_field(field_with_key, value, self.config_fields_frame)
+                    field_list = [{"key": k, **v} for k, v in schema.items()]
                 else:
-                    for field in schema:
-                        value = config_data.get(field["key"])
-                        self._create_field(field, value, self.config_fields_frame)
+                    field_list = schema
+
+                for field in field_list:
+                    value = config_data.get(field["key"]) if isinstance(field, dict) and "key" in field else config_data.get(field.get("key"))
+                    async_steps.append(("config_field", field, value))
 
             config = node_data.get("config", {})
             if node_type == "SubtreeNode" and isinstance(config, dict) and "_aut_parameter_file" in config:
-                self._create_aut_param_section(config)
+                async_steps.append(("aut_param", config, None))
 
             if node_type in CONDITION_NODES:
-                self._create_preview_section(node_type, node_data.get("config", {}))
-            
+                async_steps.append(("preview_section", node_type, node_data.get("config", {})))
+
             decorator_fields = []
             if node_type in CONDITION_NODES:
                 decorator_fields = CONDITION_DECORATOR_FIELDS
@@ -2730,15 +2786,52 @@ class PropertyPanel(ctk.CTkFrame):
                 decorator_fields = ACTION_DECORATOR_FIELDS
             elif node_type in COMPOSITE_NODES or node_type == "StartNode":
                 decorator_fields = COMPOSITE_DECORATOR_FIELDS
-            
+
             if decorator_fields:
-                self._create_section_title("装饰参数")
-                self.decorator_fields_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
-                self.decorator_fields_frame.pack(fill="x")
-                for field in decorator_fields:
-                    self._create_field(field, node_data.get("config", {}).get(field["key"]), self.decorator_fields_frame)
-        finally:
+                async_steps.append(("decorator_section", decorator_fields, node_data.get("config", {})))
+
+            # 分帧异步加载
+            if async_steps:
+                self._async_load_queue = list(async_steps)
+                self._async_load_config = node_data.get("config", {})
+                self._schedule_async_load()
+            else:
+                self._is_loading = False
+        except Exception:
             self._is_loading = False
+
+    def _schedule_async_load(self):
+        """调度下一批异步字段加载"""
+        if not self._async_load_queue:
+            self._is_loading = False
+            return
+        self.after(1, self._do_async_load_batch)
+
+    def _do_async_load_batch(self):
+        """执行一批异步字段创建"""
+        batch_count = 0
+        while self._async_load_queue and batch_count < self._ASYNC_FIELDS_PER_BATCH:
+            step_type, data, extra = self._async_load_queue.pop(0)
+
+            try:
+                if step_type == "config_field":
+                    self._create_field(data, extra, self.config_fields_frame)
+                elif step_type == "aut_param":
+                    self._create_aut_param_section(data)
+                elif step_type == "preview_section":
+                    self._create_preview_section(data, extra)
+                elif step_type == "decorator_section":
+                    self._create_section_title("装饰参数")
+                    self.decorator_fields_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+                    self.decorator_fields_frame.pack(fill="x")
+                    for field in data:
+                        self._create_field(field, extra.get(field["key"]), self.decorator_fields_frame)
+            except Exception as e:
+                LogManager.debug_print(f"[WARN] 异步加载字段失败: {e}")
+
+            batch_count += 1
+
+        self._schedule_async_load()
     
     def _create_preview_section(self, node_type: str, config: Dict[str, Any]):
         self._create_section_title("预览检测")
@@ -2771,24 +2864,38 @@ class PropertyPanel(ctk.CTkFrame):
     
     def _on_preview_click(self, node_type: str):
         from bt_utils.log_manager import LogManager
-        
+
+        # 预览检测前，确保运行日志面板已展开
+        self._ensure_log_panel_expanded()
+
         self.view_image_btn.pack_forget()
         self.update_idletasks()
-        
+
         try:
             config = self._get_current_config()
             result = self._run_condition_node_preview(node_type, config)
-            
+
             if result.get("image_path"):
                 self._preview_image_path = result["image_path"]
                 self.view_image_btn.pack(side="left", padx=(0, Theme.DIMENSIONS['spacing_sm']))
-                
+
         except Exception as e:
             LogManager.instance().log_failure(
                 node_type="预览检测",
                 node_name=node_type.replace("Node", ""),
                 reason=f"检测异常: {str(e)}"
             )
+
+    def _ensure_log_panel_expanded(self):
+        """确保运行日志面板已展开，未展开时自动展开"""
+        try:
+            if self.app and hasattr(self.app, 'behavior_tree'):
+                editor = self.app.behavior_tree
+                if hasattr(editor, 'log_panel') and editor.log_panel:
+                    if not editor.log_panel.is_expanded():
+                        editor.log_panel.expand()
+        except Exception:
+            pass
     
     def _open_preview_image(self):
         if self._preview_image_path and os.path.exists(self._preview_image_path):

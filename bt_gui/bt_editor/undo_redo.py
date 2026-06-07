@@ -269,12 +269,19 @@ class AddConnectionCommand(Command):
     canvas: Any = None
     parent_id: str = ""
     child_id: str = ""
+    connection_index: int = -1
     
     description: str = "添加连线"
     
     def execute(self) -> bool:
         if self.canvas and hasattr(self.canvas, 'add_connection'):
             self.canvas.add_connection(self.parent_id, self.child_id)
+            # 记录连线在列表中的位置（用于undo时按正确位置恢复）
+            if hasattr(self.canvas, 'connections'):
+                for i, c in enumerate(self.canvas.connections):
+                    if c[0] == self.parent_id and c[1] == self.child_id:
+                        self.connection_index = i
+                        break
             return True
         return False
     
@@ -295,11 +302,17 @@ class RemoveConnectionCommand(Command):
     canvas: Any = None
     parent_id: str = ""
     child_id: str = ""
+    connection_index: int = -1
     
     description: str = "删除连线"
     
     def execute(self) -> bool:
         if self.canvas and hasattr(self.canvas, 'connections'):
+            # 记录连线在列表中的原始位置
+            for i, c in enumerate(self.canvas.connections):
+                if c[0] == self.parent_id and c[1] == self.child_id:
+                    self.connection_index = i
+                    break
             self.canvas.connections = [
                 c for c in self.canvas.connections 
                 if not (c[0] == self.parent_id and c[1] == self.child_id)
@@ -310,8 +323,17 @@ class RemoveConnectionCommand(Command):
         return False
     
     def undo(self) -> bool:
-        if self.canvas and hasattr(self.canvas, 'add_connection'):
-            self.canvas.add_connection(self.parent_id, self.child_id)
+        if self.canvas and hasattr(self.canvas, 'connections'):
+            # 在原始位置插入连线，而非追加到末尾
+            conn = (self.parent_id, self.child_id)
+            insert_idx = self.connection_index if 0 <= self.connection_index <= len(self.canvas.connections) else len(self.canvas.connections)
+            self.canvas.connections.insert(insert_idx, conn)
+            # 维护反向索引
+            if hasattr(self.canvas, '_node_connections_map'):
+                self.canvas._node_connections_map.setdefault(self.parent_id, []).append(conn)
+                self.canvas._node_connections_map.setdefault(self.child_id, []).append(conn)
+            if hasattr(self.canvas, '_redraw_connections'):
+                self.canvas._redraw_connections()
             return True
         return False
 

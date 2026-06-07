@@ -216,69 +216,87 @@ def create_bordered_option_menu(parent, values, variable=None, width=70, height=
 
 def create_color_picker(app, callback):
     """
-    创建屏幕颜色选择器
-    
+    创建屏幕颜色选择器（带放大镜）
+
     创建一个全屏透明的选择窗口，用户点击任意位置获取该位置的颜色值。
-    
+    移动鼠标时显示放大镜，方便精确定位目标颜色。
+
     Args:
         app: 应用实例（需要有 root 属性或 winfo_toplevel 方法）
         callback: 回调函数，参数为 (r, g, b) 元组
-    
+
     Returns:
         None
     """
     from tkinter import messagebox
-    
+
+    from bt_utils.magnifier import MagnifierWindow
     from bt_utils.screen_utils import get_virtual_screen_bounds
     min_x, min_y, max_x, max_y = get_virtual_screen_bounds()
-    
+
     root = app.root if hasattr(app, 'root') else app.winfo_toplevel()
-    
+
     root.iconify()
     root.update()
-    
+
     selection_window = tk.Toplevel(root)
     selection_window.overrideredirect(True)
     selection_window.geometry(f"{max_x - min_x}x{max_y - min_y}+{min_x}+{min_y}")
     selection_window.attributes("-alpha", 0.3)
     selection_window.attributes("-topmost", True)
     selection_window.configure(cursor="crosshair")
-    
+
     dark_colors = Theme.get_dark_colors()
     canvas = tk.Canvas(selection_window, bg=dark_colors['primary'], highlightthickness=0)
     canvas.pack(fill=tk.BOTH, expand=True)
-    
+
+    magnifier = MagnifierWindow(zoom_factor=4, size=150)
+    magnifier_shown = [False]
+
+    def on_mouse_move(event):
+        if not magnifier_shown[0]:
+            magnifier.show(event.x_root, event.y_root)
+            magnifier_shown[0] = True
+        else:
+            magnifier.update(event.x_root, event.y_root)
+
     def on_click(event):
         import time
-        
+
+        magnifier.hide()
+        magnifier_shown[0] = False
+
         selection_window.withdraw()
         selection_window.update()
-        
+
         time.sleep(0.2)
-        
+
         abs_x, abs_y = event.x_root, event.y_root
-        
+
         from bt_utils.screen_service import ScreenService
         screen = ScreenService.capture_screen()
-        
+
         from bt_utils.screen_utils import get_virtual_screen_bounds
         min_x, min_y, _, _ = get_virtual_screen_bounds()
-        
+
         rel_x = abs_x - min_x
         rel_y = abs_y - min_y
-        
+
         pixel = screen.getpixel((rel_x, rel_y))
         r, g, b = pixel[:3]
-        
+
         selection_window.destroy()
         root.deiconify()
-        
+
         callback((r, g, b))
-    
+
     def on_escape(e):
+        magnifier.hide()
+        magnifier_shown[0] = False
         selection_window.destroy()
         root.deiconify()
-    
+
+    canvas.bind("<Motion>", on_mouse_move)
     canvas.bind("<Button-1>", on_click)
     selection_window.bind("<Escape>", on_escape)
     selection_window.focus_set()

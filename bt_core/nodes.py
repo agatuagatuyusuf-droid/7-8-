@@ -881,6 +881,12 @@ class ConditionNode(Node):
             self.offset = (offset_x, offset_y)
         
         self._last_check_time = -self.check_interval_ms - 1
+        # 智能跳过：连续相同结果时逐步延长检测间隔
+        self._consecutive_same_count = 0
+        self._last_condition_result = None
+        self._STABLE_THRESHOLD_LOW = 5     # 连续5次相同 → 间隔×2
+        self._STABLE_THRESHOLD_HIGH = 15   # 连续15次相同 → 间隔×4
+        self._MAX_INTERVAL_MULTIPLIER = 4  # 最大间隔倍数
 
     def _parse_region(self, region_config) -> tuple:
         """解析区域配置
@@ -1000,13 +1006,21 @@ class ConditionNode(Node):
             return self._execute_children(context)
 
         check_interval_ms = self.config.get_int("check_interval_ms", 300)
+        # 智能跳过：连续相同结果时逐步延长检测间隔
+        effective_interval_ms = check_interval_ms
+        if self._consecutive_same_count >= self._STABLE_THRESHOLD_HIGH:
+            effective_interval_ms = check_interval_ms * self._MAX_INTERVAL_MULTIPLIER
+        elif self._consecutive_same_count >= self._STABLE_THRESHOLD_LOW:
+            effective_interval_ms = check_interval_ms * 2
+
         current_time = context.elapsed_time * 1000
         time_since_last = current_time - self._last_check_time
-        if time_since_last < check_interval_ms:
+        if time_since_last < effective_interval_ms:
             LogManager.debug_print(
                 f"[DEBUG] ConditionNode._tick_internal: {self.NODE_TYPE} '{self.name}' "
                 f"(id={self.node_id}) CHECK_INTERVAL_CACHE HIT: "
-                f"time_since_last={time_since_last:.1f}ms < check_interval={check_interval_ms}ms, "
+                f"time_since_last={time_since_last:.1f}ms < effective_interval={effective_interval_ms}ms "
+                f"(base={check_interval_ms}ms, consecutive={self._consecutive_same_count}), "
                 f"returning cached status={self.status.name}"
             )
             return self.status
@@ -1014,13 +1028,21 @@ class ConditionNode(Node):
         LogManager.debug_print(
             f"[DEBUG] ConditionNode._tick_internal: {self.NODE_TYPE} '{self.name}' "
             f"(id={self.node_id}) CHECK_INTERVAL_CACHE MISS: "
-            f"time_since_last={time_since_last:.1f}ms >= check_interval={check_interval_ms}ms, "
+            f"time_since_last={time_since_last:.1f}ms >= effective_interval={effective_interval_ms}ms "
+                f"(base={check_interval_ms}ms, consecutive={self._consecutive_same_count}), "
             f"current_status={self.status.name}, _last_check_time={self._last_check_time}, "
             f"current_time={current_time:.1f}"
         )
 
         self._last_check_time = current_time
         result = self._check_condition(context)
+
+        # 更新连续相同结果计数
+        if self._last_condition_result is not None and result == self._last_condition_result:
+            self._consecutive_same_count += 1
+        else:
+            self._consecutive_same_count = 0
+        self._last_condition_result = result
 
         invert = self.config.get_bool("invert", False)
         if invert:
@@ -1031,7 +1053,8 @@ class ConditionNode(Node):
 
         LogManager.debug_print(
             f"[DEBUG] ConditionNode._tick_internal: {self.NODE_TYPE} '{self.name}' "
-            f"(id={self.node_id}) condition_result={result}, final_status={status.name}"
+            f"(id={self.node_id}) condition_result={result}, final_status={status.name}, "
+            f"consecutive_same={self._consecutive_same_count}"
         )
 
         if status == NodeStatus.SUCCESS and self.children:
@@ -1068,6 +1091,9 @@ class ConditionNode(Node):
             return all(isinstance(x, int) for x in region)
         return False
 
+    # 差异截图：无region时的默认检测区域半径
+    _DEFAULT_REGION_RADIUS = 150
+
     def _get_region_image(self, context):
         try:
             region_mode = self.config.get("region_mode", "fixed")
@@ -1075,6 +1101,11 @@ class ConditionNode(Node):
                 region = self._resolve_dynamic_region(context)
             else:
                 region = self._parse_region(self.config.get("region", None))
+
+            # 差异截图优化：无region时尝试使用上次检测位置附近的区域
+            if region is None:
+                region = self._get_fallback_region(context)
+
             return context.get_screenshot(region)
         except Exception as e:
             from bt_utils.exception_handler import log_exception
@@ -1086,7 +1117,30 @@ class ConditionNode(Node):
         if region_mode == "dynamic":
             return self._resolve_dynamic_region(context)
         else:
-            return self._parse_region(self.config.get("region", None))
+            region = self._parse_region(self.config.get("region", None))
+            if region is None:
+                region = self._get_fallback_region(context)
+            return region
+
+    def _get_fallback_region(self, context):
+        """当未配置region时，尝试使用上次检测位置附近的区域作为回退
+
+        避免全屏截图的开销。如果黑板中有上次检测位置，则以其为中心
+        截取 _DEFAULT_REGION_RADIUS 范围内的区域。
+
+        Args:
+            context: 执行上下文
+
+        Returns:
+            region元组 (x1,y1,x2,y2) 或 None（无可用的回退位置时）
+        """
+        pos = context.blackboard.get("last_detection_position")
+        if pos is None or not isinstance(pos, (tuple, list)) or len(pos) < 2:
+            return None
+
+        cx, cy = int(pos[0]), int(pos[1])
+        r = self._DEFAULT_REGION_RADIUS
+        return (max(0, cx - r), max(0, cy - r), cx + r, cy + r)
 
     def _resolve_dynamic_region(self, context):
         use_last_pos = self.config.get_bool("region_use_last_pos", True)
@@ -1148,6 +1202,8 @@ class ConditionNode(Node):
         super().reset(reset_counters)
         check_interval_ms = self.config.get_int("check_interval_ms", 300)
         self._last_check_time = -check_interval_ms - 1
+        self._consecutive_same_count = 0
+        self._last_condition_result = None
 
 
 class ActionNode(Node):
