@@ -155,6 +155,10 @@ class ExecutionContext:
         Returns:
             PIL.Image 截图对象
         """
+        # 确保region为tuple（list不可作为dict键）
+        if isinstance(region, list):
+            region = tuple(region)
+
         # 新tick开始时清空缓存
         if self.tick_count != self._screenshot_cache_tick:
             self._screenshot_cache.clear()
@@ -201,6 +205,8 @@ class ExecutionContext:
             self._input_controller = InputController()
 
         self._input_controller.key_press(key, action, duration)
+        # 动作可能改变屏幕内容，清空截图缓存
+        self._screenshot_cache.clear()
 
     def execute_mouse_click(self, button: str = "left", position: tuple = None,
                            action: str = "press", duration: int = 0) -> None:
@@ -220,6 +226,8 @@ class ExecutionContext:
             position = self.convert_to_screen_coords(position)
 
         self._input_controller.mouse_click(button, position, action, duration)
+        # 动作可能改变屏幕内容，清空截图缓存
+        self._screenshot_cache.clear()
 
     def execute_mouse_move(self, position: tuple, relative: bool = False) -> None:
         """执行鼠标移动（全局自动坐标转换）
@@ -236,6 +244,8 @@ class ExecutionContext:
             position = self.convert_to_screen_coords(position)
 
         self._input_controller.mouse_move(position, relative)
+        # 鼠标移动可能触发悬停效果，清空截图缓存
+        self._screenshot_cache.clear()
 
     def get_mouse_position(self) -> Optional[Tuple[int, int]]:
         """获取当前鼠标位置

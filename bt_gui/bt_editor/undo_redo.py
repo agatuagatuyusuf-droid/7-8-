@@ -287,10 +287,20 @@ class AddConnectionCommand(Command):
     
     def undo(self) -> bool:
         if self.canvas and hasattr(self.canvas, 'connections'):
+            conn = (self.parent_id, self.child_id)
             self.canvas.connections = [
-                c for c in self.canvas.connections 
+                c for c in self.canvas.connections
                 if not (c[0] == self.parent_id and c[1] == self.child_id)
             ]
+            # 更新反向索引
+            if hasattr(self.canvas, '_node_connections_map'):
+                for node_id in (self.parent_id, self.child_id):
+                    if node_id in self.canvas._node_connections_map:
+                        self.canvas._node_connections_map[node_id] = [
+                            x for x in self.canvas._node_connections_map[node_id] if x != conn
+                        ]
+                        if not self.canvas._node_connections_map[node_id]:
+                            del self.canvas._node_connections_map[node_id]
             if hasattr(self.canvas, '_redraw_connections'):
                 self.canvas._redraw_connections()
             return True

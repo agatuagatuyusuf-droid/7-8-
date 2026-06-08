@@ -2715,6 +2715,7 @@ class PropertyPanel(ctk.CTkFrame):
         self.field_containers.clear()
         self._hidden_values.clear()
         self._async_load_queue.clear()
+        self._last_node_type = None
     
     def save_and_clear(self):
         self.current_node_id = None
