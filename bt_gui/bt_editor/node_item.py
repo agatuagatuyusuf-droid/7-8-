@@ -55,6 +55,7 @@ class NodeItem:
         self._flash_state = False
         self._flash_job = None
         self._status_visible = False
+        self._canvas_items_exist = True  # Canvas图元存在标志（虚拟化时可能被删除）
         
         self._dark_colors = Theme.get_dark_colors()
         self._category = NODE_CATEGORY_MAP.get(node_type, "action")
@@ -187,8 +188,23 @@ class NodeItem:
             width=2,
             tags=("node_port_out", self.node_id, "port")
         )
-        
+
         self._update_outline()
+
+        # 恢复状态指示器（虚拟化后redraw时需恢复之前的状态）
+        if self._status_visible:
+            self.canvas.itemconfig(self.status_bg, state='normal')
+            self.canvas.itemconfig(self.status_icon, state='normal')
+        if self._status != NodeExecutionStatus.IDLE:
+            icon = STATUS_ICONS.get(self._status, "")
+            self.canvas.itemconfig(self.status_icon, text=icon)
+            if self._status in (NodeExecutionStatus.SUCCESS, NodeExecutionStatus.FAILURE, NodeExecutionStatus.ABORTED):
+                status_color = STATUS_COLORS[self._status]
+                if status_color:
+                    self.canvas.itemconfig(self.status_bg, fill=status_color)
+                    self.canvas.itemconfig(self.status_icon, fill="#FFFFFF")
+            elif self._status == NodeExecutionStatus.RUNNING:
+                self.canvas.itemconfig(self.status_bg, fill=STATUS_COLORS[NodeExecutionStatus.RUNNING])
     
     def _get_display_name(self) -> str:
         if self.name and self.name.strip():
@@ -233,7 +249,12 @@ class NodeItem:
     
     def redraw(self):
         self.canvas.delete(self.node_id)
+        self._canvas_items_exist = False
         self._create_visuals()
+        self._canvas_items_exist = True
+        # redraw后需重新应用选中/运行状态边框，因为_create_visuals中_update_outline
+        # 受_canvas_items_exist守卫保护，在redraw期间为False会被跳过
+        self._update_outline()
     
     def move_to(self, x: float, y: float):
         self.x = x
@@ -268,34 +289,41 @@ class NodeItem:
     
     def set_selected(self, selected: bool):
         self._selected = selected
-        self._update_outline()
-    
+        if self._canvas_items_exist:
+            self._update_outline()
+
     def highlight_port(self, port_type: str, highlight: bool = True):
+        if not self._canvas_items_exist:
+            return
         if port_type == "input":
             port = self.input_port
             color = self._dark_colors['node_selected'] if highlight else self._dark_colors['bg_tertiary']
         else:
             port = self.output_port
             color = self._dark_colors['node_selected'] if highlight else self._color_config['bg']
-        
+
         self.canvas.itemconfig(port, outline=color, width=3 if highlight else 2)
-    
+
     def set_status(self, status: NodeExecutionStatus):
         self._status = status
-        
+
         if self._flash_job:
             self.canvas.after_cancel(self._flash_job)
             self._flash_job = None
-        
+
         if status == NodeExecutionStatus.RUNNING:
             self._start_flashing()
         else:
             self._flash_state = False
-            self._update_outline()
-        
+            if self._canvas_items_exist:
+                self._update_outline()
+
+        if not self._canvas_items_exist:
+            return
+
         icon = STATUS_ICONS.get(status, "")
         self.canvas.itemconfig(self.status_icon, text=icon)
-        
+
         if status in (NodeExecutionStatus.SUCCESS, NodeExecutionStatus.FAILURE, NodeExecutionStatus.ABORTED):
             status_color = STATUS_COLORS[status]
             if status_color:
@@ -306,25 +334,30 @@ class NodeItem:
         else:
             self.canvas.itemconfig(self.status_bg, fill=self._dark_colors['bg_tertiary'])
             self.canvas.itemconfig(self.status_icon, fill=self._dark_colors['text_secondary'])
-    
+
     def show_status_indicator(self):
         if not self._status_visible:
             self._status_visible = True
-            self.canvas.itemconfig(self.status_bg, state='normal')
-            self.canvas.itemconfig(self.status_icon, state='normal')
-    
+            if self._canvas_items_exist:
+                self.canvas.itemconfig(self.status_bg, state='normal')
+                self.canvas.itemconfig(self.status_icon, state='normal')
+
     def hide_status_indicator(self):
         if self._status_visible:
             self._status_visible = False
-            self.canvas.itemconfig(self.status_bg, state='hidden')
-            self.canvas.itemconfig(self.status_icon, state='hidden')
-    
+            if self._canvas_items_exist:
+                self.canvas.itemconfig(self.status_bg, state='hidden')
+                self.canvas.itemconfig(self.status_icon, state='hidden')
+
     def _start_flashing(self):
         self._flash_state = not self._flash_state
-        self._update_outline()
+        if self._canvas_items_exist:
+            self._update_outline()
         self._flash_job = self.canvas.after(400, self._start_flashing)
-    
+
     def _update_outline(self):
+        if not self._canvas_items_exist:
+            return
         if self._status == NodeExecutionStatus.RUNNING:
             outline = "#F59E0B" if self._flash_state else "#FBBF24"
             width = 2
@@ -334,18 +367,19 @@ class NodeItem:
         else:
             outline = self._dark_colors['node_border']
             width = 1
-        
+
         self.canvas.itemconfig(self.rect, outline=outline, width=width)
-    
+
     def reset_status(self):
         self._status = NodeExecutionStatus.IDLE
         if self._flash_job:
             self.canvas.after_cancel(self._flash_job)
             self._flash_job = None
         self._flash_state = False
-        self._update_outline()
-        self.canvas.itemconfig(self.status_icon, text="")
-        self.canvas.itemconfig(self.status_bg, fill=self._dark_colors['bg_tertiary'])
+        if self._canvas_items_exist:
+            self._update_outline()
+            self.canvas.itemconfig(self.status_icon, text="")
+            self.canvas.itemconfig(self.status_bg, fill=self._dark_colors['bg_tertiary'])
         self.hide_status_indicator()
 
 

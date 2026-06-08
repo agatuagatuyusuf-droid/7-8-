@@ -26,6 +26,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self.nodes: Dict[str, NodeItem] = {}
         self.connections: List[tuple] = []
         self.connection_items: Dict[tuple, int] = {}
+        self.connection_order_items: Dict[tuple, int] = {}  # 连线序号文本项索引
+        # node→connections反向索引，用于按需重绘关联连线
+        self._node_connections_map: Dict[str, List[tuple]] = {}
         self.selected_node: Optional[str] = None
         self.selected_nodes: List[str] = []
         self.selected_connection: Optional[tuple] = None
@@ -83,7 +86,11 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         
         self._dark_colors = Theme.get_dark_colors()
         self.configure(fg_color=self._dark_colors['canvas_bg'], corner_radius=0)
-        
+
+        # Canvas虚拟化：仅渲染视口内可见节点
+        self._visible_node_ids: Set[str] = set()
+        self._virtualization_enabled = True
+
         self._create_canvas()
         self._bind_events()
     
@@ -107,8 +114,12 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
 
         self.canvas.delete("grid")
 
-        width = self.canvas.winfo_width() or 800
-        height = self.canvas.winfo_height() or 600
+        width = self.canvas.winfo_width()
+        height = self.canvas.winfo_height()
+        if width <= 1:
+            width = 800
+        if height <= 1:
+            height = 600
 
         offset_x = int(self.pan_x) % self.grid_size
         offset_y = int(self.pan_y) % self.grid_size
@@ -160,6 +171,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
     
     def _on_resize(self, event):
         self._draw_grid()
+        # Canvas尺寸变化时更新可见节点（虚拟化模式下视口范围改变）
+        if self._virtualization_enabled and self.nodes:
+            self._update_visible_nodes()
     
     def _on_canvas_focus_in(self, event):
         pass
@@ -299,6 +313,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             
             for node_id, node in self.nodes.items():
                 if node_id != self._connect_start_node:
+                    # 跳过不可见节点，避免无意义的Canvas操作
+                    if self._virtualization_enabled and not node._canvas_items_exist:
+                        continue
                     if node.is_on_input_port(x, y):
                         node.highlight_port("input", True)
                     else:
@@ -622,9 +639,12 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             if conn_key in self.connection_items:
                 self.canvas.delete(self.connection_items[conn_key])
                 del self.connection_items[conn_key]
+            if conn_key in self.connection_order_items:
+                self.canvas.delete(self.connection_order_items[conn_key])
+                del self.connection_order_items[conn_key]
             self.selected_connection = None
             self._redraw_connections()
-    
+
     def _delete_selected_connections(self):
         for conn_key in self.selected_connections[:]:
             if conn_key in self.connections:
@@ -632,6 +652,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             if conn_key in self.connection_items:
                 self.canvas.delete(self.connection_items[conn_key])
                 del self.connection_items[conn_key]
+            if conn_key in self.connection_order_items:
+                self.canvas.delete(self.connection_order_items[conn_key])
+                del self.connection_order_items[conn_key]
         self.selected_connections = []
         self.selected_connection = None
         self._redraw_connections()
@@ -648,12 +671,25 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
     def add_node(self, node_id: str, node_type: str, x: float, y: float, name: str = "", config: dict = None, enabled: bool = True) -> NodeItem:
         if not name:
             name = NODE_DISPLAY_NAMES.get(node_type, node_type)
-        
+
         if node_type == "SubtreeNode":
             node = SubtreeNodeItem(self.canvas, node_id, node_type, x, y, name, config, enabled, self.zoom, self.pan_x, self.pan_y)
         else:
             node = NodeItem(self.canvas, node_id, node_type, x, y, name, config, enabled, self.zoom, self.pan_x, self.pan_y)
         self.nodes[node_id] = node
+
+        # 虚拟化：如果节点在视口内，立即渲染；否则删除构造函数创建的图元
+        if self._virtualization_enabled:
+            if self._is_node_visible(node):
+                node.set_zoom(self.zoom)
+                node.set_pan(self.pan_x, self.pan_y)
+                node.redraw()
+                self._visible_node_ids.add(node_id)
+            else:
+                # 构造函数已创建Canvas图元，但节点不在视口内，需清理
+                self.canvas.delete(node_id)
+                node._canvas_items_exist = False
+
         return node
     
     def remove_node(self, node_id: str):
@@ -671,15 +707,35 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             if node_id in self.selected_nodes:
                 self.selected_nodes.remove(node_id)
             
-            self.connections = [
-                c for c in self.connections 
-                if c[0] != node_id and c[1] != node_id
-            ]
+            # 移除关联连线并清理反向索引
+            removed_connections = [c for c in self.connections if c[0] == node_id or c[1] == node_id]
+            self.connections = [c for c in self.connections if c[0] != node_id and c[1] != node_id]
+            for conn in removed_connections:
+                pid, cid = conn
+                if pid in self._node_connections_map:
+                    self._node_connections_map[pid] = [
+                        x for x in self._node_connections_map[pid] if x != conn
+                    ]
+                    if not self._node_connections_map[pid]:
+                        del self._node_connections_map[pid]
+                if cid in self._node_connections_map:
+                    self._node_connections_map[cid] = [
+                        x for x in self._node_connections_map[cid] if x != conn
+                    ]
+                    if not self._node_connections_map[cid]:
+                        del self._node_connections_map[cid]
+            # 清理被删节点自身的索引
+            self._node_connections_map.pop(node_id, None)
+            # 清理可见集合
+            self._visible_node_ids.discard(node_id)
             self._redraw_connections()
     
     def redraw_node(self, node_id: str):
         if node_id in self.nodes:
             node = self.nodes[node_id]
+            # 虚拟化模式下，仅重绘可见节点
+            if self._virtualization_enabled and node_id not in self._visible_node_ids:
+                return
             node.redraw()
     
     def add_connection(self, parent_id: str, child_id: str) -> bool:
@@ -708,7 +764,11 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             )
             return False
         
-        self.connections.append((parent_id, child_id))
+        conn = (parent_id, child_id)
+        self.connections.append(conn)
+        # 维护反向索引
+        self._node_connections_map.setdefault(parent_id, []).append(conn)
+        self._node_connections_map.setdefault(child_id, []).append(conn)
         self._redraw_connections()
         return True
     
@@ -734,16 +794,29 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self.canvas.delete("connection")
         self.canvas.delete("connection_order")
         self.connection_items.clear()
-        
-        parent_child_order: Dict[str, int] = {}
-        
+        self.connection_order_items.clear()
+        # 重建反向索引
+        self._node_connections_map.clear()
+
+        # 预计算全局编号：基于connections列表中的实际位置
+        conn_order_map: Dict[tuple, int] = {}
+        parent_counter: Dict[str, int] = {}
         for parent_id, child_id in self.connections:
-            if parent_id not in parent_child_order:
-                parent_child_order[parent_id] = 0
-            else:
-                parent_child_order[parent_id] += 1
-            
-            order_num = parent_child_order[parent_id] + 1
+            conn = (parent_id, child_id)
+            self._node_connections_map.setdefault(parent_id, []).append(conn)
+            self._node_connections_map.setdefault(child_id, []).append(conn)
+
+            parent_counter.setdefault(parent_id, 0)
+            parent_counter[parent_id] += 1
+            conn_order_map[conn] = parent_counter[parent_id]
+
+        for parent_id, child_id in self.connections:
+            # 虚拟化模式下，跳过不可见连线
+            if self._virtualization_enabled:
+                if parent_id not in self._visible_node_ids or child_id not in self._visible_node_ids:
+                    continue
+
+            order_num = conn_order_map.get((parent_id, child_id), 1)
             
             if parent_id in self.nodes and child_id in self.nodes:
                 parent = self.nodes[parent_id]
@@ -778,9 +851,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                 )
                 
                 self.connection_items[(parent_id, child_id)] = line_id
-                
+
                 if order_num > 1 or len([c for c in self.connections if c[0] == parent_id]) > 1:
-                    self.canvas.create_text(
+                    text_id = self.canvas.create_text(
                         end_x + 15,
                         end_y - 15,
                         text=str(order_num),
@@ -788,6 +861,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                         font=("Arial", max(8, int(10 * self.zoom)), "bold"),
                         tags="connection_order"
                     )
+                    self.connection_order_items[(parent_id, child_id)] = text_id
         
         self.canvas.tag_lower("connection_order")
         self.canvas.tag_lower("connection")
@@ -827,39 +901,68 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             self._drag_pending_redraw = True
     
     def _do_drag_redraw(self):
-        """执行节流后的拖拽重绘"""
+        """执行节流后的拖拽重绘
+
+        区分两种场景：
+        - 拖拽节点：仅重绘被拖动节点及其关联连线
+        - 平移画布：使用虚拟化更新可见节点
+        """
         self._drag_throttle_timer = None
-        
+
         if self._drag_pending_redraw:
             self._drag_pending_redraw = False
             self._drag_throttle_timer = self.after(
                 self._drag_throttle_ms, self._do_drag_redraw
             )
-        
-        self._redraw_all_flag = True
-        self._do_incremental_redraw()
+
+        is_panning = self._panning or self._right_panning
+
+        if is_panning:
+            if self._virtualization_enabled:
+                # 虚拟化模式：根据新视口动态增删Canvas图元
+                self._update_visible_nodes()
+            else:
+                for node in self.nodes.values():
+                    node.set_zoom(self.zoom)
+                    node.set_pan(self.pan_x, self.pan_y)
+                    node.redraw()
+                self._do_redraw_all_connections()
+        else:
+            # 拖拽节点：仅重绘被选中的节点及其关联连线
+            for node_id in self.selected_nodes:
+                if node_id in self.nodes:
+                    self.nodes[node_id].set_zoom(self.zoom)
+                    self.nodes[node_id].set_pan(self.pan_x, self.pan_y)
+                    self.nodes[node_id].redraw()
+            self._redraw_connections_for_nodes(self.selected_nodes)
     
     def _do_incremental_redraw(self):
         self._redraw_scheduled = False
-        
+
         if self._redraw_all_flag:
             self._redraw_all_flag = False
-            for node in self.nodes.values():
-                node.set_zoom(self.zoom)
-                node.set_pan(self.pan_x, self.pan_y)
-                node.redraw()
-            self._do_redraw_all_connections()
+            if self._virtualization_enabled:
+                # 虚拟化模式：仅更新视口内可见节点
+                self._update_visible_nodes()
+            else:
+                for node in self.nodes.values():
+                    node.set_zoom(self.zoom)
+                    node.set_pan(self.pan_x, self.pan_y)
+                    node.redraw()
+                self._do_redraw_all_connections()
             self._dirty_nodes.clear()
             self._dirty_connections.clear()
             return
-        
+
         for node_id in self._dirty_nodes:
             if node_id in self.nodes:
+                if self._virtualization_enabled and node_id not in self._visible_node_ids:
+                    continue
                 self.nodes[node_id].redraw()
-        
+
         if self._dirty_connections:
             self._redraw_affected_connections()
-        
+
         self._dirty_nodes.clear()
         self._dirty_connections.clear()
     
@@ -867,36 +970,94 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self.canvas.delete("connection")
         self.canvas.delete("connection_order")
         self.connection_items.clear()
-        
-        parent_child_order: Dict[str, int] = {}
-        
+        self.connection_order_items.clear()
+        # 重建反向索引
+        self._node_connections_map.clear()
+
+        # 预计算全局编号：基于connections列表中的实际位置
+        conn_order_map: Dict[tuple, int] = {}
+        parent_counter: Dict[str, int] = {}
         for parent_id, child_id in self.connections:
-            if parent_id not in parent_child_order:
-                parent_child_order[parent_id] = 0
-            else:
-                parent_child_order[parent_id] += 1
-            
-            order_num = parent_child_order[parent_id] + 1
-            
+            conn = (parent_id, child_id)
+            self._node_connections_map.setdefault(parent_id, []).append(conn)
+            self._node_connections_map.setdefault(child_id, []).append(conn)
+
+            parent_counter.setdefault(parent_id, 0)
+            parent_counter[parent_id] += 1
+            conn_order_map[conn] = parent_counter[parent_id]
+
+        for parent_id, child_id in self.connections:
+            # 虚拟化模式下，跳过不可见连线
+            if self._virtualization_enabled:
+                if parent_id not in self._visible_node_ids or child_id not in self._visible_node_ids:
+                    continue
+
+            order_num = conn_order_map.get((parent_id, child_id), 1)
+
             if parent_id in self.nodes and child_id in self.nodes:
                 self._draw_single_connection(parent_id, child_id, order_num)
-        
+
         self.canvas.tag_lower("connection_order")
         self.canvas.tag_lower("connection")
         self.canvas.tag_lower("grid")
     
     def _redraw_affected_connections(self):
         for parent_id, child_id in self._dirty_connections:
-            if (parent_id, child_id) in self.connection_items:
-                self.canvas.delete(self.connection_items[(parent_id, child_id)])
-                del self.connection_items[(parent_id, child_id)]
-        
+            conn_key = (parent_id, child_id)
+            if conn_key in self.connection_items:
+                self.canvas.delete(self.connection_items[conn_key])
+                del self.connection_items[conn_key]
+            if conn_key in self.connection_order_items:
+                self.canvas.delete(self.connection_order_items[conn_key])
+                del self.connection_order_items[conn_key]
+
+        # 收集受影响连线的所有兄弟连线，它们的序号可能变化
+        affected_parents = set()
+        for parent_id, child_id in self._dirty_connections:
+            affected_parents.add(parent_id)
+
+        sibling_conns_to_update = set()
+        for parent_id in affected_parents:
+            for c in self.connections:
+                if c[0] == parent_id:
+                    sibling_conns_to_update.add(c)
+
+        for conn_key in sibling_conns_to_update:
+            if conn_key in self.connection_order_items:
+                self.canvas.delete(self.connection_order_items[conn_key])
+                del self.connection_order_items[conn_key]
+
         for parent_id, child_id in self._dirty_connections:
             if parent_id in self.nodes and child_id in self.nodes:
+                # 基于全局位置计算编号
                 siblings = [c for c in self.connections if c[0] == parent_id]
                 order = siblings.index((parent_id, child_id)) + 1 if (parent_id, child_id) in siblings else 1
                 self._draw_single_connection(parent_id, child_id, order)
-        
+
+        # 重建受影响父节点下其他兄弟连线的序号标签
+        for conn_key in sibling_conns_to_update:
+            if conn_key not in self._dirty_connections:
+                parent_id, child_id = conn_key
+                if (parent_id in self.nodes and child_id in self.nodes
+                        and conn_key in self.connection_items
+                        and conn_key not in self.connection_order_items):
+                    siblings = [c for c in self.connections if c[0] == parent_id]
+                    order = siblings.index(conn_key) + 1 if conn_key in siblings else 1
+                    if order > 1 or len(siblings) > 1:
+                        child = self.nodes[child_id]
+                        end_x, end_y = child.get_input_port_pos()
+                        end_x = end_x * self.zoom + self.pan_x
+                        end_y = end_y * self.zoom + self.pan_y
+                        text_id = self.canvas.create_text(
+                            end_x + 15,
+                            end_y - 15,
+                            text=str(order),
+                            fill=self._dark_colors['text_secondary'],
+                            font=("Arial", max(8, int(10 * self.zoom)), "bold"),
+                            tags="connection_order"
+                        )
+                        self.connection_order_items[conn_key] = text_id
+
         self.canvas.tag_lower("connection_order")
         self.canvas.tag_lower("connection")
         self.canvas.tag_lower("grid")
@@ -933,10 +1094,16 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             tags="connection"
         )
         
-        self.connection_items[(parent_id, child_id)] = line_id
-        
+        conn_key = (parent_id, child_id)
+        self.connection_items[conn_key] = line_id
+
+        # 清理旧的序号文本项（如果存在）
+        if conn_key in self.connection_order_items:
+            self.canvas.delete(self.connection_order_items[conn_key])
+            del self.connection_order_items[conn_key]
+
         if order_num > 1 or len([c for c in self.connections if c[0] == parent_id]) > 1:
-            self.canvas.create_text(
+            text_id = self.canvas.create_text(
                 end_x + 15,
                 end_y - 15,
                 text=str(order_num),
@@ -944,6 +1111,84 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                 font=("Arial", max(8, int(10 * self.zoom)), "bold"),
                 tags="connection_order"
             )
+            self.connection_order_items[conn_key] = text_id
+
+    def _redraw_connections_for_nodes(self, node_ids: List[str]):
+        """仅重绘与指定节点关联的连线
+
+        Args:
+            node_ids: 需要重绘关联连线的节点ID列表
+        """
+        # 收集所有需要重绘的连线
+        affected_conns = set()
+        for node_id in node_ids:
+            if node_id in self._node_connections_map:
+                affected_conns.update(self._node_connections_map[node_id])
+
+        if not affected_conns:
+            return
+
+        # 删除旧连线及其序号标签
+        for conn_key in affected_conns:
+            if conn_key in self.connection_items:
+                self.canvas.delete(self.connection_items[conn_key])
+                del self.connection_items[conn_key]
+            if conn_key in self.connection_order_items:
+                self.canvas.delete(self.connection_order_items[conn_key])
+                del self.connection_order_items[conn_key]
+
+        # 收集受影响连线的所有兄弟连线（同父节点的其他子节点），它们的序号可能变化
+        affected_parents = set()
+        for parent_id, child_id in affected_conns:
+            affected_parents.add(parent_id)
+
+        # 删除受影响父节点下所有兄弟连线的序号标签（序号可能因连线变化而重新编号）
+        sibling_conns_to_update = set()
+        for parent_id in affected_parents:
+            for c in self.connections:
+                if c[0] == parent_id:
+                    sibling_conns_to_update.add(c)
+
+        for conn_key in sibling_conns_to_update:
+            if conn_key in self.connection_order_items:
+                self.canvas.delete(self.connection_order_items[conn_key])
+                del self.connection_order_items[conn_key]
+
+        # 重绘受影响的连线
+        for parent_id, child_id in affected_conns:
+            if parent_id in self.nodes and child_id in self.nodes:
+                siblings = [c for c in self.connections if c[0] == parent_id]
+                order = siblings.index((parent_id, child_id)) + 1 if (parent_id, child_id) in siblings else 1
+                self._draw_single_connection(parent_id, child_id, order)
+
+        # 重建受影响父节点下其他兄弟连线的序号标签
+        for conn_key in sibling_conns_to_update:
+            if conn_key not in affected_conns:
+                parent_id, child_id = conn_key
+                if (parent_id in self.nodes and child_id in self.nodes
+                        and conn_key in self.connection_items
+                        and conn_key not in self.connection_order_items):
+                    siblings = [c for c in self.connections if c[0] == parent_id]
+                    order = siblings.index(conn_key) + 1 if conn_key in siblings else 1
+                    if order > 1 or len(siblings) > 1:
+                        parent = self.nodes[parent_id]
+                        child = self.nodes[child_id]
+                        end_x, end_y = child.get_input_port_pos()
+                        end_x = end_x * self.zoom + self.pan_x
+                        end_y = end_y * self.zoom + self.pan_y
+                        text_id = self.canvas.create_text(
+                            end_x + 15,
+                            end_y - 15,
+                            text=str(order),
+                            fill=self._dark_colors['text_secondary'],
+                            font=("Arial", max(8, int(10 * self.zoom)), "bold"),
+                            tags="connection_order"
+                        )
+                        self.connection_order_items[conn_key] = text_id
+
+        self.canvas.tag_lower("connection_order")
+        self.canvas.tag_lower("connection")
+        self.canvas.tag_lower("grid")
     
     def clear_canvas(self, force: bool = False):
         start_node = None
@@ -958,6 +1203,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self.nodes.clear()
         self.connections.clear()
         self.connection_items.clear()
+        self.connection_order_items.clear()
+        self._node_connections_map.clear()
+        self._visible_node_ids.clear()
         self.selected_node = None
         self.selected_nodes = []
         self.selected_connection = None
@@ -1062,13 +1310,24 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             node.reset_status()
     
     def _is_node_visible(self, node: NodeItem) -> bool:
-        canvas_width = self.canvas.winfo_width() or 800
-        canvas_height = self.canvas.winfo_height() or 600
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        # winfo_width/height在Canvas未布局时返回1，需fallback到默认尺寸
+        if canvas_width <= 1:
+            canvas_width = 800
+        if canvas_height <= 1:
+            canvas_height = 600
 
-        node_left = node.x * self.zoom + self.pan_x
-        node_top = node.y * self.zoom + self.pan_y
-        node_right = (node.x + node.width) * self.zoom + self.pan_x
-        node_bottom = (node.y + node.height) * self.zoom + self.pan_y
+        # node.x/y 是节点中心坐标，需减去半宽/半高得到左上角
+        half_w = node.width * self.zoom / 2
+        half_h = node.height * self.zoom / 2
+        center_x = node.x * self.zoom + self.pan_x
+        center_y = node.y * self.zoom + self.pan_y
+
+        node_left = center_x - half_w
+        node_top = center_y - half_h
+        node_right = center_x + half_w
+        node_bottom = center_y + half_h
 
         margin = 50
 
@@ -1085,6 +1344,120 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             if self._is_node_visible(node):
                 visible.append(node_id)
         return visible
+
+    def _update_visible_nodes(self):
+        """Canvas虚拟化核心方法：根据视口更新可见节点集合
+
+        策略：
+        1. 视口内节点直接可见
+        2. 视口内节点的直接连接节点（1跳，双向）可见
+        3. 从所有可见节点沿父节点方向向上追溯完整祖先链
+        这样确保：父节点可见时子节点和连线完整，祖先链不断裂，
+        同时兄弟分支（与可见节点无直接连接）被正确隐藏。
+        """
+        if not self._virtualization_enabled:
+            return
+
+        # Canvas未完成布局时（winfo_width/height <= 1），所有节点视为可见
+        canvas_not_ready = self.canvas.winfo_width() <= 1 or self.canvas.winfo_height() <= 1
+
+        # 第1步：确定视口内基础可见节点
+        viewport_visible = set()
+        for node_id, node in self.nodes.items():
+            if canvas_not_ready or self._is_node_visible(node):
+                viewport_visible.add(node_id)
+
+        # 第2步：1跳扩展——视口内节点的直接连接节点也可见
+        new_visible = set(viewport_visible)
+        for parent_id, child_id in self.connections:
+            if parent_id in viewport_visible or child_id in viewport_visible:
+                new_visible.add(parent_id)
+                new_visible.add(child_id)
+
+        # 第3步：沿父节点方向向上追溯完整祖先链
+        # 只向上（child→parent），不向下扩展，避免兄弟分支被意外显示
+        changed = True
+        while changed:
+            changed = False
+            for parent_id, child_id in self.connections:
+                if child_id in new_visible and parent_id not in new_visible:
+                    new_visible.add(parent_id)
+                    changed = True
+
+        # 离开可见集合的节点：删除Canvas图元
+        removed = self._visible_node_ids - new_visible
+        for node_id in removed:
+            if node_id in self.nodes:
+                node = self.nodes[node_id]
+                node._canvas_items_exist = False
+                self.canvas.delete(node_id)
+                # 子树预览也要清理
+                try:
+                    self.canvas.delete(f"subtree_preview_{node_id}")
+                except Exception:
+                    pass
+
+        # 持续可见的节点：更新zoom/pan并重绘
+        stayed = self._visible_node_ids & new_visible
+        for node_id in stayed:
+            if node_id in self.nodes:
+                node = self.nodes[node_id]
+                node.set_zoom(self.zoom)
+                node.set_pan(self.pan_x, self.pan_y)
+                node.redraw()
+
+        # 新进入可见集合的节点：创建Canvas图元
+        added = new_visible - self._visible_node_ids
+        for node_id in added:
+            if node_id in self.nodes:
+                node = self.nodes[node_id]
+                node.set_zoom(self.zoom)
+                node.set_pan(self.pan_x, self.pan_y)
+                node.redraw()
+
+        self._visible_node_ids = new_visible
+
+        # 重绘可见连线
+        self._redraw_visible_connections()
+
+    def _redraw_visible_connections(self):
+        """仅重绘视口内可见节点之间的连线
+
+        编号(order_num)始终基于connections列表中的全局位置，
+        不因部分连线不可见而改变。
+        """
+        self.canvas.delete("connection")
+        self.canvas.delete("connection_order")
+        self.connection_items.clear()
+        self.connection_order_items.clear()
+
+        # 预计算全局编号：基于connections列表中的实际位置
+        parent_child_order: Dict[str, int] = {}
+        for parent_id, child_id in self.connections:
+            parent_child_order.setdefault(parent_id, 0)
+            parent_child_order[parent_id] += 1
+
+        # 记录每条连线的全局编号
+        conn_order_map: Dict[tuple, int] = {}
+        parent_counter: Dict[str, int] = {}
+        for parent_id, child_id in self.connections:
+            parent_counter.setdefault(parent_id, 0)
+            parent_counter[parent_id] += 1
+            conn_order_map[(parent_id, child_id)] = parent_counter[parent_id]
+
+        for parent_id, child_id in self.connections:
+            # 仅绘制两端节点都在视口内的连线
+            if parent_id not in self._visible_node_ids or child_id not in self._visible_node_ids:
+                continue
+
+            order_num = conn_order_map.get((parent_id, child_id), 1)
+
+            if parent_id in self.nodes and child_id in self.nodes:
+                self._draw_single_connection(parent_id, child_id, order_num)
+
+        self.canvas.tag_lower("connection_order")
+        self.canvas.tag_lower("connection")
+        self.canvas.tag_lower("grid")
 
     def load_tree(self, tree_data: Dict[str, Any]):
         self.clear_canvas(force=True)

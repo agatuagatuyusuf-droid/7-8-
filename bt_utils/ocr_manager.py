@@ -403,7 +403,7 @@ class OCRManager:
     CHINESE_LANGS = {"chi_sim", "chi_tra"}
 
     DEFAULT_CACHE_TTL = 1.0
-    MAX_CACHE_SIZE = 50
+    MAX_CACHE_SIZE = 200
 
     def __init__(self):
         if not self._available:
@@ -412,6 +412,9 @@ class OCRManager:
         self._cache: Dict[str, Tuple[Any, float]] = {}
         self._cache_lock = threading.Lock()
         self._auto_config_selector = AutoConfigSelector()
+        # 缓存命中率统计
+        self._cache_hits = 0
+        self._cache_misses = 0
         
         try:
             self._engine = RapidOCR(
@@ -502,8 +505,10 @@ class OCRManager:
             if cache_key in self._cache:
                 result, timestamp = self._cache[cache_key]
                 if time.time() - timestamp < self.DEFAULT_CACHE_TTL:
+                    self._cache_hits += 1
                     return result
                 del self._cache[cache_key]
+            self._cache_misses += 1
         return None
 
     def _set_cached_result(self, cache_key: str, result: Any):
@@ -523,6 +528,25 @@ class OCRManager:
         """清空缓存"""
         with self._cache_lock:
             self._cache.clear()
+            self._cache_hits = 0
+            self._cache_misses = 0
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """获取缓存统计信息
+
+        Returns:
+            包含 hits/misses/hit_rate/size 的字典
+        """
+        with self._cache_lock:
+            total = self._cache_hits + self._cache_misses
+            return {
+                "hits": self._cache_hits,
+                "misses": self._cache_misses,
+                "hit_rate": self._cache_hits / total if total > 0 else 0.0,
+                "size": len(self._cache),
+                "max_size": self.MAX_CACHE_SIZE,
+                "ttl": self.DEFAULT_CACHE_TTL,
+            }
 
     def _preprocess_chinese(self, image: Image.Image) -> Image.Image:
         """中文图像预处理

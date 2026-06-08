@@ -42,6 +42,9 @@ class ExecutionContext:
         self._previous_foreground_window: Optional[int] = None
         self._subtree_stack: List[str] = []
         self._parent_context: Optional['ExecutionContext'] = None
+        # 帧级截图缓存：同一tick内相同region只截图一次
+        self._screenshot_cache: dict = {}
+        self._screenshot_cache_tick: int = -1
     
     def set_stats_collector(self, collector):
         """设置统计收集器
@@ -142,7 +145,9 @@ class ExecutionContext:
                 self._on_node_status(node_id, status)
 
     def get_screenshot(self, region: tuple = None):
-        """获取屏幕截图
+        """获取屏幕截图（带帧级缓存）
+
+        同一tick内相同region的截图只执行一次，避免多节点重复截图。
 
         Args:
             region: 截图区域 (left, top, right, bottom)，窗口相对坐标
@@ -150,19 +155,42 @@ class ExecutionContext:
         Returns:
             PIL.Image 截图对象
         """
+        # 确保region为tuple（list不可作为dict键）
+        if isinstance(region, list):
+            region = tuple(region)
+
+        # 新tick开始时清空缓存
+        if self.tick_count != self._screenshot_cache_tick:
+            self._screenshot_cache.clear()
+            self._screenshot_cache_tick = self.tick_count
+
+        # 生成缓存键：region为None时用特殊标记
+        cache_key = region if region else "__full_screen__"
+
+        # 命中缓存直接返回
+        if cache_key in self._screenshot_cache:
+            return self._screenshot_cache[cache_key]
+
+        # 执行截图
         if self._bound_window:
             from bt_utils.window_capture import WindowCapture
             if region:
-                return WindowCapture.capture_window_region(self._bound_window, region)
-            return WindowCapture.capture_window(self._bound_window)
+                screenshot = WindowCapture.capture_window_region(self._bound_window, region)
+            else:
+                screenshot = WindowCapture.capture_window(self._bound_window)
+        else:
+            if self._screenshot_manager is None:
+                from bt_utils.screenshot import ScreenshotManager
+                self._screenshot_manager = ScreenshotManager()
 
-        if self._screenshot_manager is None:
-            from bt_utils.screenshot import ScreenshotManager
-            self._screenshot_manager = ScreenshotManager()
+            if region:
+                screenshot = self._screenshot_manager.get_region_screenshot(region)
+            else:
+                screenshot = self._screenshot_manager.get_full_screenshot()
 
-        if region:
-            return self._screenshot_manager.get_region_screenshot(region)
-        return self._screenshot_manager.get_full_screenshot()
+        # 写入缓存
+        self._screenshot_cache[cache_key] = screenshot
+        return screenshot
 
     def execute_key_press(self, key: str, action: str = "press", duration: int = 0) -> None:
         """执行按键操作
@@ -177,6 +205,8 @@ class ExecutionContext:
             self._input_controller = InputController()
 
         self._input_controller.key_press(key, action, duration)
+        # 动作可能改变屏幕内容，清空截图缓存
+        self._screenshot_cache.clear()
 
     def execute_mouse_click(self, button: str = "left", position: tuple = None,
                            action: str = "press", duration: int = 0) -> None:
@@ -196,6 +226,8 @@ class ExecutionContext:
             position = self.convert_to_screen_coords(position)
 
         self._input_controller.mouse_click(button, position, action, duration)
+        # 动作可能改变屏幕内容，清空截图缓存
+        self._screenshot_cache.clear()
 
     def execute_mouse_move(self, position: tuple, relative: bool = False) -> None:
         """执行鼠标移动（全局自动坐标转换）
@@ -212,6 +244,8 @@ class ExecutionContext:
             position = self.convert_to_screen_coords(position)
 
         self._input_controller.mouse_move(position, relative)
+        # 鼠标移动可能触发悬停效果，清空截图缓存
+        self._screenshot_cache.clear()
 
     def get_mouse_position(self) -> Optional[Tuple[int, int]]:
         """获取当前鼠标位置
