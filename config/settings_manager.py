@@ -132,7 +132,10 @@ class SettingsManager:
             "default_image_match_key": "last_image_match"
         },
         "input": {
-            "method": "pyautogui",
+            "keyboard_method": "pyautogui",
+            "mouse_method": "pyautogui",
+            "ib_send_mode": "any_driver",
+            "ib_target_pid": 0,
         },
         "update": {
             "ignored_version": "",
@@ -227,7 +230,16 @@ class SettingsManager:
     def _migrate_config(self) -> None:
         """配置迁移处理"""
         config_version = self.settings.get("version", "0.0.0")
-        
+
+        # 迁移 input.method → input.keyboard_method + input.mouse_method
+        input_settings = self.settings.get("input", {})
+        if "method" in input_settings:
+            old_method = input_settings.pop("method")
+            if "keyboard_method" not in input_settings:
+                input_settings["keyboard_method"] = old_method
+            if "mouse_method" not in input_settings:
+                input_settings["mouse_method"] = old_method
+
         if config_version != self.VERSION:
             self.settings["version"] = self.VERSION
             self.settings["last_save_time"] = datetime.datetime.now().isoformat()

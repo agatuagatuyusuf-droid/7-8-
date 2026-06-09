@@ -134,6 +134,8 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "click_count", "label": "点击次数(-1无限)", "type": "number", "min": -1, "max": 10, "default": 1},
         {"key": "click_interval", "label": "点击间隔(ms)", "type": "number", "default": 100},
         {"key": "click_interval_random", "label": "间隔随机范围(±ms)", "type": "number", "min": 0, "default": 0},
+        {"key": "x_float", "label": "X坐标随机范围(±px)", "type": "number", "min": 0, "default": 0},
+        {"key": "y_float", "label": "Y坐标随机范围(±px)", "type": "number", "min": 0, "default": 0},
     ],
     "MouseMoveNode": [
         {"key": "position", "label": "起点位置", "type": "position"},
@@ -148,6 +150,8 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "position_key_end", "label": "终点黑板变量名", "type": "text", "default": "", "hide_if": {"field": "relative", "value": True}},
         {"key": "move_duration", "label": "移动时长(ms)", "type": "number", "default": 0},
         {"key": "move_duration_random", "label": "移动时长随机范围(±ms)", "type": "number", "min": 0, "default": 0},
+        {"key": "x_float", "label": "X坐标随机范围(±px)", "type": "number", "min": 0, "default": 0},
+        {"key": "y_float", "label": "Y坐标随机范围(±px)", "type": "number", "min": 0, "default": 0},
     ],
     "MouseScrollNode": [
         {"key": "distance", "label": "滚动距离", "type": "number", "default": 5},
