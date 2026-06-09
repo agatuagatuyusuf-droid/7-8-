@@ -186,7 +186,9 @@ class DDVirtualInput(BaseInputController):
                 try:
                     self._dd_dll = ctypes.cdll.LoadLibrary(path)
                     self._setup_dd_api()
-                    result = self._dd_dll.DD_btn(0)
+                    # DD64.dll 在初始化失败时会弹出 MessageBox 阻塞进程
+                    # 临时禁用 MessageBox，防止 DLL 弹窗导致应用无法启动
+                    result = self._init_dd_with_silent()
                     self._log(f"DD_btn(0) init result={result}, dll={path}")
                     if result == 1:
                         self._available = True
@@ -196,8 +198,15 @@ class DDVirtualInput(BaseInputController):
                         return True
                     else:
                         self._log(f"DD_btn(0) 返回 {result}，驱动可能未正确安装")
+                        # 初始化失败，释放 DLL 避免资源泄漏
+                        try:
+                            ctypes.windll.kernel32.FreeLibrary(self._dd_dll._handle)
+                        except Exception:
+                            pass
+                        self._dd_dll = None
                 except Exception as e:
                     self._log(f"加载 {path} 失败: {e}")
+                    self._dd_dll = None
                     continue
 
         return False
@@ -227,6 +236,35 @@ class DDVirtualInput(BaseInputController):
             self._dd_dll.DD_whl.restype = ctypes.c_int
         except Exception as e:
             self._log(f"设置 DD API 类型失败: {e}")
+
+    def _init_dd_with_silent(self) -> int:
+        """在子线程中初始化 DD，避免 DLL 弹窗阻塞主线程
+
+        DD64.dll 在驱动启动失败时会调用 MessageBoxA 弹出
+        "DD start error.驱动启动错误." 的错误对话框，
+        这会阻塞调用线程。在子线程中调用可避免阻塞主线程。
+        """
+        if not self._dd_dll:
+            return 0
+
+        import threading
+
+        init_result = [0]
+        init_done = threading.Event()
+
+        def do_init():
+            try:
+                init_result[0] = self._dd_dll.DD_btn(0)
+            except Exception:
+                init_result[0] = 0
+            finally:
+                init_done.set()
+
+        t = threading.Thread(target=do_init, daemon=True)
+        t.start()
+        # 等待初始化完成（不阻塞主线程，弹窗由用户手动关闭）
+        init_done.wait()
+        return init_result[0]
 
     def _check_admin(self):
         """检查是否以管理员权限运行"""
