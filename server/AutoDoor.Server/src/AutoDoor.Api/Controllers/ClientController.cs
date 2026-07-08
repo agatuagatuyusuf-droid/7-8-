@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using AutoDoor.Server.Domain;
 using AutoDoor.Server.Infrastructure;
 
@@ -16,11 +17,13 @@ public class ClientController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly TicketSigner _signer;
+    private readonly IConfiguration _configuration;
 
-    public ClientController(AppDbContext db, TicketSigner signer)
+    public ClientController(AppDbContext db, TicketSigner signer, IConfiguration configuration)
     {
         _db = db;
         _signer = signer;
+        _configuration = configuration;
     }
 
     [HttpPost("activate")]
@@ -224,12 +227,20 @@ public class ClientController : ControllerBase
     [HttpGet("public-key")]
     public IActionResult PublicKey()
     {
-        // DEV ONLY: for local E2E test public key exchange.
-        return Ok(new
+        var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+        var exposeConfig = _configuration["License:ExposePublicKeyEndpoint"];
+        var expose = exposeConfig?.Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
+        
+        if (env == "Development" || expose)
         {
-            success = true,
-            public_key = _signer.GetPublicKeyPem()
-        });
+            return Ok(new
+            {
+                success = true,
+                public_key = _signer.GetPublicKeyPem()
+            });
+        }
+        
+        return NotFound(new { success = false, error_code = "NOT_FOUND", message = "Not available" });
     }
 
     [HttpGet("version/latest")]

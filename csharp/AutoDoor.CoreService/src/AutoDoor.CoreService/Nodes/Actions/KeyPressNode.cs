@@ -9,9 +9,10 @@ public class KeyPressNode : NodeBase
 {
     public override Task<NodeStatus> ExecuteAsync(Blackboard blackboard, CancellationToken ct)
     {
+        NodeBase.GlobalExecutionCount++;
         var key = "";
         if (Config.TryGetValue("key", out var keyProp))
-            key = keyProp.GetString() ?? "";
+            key = keyProp?.ToString() ?? "";
 
         try
         {

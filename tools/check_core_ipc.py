@@ -29,10 +29,10 @@ def find_core_service():
     candidates = [
         os.path.join(base, "csharp", "AutoDoor.CoreService",
                      "src", "AutoDoor.CoreService", "bin", "Release",
-                     "net8.0", "win-x64", "publish", "AutoDoor.CoreService.exe"),
+                     "net8.0-windows", "win-x64", "publish", "AutoDoor.CoreService.exe"),
         os.path.join(base, "csharp", "AutoDoor.CoreService",
                      "src", "AutoDoor.CoreService", "bin", "Release",
-                     "net8.0", "win-x64", "AutoDoor.CoreService.exe"),
+                     "net8.0-windows", "win-x64", "AutoDoor.CoreService.exe"),
     ]
     for path in candidates:
         if os.path.exists(path):

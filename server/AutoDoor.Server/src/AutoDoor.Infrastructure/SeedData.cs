@@ -1,12 +1,13 @@
 using System;
 using System.Linq;
+using Microsoft.Extensions.Hosting;
 using AutoDoor.Server.Domain;
 
 namespace AutoDoor.Server.Infrastructure;
 
 public static class SeedData
 {
-    public static void Initialize(AppDbContext db)
+    public static void Initialize(AppDbContext db, IHostEnvironment environment)
     {
         if (db.Products.Any()) return;
 
@@ -28,28 +29,51 @@ public static class SeedData
         };
         db.Features.AddRange(features);
 
-        var admin = new Admin
+        // Admin user - production reads from env vars, development uses default
+        if (environment.IsDevelopment())
         {
-            Username = "admin",
-            PasswordHash = BCryptPlaceholder("admin123")
-        };
-        db.Admins.Add(admin);
+            var admin = new Admin
+            {
+                Username = "admin",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123")
+            };
+            db.Admins.Add(admin);
+        }
+        else
+        {
+            var adminUsername = Environment.GetEnvironmentVariable("AUTODOOR_ADMIN_USERNAME");
+            var adminPassword = Environment.GetEnvironmentVariable("AUTODOOR_ADMIN_PASSWORD");
 
-        var testCode = new ActivationCode
+            if (string.IsNullOrEmpty(adminUsername) || string.IsNullOrEmpty(adminPassword))
+            {
+                Console.Error.WriteLine("WARNING: Production environment without AUTODOOR_ADMIN_USERNAME/AUTODOOR_ADMIN_PASSWORD. No admin user created.");
+                Console.Error.WriteLine("Create an admin manually or set these environment variables.");
+            }
+            else
+            {
+                var admin = new Admin
+                {
+                    Username = adminUsername,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword)
+                };
+                db.Admins.Add(admin);
+            }
+        }
+
+        // Test activation code - Development only
+        if (environment.IsDevelopment())
         {
-            Code = "TEST-ACTIVATE-123456",
-            ProductId = product.Id,
-            Edition = "pro",
-            DurationDays = 365,
-            MachineLimit = 1
-        };
-        db.ActivationCodes.Add(testCode);
+            var testCode = new ActivationCode
+            {
+                Code = "TEST-ACTIVATE-123456",
+                ProductId = product.Id,
+                Edition = "pro",
+                DurationDays = 365,
+                MachineLimit = 1
+            };
+            db.ActivationCodes.Add(testCode);
+        }
 
         db.SaveChanges();
-    }
-
-    private static string BCryptPlaceholder(string password)
-    {
-        return $"HASHED:{password}";
     }
 }

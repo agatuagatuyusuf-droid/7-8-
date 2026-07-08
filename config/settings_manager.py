@@ -145,6 +145,9 @@ class SettingsManager:
             "ib_send_mode": "any_driver",
             "ib_target_pid": 0,
         },
+        "runtime": {
+            "use_csharp_core": false
+        },
         "node_shortcuts": {},
         "update": {
             "ignored_version": "",

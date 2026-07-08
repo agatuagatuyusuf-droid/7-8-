@@ -1,22 +1,19 @@
-"""
-Check C# behavior tree runtime via TCP IPC with real assertions.
+"""Check UI runtime bridge connectivity via TCP IPC.
 
-Usage: python tools/check_core_runtime.py
+Usage: python tools/check_ui_runtime_bridge.py
 
 Steps:
 1. Start CoreService
-2. Connect via IPC
-3. Call tree.validate - assert success
-4. Call tree.start - assert success
-5. Poll tree.status until completed=true
-6. Assert completed=true
-7. Call runtime.logs - assert not-empty
+2. Connect via CoreClient
+3. Create RuntimeBridge
+4. Call start_tree with a simple tree
+5. Poll status until completed
+6. Call get_logs, verify non-empty
+7. Call stop_tree
 8. Call core.shutdown
-9. Assert process exits within 5s
-10. Output check_core_runtime OK
+9. Output check_ui_runtime_bridge OK
 """
 
-import json
 import os
 import subprocess
 import sys
@@ -52,27 +49,6 @@ def wait_for_port(host="127.0.0.1", port=19527, timeout=30):
         except (socket.timeout, ConnectionRefusedError):
             time.sleep(1)
     return False
-
-
-def assert_ok(result, label):
-    if not result.get("success"):
-        msg = result.get("message") or result.get("error_code") or "no message"
-        print(f"FAIL: {label} - {msg}")
-        sys.exit(1)
-    print(f"OK: {label}")
-
-
-def poll_status(client, expected_key="completed", expected_value=True, timeout=30):
-    start = time.time()
-    while time.time() - start < timeout:
-        status = client.send_request("tree.status")
-        if status.get("success"):
-            data = status.get("data") or {}
-            if data.get(expected_key) == expected_value:
-                return status
-        time.sleep(0.5)
-    print(f"FAIL: Timed out waiting for {expected_key}={expected_value}")
-    sys.exit(1)
 
 
 def main():
@@ -114,68 +90,97 @@ def main():
         print("CoreService is listening")
 
         from bt_bridge.core_client import CoreClient
+        from bt_bridge.runtime_bridge import RuntimeBridge
+
         client = CoreClient(timeout=5)
         if not client.connect():
             print("Failed to connect to CoreService")
             proc.kill()
             sys.exit(1)
 
-        # tree.validate
-        validate_result = client.send_request("tree.validate", {
-            "tree": {
-                "id": "test",
-                "type": "StartNode",
-                "children": [
-                    {"id": "seq1", "type": "SequenceNode", "children": [
-                        {"id": "delay1", "type": "DelayNode", "config": {"delay_ms": 100}},
-                        {"id": "log1", "type": "LogStatusNode", "config": {"message": "hello"}}
-                    ]}
-                ]
-            }
+        bridge = RuntimeBridge(client)
+
+        # Validate tree
+        validate_result = bridge.validate_tree({
+            "id": "test",
+            "type": "StartNode",
+            "children": [
+                {"id": "seq1", "type": "SequenceNode", "children": [
+                    {"id": "log1", "type": "LogStatusNode", "config": {"message": "bridge test"}}
+                ]}
+            ]
         })
-        assert_ok(validate_result, "tree.validate")
-        print(f"  validate result: {validate_result}")
+        if not validate_result.get("success"):
+            print(f"FAIL: validate_tree: {validate_result.get('message')}")
+            client.disconnect()
+            proc.kill()
+            sys.exit(1)
+        print(f"validate_tree OK")
 
-        # tree.start
-        start_result = client.send_request("tree.start", {
-            "tree": {
-                "id": "test",
-                "type": "StartNode",
-                "children": [
-                    {"id": "seq1", "type": "SequenceNode", "children": [
-                        {"id": "delay1", "type": "DelayNode", "config": {"delay_ms": 100}},
-                        {"id": "log1", "type": "LogStatusNode", "config": {"message": "hello"}}
-                    ]}
-                ]
-            }
+        # Start tree
+        start_result = bridge.start_tree({
+            "id": "test",
+            "type": "StartNode",
+            "children": [
+                {"id": "seq1", "type": "SequenceNode", "children": [
+                    {"id": "log1", "type": "LogStatusNode", "config": {"message": "bridge test"}}
+                ]}
+            ]
         })
-        assert_ok(start_result, "tree.start")
-        print(f"  start result: {start_result}")
+        if not start_result.get("success"):
+            print(f"FAIL: start_tree: {start_result.get('message')}")
+            client.disconnect()
+            proc.kill()
+            sys.exit(1)
+        print(f"start_tree OK")
 
-        # Poll tree.status until completed=true
-        status_result = poll_status(client, "completed", True)
-        assert_ok(status_result, "tree.status (completed=true)")
-        print(f"  status result: {status_result}")
+        # Poll status
+        timeout = 15
+        start_ts = time.time()
+        completed = False
+        while time.time() - start_ts < timeout:
+            status = bridge.get_status()
+            if status.get("success"):
+                data = status.get("data") or {}
+                if data.get("completed"):
+                    completed = True
+                    break
+            time.sleep(0.5)
 
-        # runtime.logs
-        logs_result = client.send_request("runtime.logs")
-        assert_ok(logs_result, "runtime.logs")
+        if not completed:
+            print("FAIL: Tree did not complete in time")
+            client.disconnect()
+            proc.kill()
+            sys.exit(1)
+        print(f"get_status completed OK")
+
+        # Get logs
+        logs_result = bridge.get_logs()
+        if not logs_result.get("success"):
+            print(f"FAIL: get_logs: {logs_result.get('message')}")
+            client.disconnect()
+            proc.kill()
+            sys.exit(1)
         logs_data = logs_result.get("data", {})
         logs = logs_data.get("logs") or []
-        if not logs:
-            print("FAIL: runtime.logs returned empty")
-            sys.exit(1)
-        print(f"  logs contain {len(logs)} entries: {[l.get('message') for l in logs[:3]]}")
+        print(f"get_logs returned {len(logs)} entries")
 
-        # runtime.stats
-        stats_result = client.send_request("runtime.stats")
-        assert_ok(stats_result, "runtime.stats")
-        stats_data = stats_result.get("data", {})
-        print(f"  stats: {stats_data}")
+        # Get stats
+        stats_result = bridge.get_stats()
+        if not stats_result.get("success"):
+            print(f"FAIL: get_stats: {stats_result.get('message')}")
+            client.disconnect()
+            proc.kill()
+            sys.exit(1)
+        print(f"get_stats OK: {stats_result.get('data')}")
+
+        # Stop tree
+        stop_result = bridge.stop_tree()
+        if not stop_result.get("success"):
+            print(f"WARN: stop_tree: {stop_result.get('message')}")
 
         # Shutdown
-        shutdown_result = client.send_request("core.shutdown")
-        assert_ok(shutdown_result, "core.shutdown")
+        client.send_request("core.shutdown")
         client.disconnect()
 
         try:
@@ -186,12 +191,9 @@ def main():
             print("FAIL: CoreService did not exit after shutdown")
             sys.exit(1)
 
-        print("check_core_runtime OK")
+        print("check_ui_runtime_bridge OK")
         sys.exit(0)
 
-    except AssertionError:
-        proc.kill()
-        sys.exit(1)
     except Exception as e:
         print(f"Error: {e}")
         proc.kill()

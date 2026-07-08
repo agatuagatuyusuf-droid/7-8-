@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -10,55 +11,58 @@ namespace AutoDoor.Server.Infrastructure;
 public class TicketSigner
 {
     private readonly RSA _rsa;
+    private readonly bool _isProduction;
+    private readonly bool _hasPrivateKey;
+
+    public bool HasPrivateKey => _hasPrivateKey;
 
     public TicketSigner()
     {
         _rsa = RSA.Create(2048);
-        LoadOrGenerateKey();
+        _isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
+        _hasPrivateKey = LoadOrGenerateKey();
     }
 
-    private void LoadOrGenerateKey()
+    private bool LoadOrGenerateKey()
     {
-        // DEV ONLY: generated key is for local development only.
-        var envKey = Environment.GetEnvironmentVariable("TICKET_PRIVATE_KEY");
+        // Production: must read from env var or file
+        var envKey = Environment.GetEnvironmentVariable("AUTODOOR_SERVER_PRIVATE_KEY_PEM");
         if (!string.IsNullOrEmpty(envKey))
         {
-            try { _rsa.ImportFromPem(envKey); return; }
+            try { _rsa.ImportFromPem(envKey); return true; }
             catch { }
         }
 
-        var envPath = Environment.GetEnvironmentVariable("TICKET_KEY_PATH");
-        if (!string.IsNullOrEmpty(envPath) && System.IO.File.Exists(envPath))
+        var envPath = Environment.GetEnvironmentVariable("AUTODOOR_SERVER_PRIVATE_KEY_PATH");
+        if (!string.IsNullOrEmpty(envPath) && File.Exists(envPath))
         {
-            try { _rsa.ImportFromPem(System.IO.File.ReadAllText(envPath)); return; }
+            try { _rsa.ImportFromPem(File.ReadAllText(envPath)); return true; }
             catch { }
         }
 
-        var defaultDir = System.IO.Path.Combine(AppContext.BaseDirectory, "keys");
-        var defaultPath = System.IO.Path.Combine(defaultDir, "private_key.pem");
-        if (System.IO.File.Exists(defaultPath))
+        var settingsPath = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development"
+            ? ""
+            : "";
+        
+        // Check appsettings Signing:PrivateKeyPath (handled by configuration, not direct file)
+        // For now, rely on env vars for production
+
+        if (_isProduction)
         {
-            try { _rsa.ImportFromPem(System.IO.File.ReadAllText(defaultPath)); return; }
-            catch { }
+            Console.Error.WriteLine("FATAL: Production environment requires a private key via AUTODOOR_SERVER_PRIVATE_KEY_PEM or AUTODOOR_SERVER_PRIVATE_KEY_PATH");
+            Environment.Exit(1);
+            return false;
         }
 
-        System.IO.Directory.CreateDirectory(defaultDir);
+        // Development: generate ephemeral key
+        Console.WriteLine("DEV ONLY: ephemeral signing key generated. Not suitable for production.");
+        var defaultDir = Path.Combine(AppContext.BaseDirectory, "keys");
+        Directory.CreateDirectory(defaultDir);
         var privPem = _rsa.ExportRSAPrivateKeyPem();
-        System.IO.File.WriteAllText(defaultPath, privPem);
-        var pubPath = System.IO.Path.Combine(defaultDir, "public_key.pem");
-        if (!System.IO.File.Exists(pubPath))
-        {
-            var pubPem = _rsa.ExportSubjectPublicKeyInfoPem();
-            System.IO.File.WriteAllText(pubPath, pubPem);
-        }
-    }
-
-    public string Sign(JsonElement ticketElement)
-    {
-        var canonicalJson = BuildCanonicalJson(ticketElement);
-        var data = Encoding.UTF8.GetBytes(canonicalJson);
-        var signature = _rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-        return Convert.ToBase64String(signature);
+        File.WriteAllText(Path.Combine(defaultDir, "private_key.pem"), privPem);
+        var pubPem = _rsa.ExportSubjectPublicKeyInfoPem();
+        File.WriteAllText(Path.Combine(defaultDir, "public_key.pem"), pubPem);
+        return true;
     }
 
     public string Sign(string canonicalJson)
@@ -115,10 +119,5 @@ public class TicketSigner
     public string GetPublicKeyPem()
     {
         return _rsa.ExportSubjectPublicKeyInfoPem();
-    }
-
-    public string GetPrivateKeyPem()
-    {
-        return _rsa.ExportRSAPrivateKeyPem();
     }
 }

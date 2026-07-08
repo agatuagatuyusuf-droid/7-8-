@@ -58,13 +58,18 @@ def main():
     licenses = os.path.join(dist_dir, "THIRD_PARTY_LICENSES.txt")
     checks.append(("THIRD_PARTY_LICENSES.txt exists", os.path.isfile(licenses)))
 
-    # 8. No plain .py source files
-    py_files = []
+    # 8. No plain .py source files (allow third-party in _internal/)
+    PROJECT_MODULES = ("bt_core", "bt_gui", "bt_nodes", "bt_utils", "config", "bt_bridge", "main.py")
+    py_leak = []
     for root, dirs, files in os.walk(dist_dir):
         for f in files:
-            if f.endswith(".py"):
-                py_files.append(os.path.join(root, f))
-    checks.append(("no plain .py source", len(py_files) == 0))
+            if not f.endswith(".py"):
+                continue
+            rel = os.path.relpath(os.path.join(root, f), dist_dir).replace("\\", "/")
+            if any(f"_internal/{mod}/" in rel or rel == f"_internal/{mod}"
+                   for mod in PROJECT_MODULES):
+                py_leak.append(os.path.join(root, f))
+    checks.append(("no plain .py source", len(py_leak) == 0))
 
     # 9. No old author keywords
     author_pattern = re.compile(r"wdhq4261761|298117299|QQ群|B站|bilibili|space\.bilibili\.com|my\.feishu\.cn")
@@ -86,11 +91,15 @@ def main():
 
     # 10. No contracts / authorization / private keys / .env
     forbidden = [".env", ".pem", ".key"]
+    allowed_rel = {"_internal/certifi/cacert.pem"}
     found_forbidden = False
     for root, dirs, files in os.walk(dist_dir):
         for f in files:
             for ext in forbidden:
-                if f.endswith(ext):
+                if not f.endswith(ext):
+                    continue
+                rel = os.path.relpath(os.path.join(root, f), dist_dir).replace("\\", "/")
+                if rel not in allowed_rel:
                     found_forbidden = True
                     break
         if found_forbidden:

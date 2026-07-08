@@ -8,6 +8,7 @@ public class StartNode : NodeBase
 {
     public override async Task<NodeStatus> ExecuteAsync(Blackboard blackboard, CancellationToken ct)
     {
+        NodeBase.GlobalExecutionCount++;
         if (Children.Count == 0)
             return NodeStatus.Success;
 

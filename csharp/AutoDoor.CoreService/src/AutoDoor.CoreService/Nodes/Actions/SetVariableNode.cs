@@ -8,13 +8,14 @@ public class SetVariableNode : NodeBase
 {
     public override Task<NodeStatus> ExecuteAsync(Blackboard blackboard, CancellationToken ct)
     {
+        NodeBase.GlobalExecutionCount++;
         var variableName = "";
         if (Config.TryGetValue("variable", out var varProp))
-            variableName = varProp.GetString() ?? "";
+            variableName = varProp?.ToString() ?? "";
 
         var value = "true";
         if (Config.TryGetValue("value", out var valProp))
-            value = valProp.GetString() ?? value;
+            value = valProp?.ToString() ?? value;
 
         if (!string.IsNullOrEmpty(variableName))
             blackboard.Set(variableName, value);

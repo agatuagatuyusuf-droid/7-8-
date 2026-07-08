@@ -9,13 +9,14 @@ public class ColorConditionNode : NodeBase
 {
     public override Task<NodeStatus> ExecuteAsync(Blackboard blackboard, CancellationToken ct)
     {
+        NodeBase.GlobalExecutionCount++;
         var x = 0; var y = 0;
-        if (Config.TryGetValue("x", out var xProp)) x = xProp.GetInt32();
-        if (Config.TryGetValue("y", out var yProp)) y = yProp.GetInt32();
+        if (Config.TryGetValue("x", out var xProp)) x = Convert.ToInt32(xProp);
+        if (Config.TryGetValue("y", out var yProp)) y = Convert.ToInt32(yProp);
 
         var expectedColor = "";
         if (Config.TryGetValue("color", out var colorProp))
-            expectedColor = colorProp.GetString() ?? "";
+            expectedColor = colorProp?.ToString() ?? "";
 
         try
         {

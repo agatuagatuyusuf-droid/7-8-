@@ -8,6 +8,7 @@ public class SelectorNode : NodeBase
 {
     public override async Task<NodeStatus> ExecuteAsync(Blackboard blackboard, CancellationToken ct)
     {
+        NodeBase.GlobalExecutionCount++;
         foreach (var child in Children)
         {
             var status = await child.ExecuteAsync(blackboard, ct);

@@ -9,17 +9,18 @@ public class MouseClickNode : NodeBase
 {
     public override Task<NodeStatus> ExecuteAsync(Blackboard blackboard, CancellationToken ct)
     {
+        NodeBase.GlobalExecutionCount++;
         var button = "left";
         if (Config.TryGetValue("button", out var btnProp))
-            button = btnProp.GetString() ?? "left";
+            button = btnProp?.ToString() ?? "left";
 
         var x = 0;
         if (Config.TryGetValue("x", out var xProp))
-            x = xProp.GetInt32();
+            x = Convert.ToInt32(xProp);
 
         var y = 0;
         if (Config.TryGetValue("y", out var yProp))
-            y = yProp.GetInt32();
+            y = Convert.ToInt32(yProp);
 
         try
         {

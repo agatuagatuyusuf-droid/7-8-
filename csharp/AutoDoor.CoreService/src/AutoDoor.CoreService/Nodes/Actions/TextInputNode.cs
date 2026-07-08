@@ -9,9 +9,10 @@ public class TextInputNode : NodeBase
 {
     public override Task<NodeStatus> ExecuteAsync(Blackboard blackboard, CancellationToken ct)
     {
+        NodeBase.GlobalExecutionCount++;
         var text = "";
         if (Config.TryGetValue("text", out var textProp))
-            text = textProp.GetString() ?? "";
+            text = textProp?.ToString() ?? "";
 
         try
         {

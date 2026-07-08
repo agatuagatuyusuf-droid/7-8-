@@ -9,6 +9,7 @@ public class ImageConditionNode : NodeBase
 {
     public override Task<NodeStatus> ExecuteAsync(Blackboard blackboard, CancellationToken ct)
     {
+        NodeBase.GlobalExecutionCount++;
         throw new NotImplementedException("ImageConditionNode is not yet implemented in the commercial build");
     }
 }

@@ -28,7 +28,7 @@ def main():
     publish_dir = os.path.join(
         project_root, "csharp", "AutoDoor.CoreService",
         "src", "AutoDoor.CoreService", "bin", "Release",
-        "net8.0", "win-x64", "publish"
+        "net8.0-windows", "win-x64", "publish"
     )
 
     if not os.path.exists(publish_dir):
@@ -36,7 +36,7 @@ def main():
         publish_dir = os.path.join(
             project_root, "csharp", "AutoDoor.CoreService",
             "src", "AutoDoor.CoreService", "bin", "Release",
-            "net8.0", "win-x64"
+            "net8.0-windows", "win-x64"
         )
         if not os.path.exists(os.path.join(publish_dir, "AutoDoor.CoreService.exe")):
             print(f"ERROR: CoreService publish directory not found")

@@ -16,19 +16,24 @@ public class BehaviorTreeEngine
     }
 
     public Blackboard Blackboard => _blackboard;
+    public int NodesExecuted { get; private set; }
 
     public async Task<NodeStatus> ExecuteAsync(CancellationToken ct)
     {
+        NodeBase.GlobalExecutionCount = 0;
         try
         {
-            return await _root.ExecuteAsync(_blackboard, ct);
+            var result = await _root.ExecuteAsync(_blackboard, ct);
+            NodesExecuted = NodeBase.GlobalExecutionCount;
+            return result;
         }
         catch (OperationCanceledException)
         {
             return NodeStatus.Aborted;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Console.Error.WriteLine($"BT engine error: {ex.GetType().Name}: {ex.Message}");
             return NodeStatus.Failure;
         }
     }

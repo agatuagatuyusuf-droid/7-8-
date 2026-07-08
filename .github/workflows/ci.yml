@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - commercial-*
+      - master
+  workflow_dispatch:
+
+jobs:
+  check-python:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: compileall
+        run: python -m compileall main.py bt_core bt_gui bt_nodes bt_utils config bt_bridge
+
+  check-dotnet:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0'
+      - name: Build CoreService
+        run: dotnet build csharp/AutoDoor.CoreService/src/AutoDoor.CoreService/AutoDoor.CoreService.csproj -c Release
+      - name: Build Server
+        run: dotnet build server/AutoDoor.Server/src/AutoDoor.Api/AutoDoor.Api.csproj -c Release
+
+  check-ipc:
+    runs-on: windows-latest
+    needs: [check-python, check-dotnet]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Publish CoreService
+        run: dotnet publish csharp/AutoDoor.CoreService/src/AutoDoor.CoreService/AutoDoor.CoreService.csproj -c Release -r win-x64 --self-contained false
+      - name: Check IPC
+        run: python tools/check_core_ipc.py
+
+  check-runtime:
+    runs-on: windows-latest
+    needs: [check-python, check-dotnet]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Publish CoreService
+        run: dotnet publish csharp/AutoDoor.CoreService/src/AutoDoor.CoreService/AutoDoor.CoreService.csproj -c Release -r win-x64 --self-contained false
+      - name: Check Runtime
+        run: python tools/check_core_runtime.py
+
+  check-license-e2e:
+    runs-on: windows-latest
+    needs: [check-python, check-dotnet]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Publish CoreService
+        run: dotnet publish csharp/AutoDoor.CoreService/src/AutoDoor.CoreService/AutoDoor.CoreService.csproj -c Release -r win-x64 --self-contained false
+      - name: Check License E2E
+        run: python tools/check_license_e2e.py

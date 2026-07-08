@@ -76,6 +76,8 @@ public class RuntimeHost
             _cts = new CancellationTokenSource();
             _engine = new BehaviorTreeEngine(tree);
 
+            NodeBase.GlobalLogCallback = AddLog;
+
             _currentTask = Task.Run(async () =>
             {
                 try
@@ -83,7 +85,7 @@ public class RuntimeHost
                     var status = await _engine.ExecuteAsync(_cts.Token);
                     lock (_lock)
                     {
-                        _context.TickCount++;
+                        _context.TickCount = _engine?.NodesExecuted ?? 0;
                         _context.ElapsedMs = (long)(DateTime.UtcNow - _context.StartTime).TotalMilliseconds;
                         _context.State = status switch
                         {

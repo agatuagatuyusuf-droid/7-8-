@@ -40,10 +40,10 @@ def find_core_service():
     candidates = [
         os.path.join(base, "csharp", "AutoDoor.CoreService",
                      "src", "AutoDoor.CoreService", "bin", "Release",
-                     "net8.0", "win-x64", "publish", "AutoDoor.CoreService.exe"),
+                     "net8.0-windows", "win-x64", "publish", "AutoDoor.CoreService.exe"),
         os.path.join(base, "csharp", "AutoDoor.CoreService",
                      "src", "AutoDoor.CoreService", "bin", "Release",
-                     "net8.0", "win-x64", "AutoDoor.CoreService.exe"),
+                     "net8.0-windows", "win-x64", "AutoDoor.CoreService.exe"),
     ]
     for path in candidates:
         if os.path.exists(path):
@@ -115,14 +115,17 @@ def main():
             sys.exit(1)
 
         print("Starting license server...")
+        server_env = os.environ.copy()
+        server_env["ASPNETCORE_ENVIRONMENT"] = "Development"
         server_proc = subprocess.Popen(
             ["dotnet", "run", "--project", server_project],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            env=server_env
         )
         processes.append(("server", server_proc))
 
-        if not wait_for_url(f"{SERVER_URL}/api/dev-admin/dashboard"):
+        if not wait_for_url(f"{SERVER_URL}/api/client/public-key"):
             print("Timed out waiting for license server")
             sys.exit(1)
         print("License server is running")

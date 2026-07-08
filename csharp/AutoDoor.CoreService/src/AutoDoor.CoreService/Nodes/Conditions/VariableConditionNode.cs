@@ -9,17 +9,18 @@ public class VariableConditionNode : NodeBase
 {
     public override Task<NodeStatus> ExecuteAsync(Blackboard blackboard, CancellationToken ct)
     {
+        NodeBase.GlobalExecutionCount++;
         var variableName = "";
         if (Config.TryGetValue("variable", out var varProp))
-            variableName = varProp.GetString() ?? "";
+            variableName = varProp?.ToString() ?? "";
 
         var expectedValue = "";
         if (Config.TryGetValue("value", out var valProp))
-            expectedValue = valProp.GetString() ?? "";
+            expectedValue = valProp?.ToString() ?? "";
 
         var operatorType = "equals";
         if (Config.TryGetValue("operator", out var opProp))
-            operatorType = opProp.GetString() ?? "equals";
+            operatorType = opProp?.ToString() ?? "equals";
 
         var actualValue = blackboard.Get(variableName)?.ToString() ?? "";
 
