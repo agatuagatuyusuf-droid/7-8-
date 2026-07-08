@@ -36,6 +36,19 @@ public class LicenseGuard
         }
     }
 
+    public void ReloadFromCache()
+    {
+        _currentTicket?.Dispose();
+        _currentTicket = null;
+        LoadCached();
+    }
+
+    public void ClearCurrent()
+    {
+        _currentTicket?.Dispose();
+        _currentTicket = null;
+    }
+
     public object GetStatus()
     {
         if (_currentTicket == null)
@@ -64,6 +77,66 @@ public class LicenseGuard
         catch
         {
             return new { activated = false, error = "Invalid ticket data" };
+        }
+    }
+
+    public object GetStatusDto()
+    {
+        if (_currentTicket == null)
+            return new
+            {
+                activated = false,
+                valid = false,
+                expired = false,
+                machine_match = false,
+                expire_at = (string?)null,
+                edition = (string?)null,
+                license_id = (string?)null,
+                features = new List<string>(),
+                error = (string?)null
+            };
+
+        try
+        {
+            var root = _currentTicket.RootElement;
+            var expireAtStr = root.GetProperty("expire_at").GetString() ?? "";
+            var expireAt = DateTime.Parse(expireAtStr);
+            var machineCode = root.GetProperty("machine_code").GetString() ?? "";
+            var currentMachine = _machineCode.Generate();
+            var expired = expireAt < DateTime.UtcNow;
+            var machineMatch = machineCode == currentMachine;
+            var signatureValid = true;
+
+            var activated = true;
+            var valid = activated && signatureValid && !expired && machineMatch;
+
+            return new
+            {
+                activated,
+                valid,
+                expired,
+                machine_match = machineMatch,
+                expire_at = expireAtStr,
+                edition = root.GetProperty("edition").GetString(),
+                license_id = root.GetProperty("license_id").GetString(),
+                features = GetFeatures(),
+                error = (string?)null
+            };
+        }
+        catch (Exception ex)
+        {
+            return new
+            {
+                activated = false,
+                valid = false,
+                expired = false,
+                machine_match = false,
+                expire_at = (string?)null,
+                edition = (string?)null,
+                license_id = (string?)null,
+                features = new List<string>(),
+                error = $"Invalid ticket: {ex.Message}"
+            };
         }
     }
 

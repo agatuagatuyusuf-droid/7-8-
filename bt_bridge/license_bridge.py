@@ -47,3 +47,10 @@ class LicenseBridge:
             data = result.get("data", {})
             return data.get("activated", False)
         return False
+
+    def is_valid(self) -> bool:
+        result = self.status()
+        if result.get("success"):
+            data = result.get("data", {})
+            return data.get("valid", False)
+        return False

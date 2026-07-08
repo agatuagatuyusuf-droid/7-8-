@@ -1,28 +1,38 @@
 import json
+import os
 import socket
 import threading
-import time
-from typing import Any, Optional, Callable
+from typing import Any, Optional
 from .ipc_protocol import make_request, parse_response
 
 
 class CoreClient:
-    """通过 Named Pipe 与 C# CoreService 通信"""
+    """通过 TCP 与 C# CoreService 通信"""
 
-    PIPE_NAME = r"\\.\pipe\AutoDoorPro.CoreService"
+    _DEFAULT_HOST = "127.0.0.1"
+    _DEFAULT_PORT = 19527
 
-    def __init__(self, timeout: float = 10.0):
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None, timeout: float = 10.0):
+        self._host = host or os.environ.get("AUTODOOR_CORE_HOST") or self._DEFAULT_HOST
+        self._port = port or int(os.environ.get("AUTODOOR_CORE_PORT") or str(self._DEFAULT_PORT))
         self._timeout = timeout
         self._connected = False
         self._lock = threading.Lock()
+        self._socket: Optional[socket.socket] = None
+        self._file: Optional[Any] = None
 
     def connect(self) -> bool:
         try:
-            self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            self._socket.settimeout(self._timeout)
-            self._socket.connect(self.PIPE_NAME)
+            self._socket = socket.create_connection((self._host, self._port), timeout=self._timeout)
+            self._file = self._socket.makefile("rwb")
             self._connected = True
             return True
+        except socket.timeout:
+            self._connected = False
+            return False
+        except ConnectionRefusedError:
+            self._connected = False
+            return False
         except Exception:
             self._connected = False
             return False
@@ -30,9 +40,17 @@ class CoreClient:
     def disconnect(self):
         self._connected = False
         try:
-            self._socket.close()
+            if self._file:
+                self._file.close()
         except Exception:
             pass
+        try:
+            if self._socket:
+                self._socket.close()
+        except Exception:
+            pass
+        self._file = None
+        self._socket = None
 
     def send_request(self, action: str, payload: Optional[dict] = None) -> dict:
         if not self._connected:
@@ -42,10 +60,24 @@ class CoreClient:
         with self._lock:
             try:
                 request = make_request(action, payload)
-                self._socket.sendall((request + "\n").encode("utf-8"))
+                if self._file:
+                    self._file.write((request + "\n").encode("utf-8"))
+                    self._file.flush()
 
-                response_data = self._socket.recv(65536).decode("utf-8")
-                return parse_response(response_data)
+                    line = self._file.readline()
+                    if not line:
+                        return {"success": False, "error_code": "IPC_DISCONNECTED",
+                                "message": "CoreService disconnected"}
+                    return parse_response(line.decode("utf-8"))
+                return {"success": False, "error_code": "IPC_SEND_FAILED",
+                        "message": "No file handle for IPC"}
+            except socket.timeout:
+                return {"success": False, "error_code": "IPC_TIMEOUT",
+                        "message": "IPC request timed out"}
+            except (BrokenPipeError, ConnectionResetError) as e:
+                self._connected = False
+                return {"success": False, "error_code": "IPC_DISCONNECTED",
+                        "message": f"IPC connection lost: {e}"}
             except Exception as e:
                 return {"success": False, "error_code": "IPC_ERROR",
                         "message": str(e)}

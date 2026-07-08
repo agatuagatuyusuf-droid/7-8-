@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using AutoDoor.CoreService.Common;
 
 namespace AutoDoor.CoreService.License;
 
@@ -12,13 +13,23 @@ public class LicenseClient
     private readonly MachineCodeProvider _machineCode;
     private readonly LicenseCache _cache;
     private readonly SignatureVerifier _verifier;
+    private readonly LicenseOptions _options;
 
-    public LicenseClient(MachineCodeProvider machineCode, LicenseCache cache, SignatureVerifier verifier)
+    public LicenseClient(MachineCodeProvider machineCode, LicenseCache cache, SignatureVerifier verifier, AppSettings appSettings)
     {
         _httpClient = new HttpClient();
         _machineCode = machineCode;
         _cache = cache;
         _verifier = verifier;
+
+        var envUrl = Environment.GetEnvironmentVariable("AUTODOOR_LICENSE_SERVER_URL");
+        var envProductId = Environment.GetEnvironmentVariable("AUTODOOR_PRODUCT_ID");
+        _options = new LicenseOptions
+        {
+            ServerUrl = envUrl ?? appSettings.License.ServerUrl,
+            ProductId = envProductId ?? appSettings.License.ProductId,
+            PublicKey = appSettings.License.PublicKey
+        };
     }
 
     public async Task<(bool success, string? errorCode, string message, object? data)> ActivateAsync(string code)
@@ -30,14 +41,13 @@ public class LicenseClient
             {
                 activation_code = code,
                 machine_code = machineCode,
-                product_id = "autodoor_pro"
+                product_id = _options.ProductId
             };
 
             var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync(
-                "https://YOUR-DOMAIN.com/api/client/activate", content);
+            var response = await _httpClient.PostAsync(_options.ActivateUrl, content);
 
             if (!response.IsSuccessStatusCode)
                 return (false, "ACTIVATE_FAILED", "Server returned error", null);
@@ -80,14 +90,13 @@ public class LicenseClient
             var payload = new
             {
                 machine_code = machineCode,
-                product_id = "autodoor_pro"
+                product_id = _options.ProductId
             };
 
             var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync(
-                "https://YOUR-DOMAIN.com/api/client/refresh", content);
+            var response = await _httpClient.PostAsync(_options.RefreshUrl, content);
 
             if (response.IsSuccessStatusCode)
             {
@@ -105,7 +114,6 @@ public class LicenseClient
                 }
             }
 
-            // Server unreachable - use cache if within offline period
             var cachedData = _cache.Load();
             if (cachedData != null && _cache.IsWithinOfflinePeriod(cachedData))
                 return (true, null, "Using cached license (offline)", cachedData);

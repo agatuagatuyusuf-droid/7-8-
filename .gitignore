@@ -66,6 +66,8 @@ build_cython/
 # C# build output
 csharp/**/bin/
 csharp/**/obj/
+server/**/bin/
+server/**/obj/
 
 # Commercial build artifacts
 *.spec
@@ -77,8 +79,10 @@ legal/*.json
 legal/*.pem
 legal/*.key
 
-# Goal state
-.goal/*.json
+# Goal state - allow state.json but ignore other
+.goal/*.tmp
+.goal/*.log
+!.goal/state.json
 
 # License cache (local)
 license/cache.dat
@@ -94,3 +98,9 @@ license/*.key
 
 # Spec backups
 *.spec.bak
+
+# Private keys and secrets
+*.pem
+*.key
+server/**/private*.pem
+server/**/private*.key

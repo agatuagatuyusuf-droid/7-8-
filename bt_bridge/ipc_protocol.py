@@ -13,7 +13,14 @@ def make_request(action: str, payload: Optional[dict] = None) -> str:
 
 
 def parse_response(response_json: str) -> dict:
-    return json.loads(response_json)
+    try:
+        return json.loads(response_json)
+    except json.JSONDecodeError as e:
+        return {
+            "success": False,
+            "error_code": "IPC_INVALID_JSON",
+            "message": f"JSON parse error: {e}"
+        }
 
 
 def make_event(event: str, data: dict) -> str:

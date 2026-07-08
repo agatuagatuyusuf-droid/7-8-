@@ -56,13 +56,11 @@ import logging
 write_log("json and logging imported successfully")
 
 def get_resource_path(relative_path):
-    """获取资源文件的绝对路径，支持PyInstaller打包后的路径"""
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.dirname(__file__), relative_path)
 
 def load_version():
-    """从build_info.json加载版本信息"""
     build_info_file = get_resource_path('bt_utils/build_info.json')
     
     if os.path.exists(build_info_file):
@@ -76,7 +74,6 @@ def load_version():
     return "1.2.2a"
 
 def load_github_info():
-    """从build_info.json或brand.json加载GitHub仓库信息"""
     from bt_utils.brand_manager import get
     owner = get("repo_owner", "")
     repo = get("repo_name", "")
@@ -121,7 +118,6 @@ write_log("registry imported successfully")
 
 
 def ensure_workspace_exists():
-    """确保workspace文件夹存在"""
     from config.settings_manager import SettingsManager
     
     settings_manager = SettingsManager()
@@ -139,7 +135,6 @@ def ensure_workspace_exists():
 
 
 def check_vcredist():
-    """检查 Visual C++ Redistributable 运行时库"""
     try:
         import onnxruntime
         return True
@@ -152,7 +147,6 @@ def check_vcredist():
 
 
 def initialize_ocr():
-    """初始化OCR引擎"""
     try:
         if not check_vcredist():
             import tkinter as tk
@@ -190,7 +184,6 @@ def initialize_ocr():
 
 
 def initialize_input():
-    """初始化输入控制器"""
     try:
         from bt_utils.input_controller_factory import InputController
         InputController()
@@ -200,13 +193,6 @@ def initialize_input():
 
 
 def check_admin_for_driver(method: str, display_name: str, is_available_fn):
-    """检查驱动模式是否需要管理员权限，如需要则提权重启
-
-    Args:
-        method: 输入方式 key（如 "dd", "ib"）
-        display_name: 显示名称（如 "DD虚拟键盘", "IbInputSimulator"）
-        is_available_fn: 检测 DLL 是否存在的函数
-    """
     from config.settings_manager import SettingsManager
     from bt_utils.app_restarter import is_admin, restart_as_admin
 
@@ -214,7 +200,6 @@ def check_admin_for_driver(method: str, display_name: str, is_available_fn):
     kb_method = settings.get("input.keyboard_method", "pyautogui")
     ms_method = settings.get("input.mouse_method", "pyautogui")
 
-    # 键盘或鼠标任一使用该驱动都需要管理员权限
     if kb_method != method and ms_method != method:
         return True
 
@@ -270,7 +255,64 @@ def check_admin_for_driver(method: str, display_name: str, is_available_fn):
     return True
 
 
+def should_skip_license_check():
+    build_type = os.environ.get("AUTODOOR_BUILD_TYPE", "release").lower()
+    if build_type == "debug":
+        write_log("Debug build: skipping license check")
+        return True
+    skip_env = os.environ.get("AUTODOOR_SKIP_LICENSE", "0")
+    if skip_env == "1":
+        write_log("AUTODOOR_SKIP_LICENSE=1: skipping license check")
+        return True
+    return False
+
+
+def check_license_before_app():
+    from bt_bridge.license_session import LicenseSession
+    from bt_gui.dialogs.activation_dialog import ActivationDialog
+
+    session = LicenseSession()
+
+    write_log("Starting CoreService for license check...")
+    if not session.ensure_ready():
+        write_log(f"CoreService not ready: {session.last_error}")
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(
+            "授权服务错误",
+            session.last_error
+        )
+        root.destroy()
+        return False
+
+    write_log("Checking license status...")
+    result = session.status()
+    if result.get("success"):
+        data = result.get("data", {})
+        if data.get("valid"):
+            write_log("License valid, proceeding to main UI")
+            return True
+
+    write_log("License not valid, showing activation dialog")
+
+    dialog = ActivationDialog(session)
+    dialog.wait_window()
+
+    if dialog.activated:
+        write_log("Activation successful, proceeding to main UI")
+        return True
+
+    write_log("Activation cancelled, exiting")
+    return False
+
+
 def main():
+    if not should_skip_license_check():
+        if not check_license_before_app():
+            sys.exit(1)
+
     ensure_workspace_exists()
 
     from bt_utils.app_restarter import is_dd_available, is_ib_available

@@ -1,0 +1,17 @@
+{
+  "goal": "AutoDoor commercial P10-P15",
+  "branch": "commercial-p10-p15",
+  "current_phase": "p10_p15",
+  "status": "completed",
+  "tasks": [
+    {"id": "P0-P9", "title": "Fix blocking issues", "status": "completed"},
+    {"id": "P10", "title": "UI activation window", "status": "completed"},
+    {"id": "P11", "title": "C# runtime skeleton", "status": "completed"},
+    {"id": "P12", "title": "Core nodes first version", "status": "completed"},
+    {"id": "P13", "title": "OCR/Image/Input first version", "status": "partial"},
+    {"id": "P14", "title": "License server backend first version", "status": "completed"},
+    {"id": "P15", "title": "Commercial packaging verification", "status": "completed"}
+  ],
+  "blockers": [],
+  "last_updated": "2026-07-08"
+}
