@@ -6,6 +6,7 @@ from tkinter import messagebox
 from .theme import Theme, init_theme
 from .bt_editor import BehaviorTreeEditor
 from .script_tab import ScriptTab
+from .schedule_tab import ScheduleTab
 from .settings_tab import SettingsTab
 from config.settings_manager import SettingsManager
 from bt_utils.log_manager import LogManager
@@ -211,6 +212,7 @@ class BehaviorTreeApp(ctk.CTk):
         tab_config = [
             ('bt', '🌲 行为树编辑器'),
             ('script', '📝 脚本录制'),
+            ('schedule', '⏰ 定时执行'),
             ('settings', '⚙ 设置')
         ]
         
@@ -294,10 +296,12 @@ class BehaviorTreeApp(ctk.CTk):
         
         bt_frame = ctk.CTkFrame(self.content_frame, fg_color='transparent')
         script_frame = ctk.CTkFrame(self.content_frame, fg_color='transparent')
+        schedule_frame = ctk.CTkFrame(self.content_frame, fg_color='transparent')
         settings_frame = ctk.CTkFrame(self.content_frame, fg_color='transparent')
         
         self.tab_frames['bt'] = bt_frame
         self.tab_frames['script'] = script_frame
+        self.tab_frames['schedule'] = schedule_frame
         self.tab_frames['settings'] = settings_frame
         
         self.behavior_tree = BehaviorTreeEditor(bt_frame, self)
@@ -305,6 +309,9 @@ class BehaviorTreeApp(ctk.CTk):
         
         self.script_editor = ScriptTab(script_frame, self)
         self.script_editor.pack(fill='both', expand=True)
+        
+        self.schedule_tab = ScheduleTab(schedule_frame, self)
+        self.schedule_tab.pack(fill='both', expand=True)
         
         self.settings = SettingsTab(settings_frame, self)
         self.settings.pack(fill='both', expand=True)

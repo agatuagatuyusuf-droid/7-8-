@@ -34,6 +34,9 @@ class SettingsTab(ctk.CTkFrame):
         self.start_shortcut_var = tk.StringVar(value="F10")
         self.stop_shortcut_var = tk.StringVar(value="F12")
         self.record_hotkey_var = tk.StringVar(value="F11")
+        self.toggle_disable_var = tk.StringVar(value="Space")
+        self.auto_arrange_var = tk.StringVar(value="X")
+        self.fit_view_var = tk.StringVar(value="Z")
         
         from config.settings_manager import SettingsManager
         settings = SettingsManager()
@@ -183,7 +186,10 @@ class SettingsTab(ctk.CTkFrame):
         shortcuts = [
             ("开始运行:", "F10", self.start_shortcut_var),
             ("停止运行:", "F12", self.stop_shortcut_var),
-            ("录制按钮:", "F11", self.record_hotkey_var)
+            ("录制按钮:", "F11", self.record_hotkey_var),
+            ("禁用节点:", "Space", self.toggle_disable_var),
+            ("自动整理:", "X", self.auto_arrange_var),
+            ("适应窗口:", "Z", self.fit_view_var)
         ]
         
         for label, default, var in shortcuts:
@@ -802,6 +808,15 @@ class SettingsTab(ctk.CTkFrame):
             settings_manager.set("shortcuts.stop", stop_key, auto_save=False)
             settings_manager.set("shortcuts.record", record_key, auto_save=False)
             
+            toggle_key = self.toggle_disable_var.get()
+            settings_manager.set("shortcuts.toggle_disable", toggle_key, auto_save=False)
+            
+            arrange_key = self.auto_arrange_var.get()
+            settings_manager.set("shortcuts.auto_arrange", arrange_key, auto_save=False)
+            
+            fit_key = self.fit_view_var.get()
+            settings_manager.set("shortcuts.fit_view", fit_key, auto_save=False)
+            
             # 保存单树快捷键
             tab_shortcuts = []
             for row in self._tab_shortcut_rows:
@@ -840,6 +855,9 @@ class SettingsTab(ctk.CTkFrame):
                 "start": self.start_shortcut_var.get(),
                 "stop": self.stop_shortcut_var.get(),
                 "record": self.record_hotkey_var.get(),
+                "toggle_disable": self.toggle_disable_var.get(),
+                "auto_arrange": self.auto_arrange_var.get(),
+                "fit_view": self.fit_view_var.get(),
                 "tab_shortcuts": tab_shortcuts
             },
             "keyboard_method": self._current_keyboard_method,
@@ -883,6 +901,12 @@ class SettingsTab(ctk.CTkFrame):
                 self.stop_shortcut_var.set(shortcuts["stop"])
             if "record" in shortcuts:
                 self.record_hotkey_var.set(shortcuts["record"])
+            if "toggle_disable" in shortcuts:
+                self.toggle_disable_var.set(shortcuts["toggle_disable"])
+            if "auto_arrange" in shortcuts:
+                self.auto_arrange_var.set(shortcuts["auto_arrange"])
+            if "fit_view" in shortcuts:
+                self.fit_view_var.set(shortcuts["fit_view"])
             if "tab_shortcuts" in shortcuts:
                 # 清除现有行
                 for row in self._tab_shortcut_rows:

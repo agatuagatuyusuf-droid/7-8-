@@ -1,0 +1,96 @@
+================================================================================
+  AutoDoor 行为树系统 - 完整源码包
+  文件名：autodoor_behavior_tree_完整包.zip
+  打包时间：2026-07-04
+================================================================================
+
+一、包里有什么
+--------------------------------------------------------------------------------
+本压缩包包含完整的项目文件，共约 1647 个文件，包括：
+
+  autodoor_behavior_tree/        项目根目录
+  ├── .git/                      Git 版本库（含完整提交历史，可回滚）
+  ├── .github/workflows/         GitHub Actions 自动构建配置
+  ├── assets/                    图标、音效等资源
+  ├── bt_core/                   行为树核心引擎（节点、黑板、序列化等）
+  ├── bt_gui/                    可视化编辑器界面
+  │   ├── bt_editor/             编辑器核心（画布、工具栏、属性面板等）
+  │   ├── dialogs/               对话框
+  │   └── editor/                编辑器模块
+  ├── bt_nodes/                  节点实现（动作节点 / 条件节点）
+  ├── bt_utils/                  工具类（OCR、输入、截图、日志等）
+  ├── build/                     PyInstaller 构建中间文件
+  ├── config/                    配置文件与设置管理
+  ├── dist/                      已打包好的可执行程序
+  │   └── autodoor-behaviortree-1.6.0/
+  │       └── autodoor_bt.exe    直接双击即可运行的主程序
+  ├── doc/                       架构文档、节点速查表、用户手册
+  ├── docs/                      其他文档与计划
+  ├── drivers/                   DD64.dll、IbInputSimulator.dll 等驱动
+  ├── tests/                     测试脚本
+  ├── autodoor_bt.spec           PyInstaller 打包配置
+  ├── autodoor_behavior_tree.code-workspace   VS Code 工作区配置
+  ├── build.bat                  一键重新打包脚本
+  ├── build_config.json          构建配置
+  ├── generate_build_info.py     生成构建信息脚本
+  ├── main.py                    程序入口
+  ├── requirements.txt           Python 依赖列表
+  └── README.md                  项目说明文档
+
+
+二、直接用：不用改代码，拿来就用
+--------------------------------------------------------------------------------
+1. 解压本压缩包。
+2. 进入目录：
+      autodoor_behavior_tree/dist/autodoor-behaviortree-1.6.0/
+3. 双击运行：
+      autodoor_bt.exe
+4. 该目录下已包含所有运行所需的驱动和资源。
+
+
+三、想修改：从源码运行
+--------------------------------------------------------------------------------
+1. 安装 Python 3.12 或更高版本（建议 3.12）。
+2. 解压后进入项目目录：
+      cd autodoor_behavior_tree
+3. 安装依赖（推荐使用虚拟环境）：
+      python -m venv venv
+      venv\Scripts\activate
+      pip install -r requirements.txt
+4. 运行程序：
+      python main.py
+
+
+四、修改代码后重新打包
+--------------------------------------------------------------------------------
+1. 确保依赖已安装，且 PyInstaller 已安装：
+      pip install pyinstaller
+2. 双击运行或在命令行执行：
+      build.bat
+   打包完成后，新的可执行文件会生成在：
+      dist/autodoor-behaviortree-<版本号>/
+
+
+五、推荐开发方式
+--------------------------------------------------------------------------------
+- 使用 VS Code 打开：
+    autodoor_behavior_tree.code-workspace
+  这样会自动加载推荐的工作区配置。
+- 主要业务代码在 bt_nodes/、bt_core/、bt_gui/、bt_utils/ 中。
+- 新增节点可参考 bt_nodes/actions/ 或 bt_nodes/conditions/ 中的现有实现。
+- 详细设计文档见 doc/ 目录。
+
+
+六、注意事项
+--------------------------------------------------------------------------------
+- 本项目面向 Windows 平台，部分功能依赖 Windows API 与驱动。
+- 运行时如果杀毒软件报毒，通常是 DD64.dll / IbInputSimulator.dll 等
+  输入模拟驱动被杀毒软件误报，请自行添加信任。
+- 修改代码前建议先确认 requirements.txt 中的依赖版本，尤其是：
+      onnxruntime==1.19.0
+  版本不一致可能导致 OCR 功能异常。
+
+
+七、联系方式
+--------------------------------------------------------------------------------
+详见 README.md 中的"联系作者"部分。

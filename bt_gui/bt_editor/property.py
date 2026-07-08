@@ -13,6 +13,7 @@ from bt_utils.log_manager import LogManager
 
 NODE_CONFIG_SCHEMAS = {
     "OCRConditionNode": [
+        {"key": "dpi_base", "label": "DPI基准", "type": "select", "options": ["100%", "125%", "150%", "175%"], "default": "125%"},
         {"key": "region_mode", "label": "区域选择方式", "type": "select", "options": ["fixed", "dynamic"], "display_names": {"fixed": "固定区域检测", "dynamic": "动态区域检测"}, "default": "fixed"},
         {"key": "region", "label": "检测区域", "type": "region", "hide_if": {"field": "region_mode", "value": "dynamic"}},
         {"key": "region_use_last_pos", "label": "锚点设置最近检测点", "type": "bool", "default": True, "hide_if": {"field": "region_mode", "value": "fixed"}},
@@ -26,6 +27,7 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "offset", "label": "坐标偏移", "type": "offset"},
     ],
     "ImageConditionNode": [
+        {"key": "dpi_base", "label": "DPI基准", "type": "select", "options": ["100%", "125%", "150%", "175%"], "default": "125%"},
         {"key": "region_mode", "label": "区域选择方式", "type": "select", "options": ["fixed", "dynamic"], "display_names": {"fixed": "固定区域检测", "dynamic": "动态区域检测"}, "default": "fixed"},
         {"key": "region", "label": "检测区域", "type": "region", "hide_if": {"field": "region_mode", "value": "dynamic"}},
         {"key": "region_use_last_pos", "label": "锚点设置最近检测点", "type": "bool", "default": True, "hide_if": {"field": "region_mode", "value": "fixed"}},
@@ -37,6 +39,7 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "offset", "label": "坐标偏移", "type": "offset"},
     ],
     "ColorConditionNode": [
+        {"key": "dpi_base", "label": "DPI基准", "type": "select", "options": ["100%", "125%", "150%", "175%"], "default": "125%"},
         {"key": "region_mode", "label": "区域选择方式", "type": "select", "options": ["fixed", "dynamic"], "display_names": {"fixed": "固定区域检测", "dynamic": "动态区域检测"}, "default": "fixed"},
         {"key": "region", "label": "检测区域", "type": "region", "hide_if": {"field": "region_mode", "value": "dynamic"}},
         {"key": "region_use_last_pos", "label": "锚点设置最近检测点", "type": "bool", "default": True, "hide_if": {"field": "region_mode", "value": "fixed"}},
@@ -49,6 +52,7 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "offset", "label": "坐标偏移", "type": "offset"},
     ],
     "NumberConditionNode": [
+        {"key": "dpi_base", "label": "DPI基准", "type": "select", "options": ["100%", "125%", "150%", "175%"], "default": "125%"},
         {"key": "region_mode", "label": "区域选择方式", "type": "select", "options": ["fixed", "dynamic"], "display_names": {"fixed": "固定区域检测", "dynamic": "动态区域检测"}, "default": "fixed"},
         {"key": "region", "label": "检测区域", "type": "region", "hide_if": {"field": "region_mode", "value": "dynamic"}},
         {"key": "region_use_last_pos", "label": "锚点设置最近检测点", "type": "bool", "default": True, "hide_if": {"field": "region_mode", "value": "fixed"}},
@@ -211,6 +215,19 @@ NODE_CONFIG_SCHEMAS = {
             ]
         }
     },
+    "RunProgramNode": [
+        {"key": "program_path", "label": "程序路径", "type": "browse", "width": 120, "filetypes": [("可执行文件", "*.exe *.bat *.cmd *.com"), ("所有文件", "*.*")]},
+        {"key": "arguments", "label": "命令行参数", "type": "text", "default": ""},
+        {"key": "working_dir", "label": "工作目录", "type": "folder", "width": 120},
+        {"key": "wait_complete", "label": "等待完成（默认不勾选）", "type": "bool", "default": False},
+        {"key": "timeout_ms", "label": "超时时间(ms,0不限)", "type": "number", "min": 0, "default": 0},
+    ],
+    "LogStatusNode": [
+    ],
+    "SetDisplayNode": [
+        {"key": "width", "label": "宽度(px)", "type": "number", "min": 800, "default": 1920},
+        {"key": "height", "label": "高度(px)", "type": "number", "min": 600, "default": 1080},
+    ],
     "ScriptNode": [
         {"key": "script_path", "label": "脚本路径", "type": "file", "width": 120, "filetypes": [("所有文件", "*.*")]},
         {"key": "convert_coords", "label": "", "type": "script_convert"},
@@ -239,7 +256,8 @@ NODE_CONFIG_SCHEMAS = {
     ],
     "TextInputNode": [
         {"key": "input_mode", "label": "输入模式", "type": "select", "options": ["文本提取值", "预设文本", "文件"], "default": "文本提取值"},
-        {"key": "preset_texts", "label": "预设文本(每行一条)", "type": "text_list", "hide_if": {"field": "input_mode", "value": ["文本提取值", "文件"]}},
+        {"key": "preset_texts", "label": "预设文本", "type": "text_list", "mode_key": "preset_mode", "hide_if": {"field": "input_mode", "value": ["文本提取值", "文件"]}},
+        {"key": "preset_mode", "label": "分隔方式", "type": "select", "options": ["每行一条", "编号分隔"], "default": "每行一条", "hide_if": {"field": "input_mode", "value": ["文本提取值", "文件"]}},
         {"key": "execution_mode", "label": "执行模式", "type": "select", "options": ["顺序", "随机"], "default": "顺序", "hide_if": {"field": "input_mode", "value": ["文本提取值", "文件"]}},
         {"key": "blackboard_key", "label": "黑板变量名", "type": "text", "default": "last_extracted_text", "hide_if": {"field": "input_mode", "value": ["预设文本", "文件"]}},
         {"key": "file_path", "label": "文件路径", "type": "file", "width": 120, "filetypes": [("文本文件", "*.txt"), ("所有文件", "*.*")], "hide_if": {"field": "input_mode", "value": ["文本提取值", "预设文本"]}},
@@ -249,6 +267,7 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "output_key", "label": "输出变量名", "type": "text", "default": "last_input_text", "hide_if": {"field": "save_input_text", "value": False}},
     ],
     "TextExtractNode": [
+        {"key": "dpi_base", "label": "DPI基准", "type": "select", "options": ["100%", "125%", "150%", "175%"], "default": "125%"},
         {"key": "region_mode", "label": "区域选择方式", "type": "select", "options": ["fixed", "dynamic"], "display_names": {"fixed": "固定区域检测", "dynamic": "动态区域检测"}, "default": "fixed"},
         {"key": "region", "label": "检测区域", "type": "region", "hide_if": {"field": "region_mode", "value": "dynamic"}},
         {"key": "region_use_last_pos", "label": "锚点设置最近检测点", "type": "bool", "default": True, "hide_if": {"field": "region_mode", "value": "fixed"}},
@@ -278,6 +297,11 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "childinterval_random", "label": "子节点间隔随机范围(±ms)", "type": "number", "min": 0, "default": 0},
         {"key": "continue_on_failure", "label": "失败后继续执行", "type": "bool", "default": False},
     ],
+    "GroupNode": [
+        {"key": "childinterval", "label": "子节点间隔(ms)", "type": "number", "min": 0, "default": 0},
+        {"key": "childinterval_random", "label": "子节点间隔随机范围(±ms)", "type": "number", "min": 0, "default": 0},
+        {"key": "continue_on_failure", "label": "失败后继续执行", "type": "bool", "default": False},
+    ],
     "SelectorNode": [
         {"key": "childinterval", "label": "子节点间隔(ms)", "type": "number", "min": 0, "default": 0},
         {"key": "childinterval_random", "label": "子节点间隔随机范围(±ms)", "type": "number", "min": 0, "default": 0},
@@ -285,8 +309,9 @@ NODE_CONFIG_SCHEMAS = {
     "StartNode": [
         {"key": "bind_window", "label": "绑定窗口", "type": "bool", "default": False},
         {"key": "window_title", "label": "窗口标题", "type": "window_select", "default": "", "hide_if": {"field": "bind_window", "value": False}},
+        {"key": "keep_foreground", "label": "运行期间窗口置顶", "type": "bool", "default": False, "hide_if": {"field": "bind_window", "value": False}},
+        {"key": "window_hwnd", "label": "窗口句柄", "type": "hwnd_select", "default": 0},
         {"key": "window_pid", "label": "窗口PID", "type": "number", "default": 0, "hidden": True},
-        {"key": "window_hwnd", "label": "窗口句柄", "type": "number", "default": 0, "hidden": True},
     ],
     "SubtreeNode": [
         {"key": "subtree_path", "label": "子树项目文件夹", "type": "folder", "width": 150},
@@ -623,9 +648,13 @@ class BoolField(FieldWidget):
     
     def set_value(self, value: Any):
         if value is None:
-            self.var.set(self._default)
+            v = self._default
         else:
-            self.var.set(bool(value))
+            v = bool(value)
+        old_cmd = self.switch.cget("command")
+        self.switch.configure(command="")
+        self.var.set(v)
+        self.switch.configure(command=old_cmd)
     
     def get_value(self) -> Any:
         return self.var.get()
@@ -978,6 +1007,81 @@ class FileField(FieldWidget):
     
     def get_value(self) -> Any:
         return self.full_path
+
+
+class FileBrowseField(FieldWidget):
+    """可编辑文本 + 浏览按钮，浏览直接返回绝对路径，不复制到项目"""
+
+    def __init__(self, master, label: str, key: str, on_change: Callable,
+                 filetypes: List[tuple] = None, width: int = None, **kwargs):
+        self.filetypes = filetypes or [("所有文件", "*.*")]
+        self._width = width
+        self._path = ""
+        super().__init__(master, label, key, on_change, **kwargs)
+        self._create_widget()
+
+    def _create_widget(self):
+        input_frame = ctk.CTkFrame(self, fg_color="transparent")
+        input_frame.pack(fill="x")
+
+        self.var = tk.StringVar(value="")
+        self.var.trace("w", lambda *a: self.on_change(self.key, self.var.get()))
+
+        entry_kwargs = {
+            "textvariable": self.var,
+            "font": Theme.get_font('sm'),
+            "height": Theme.DIMENSIONS['input_height'],
+            "fg_color": self._dark_colors['bg_tertiary'],
+            "border_color": self._dark_colors['border'],
+            "text_color": self._dark_colors['text_primary'],
+            "corner_radius": Theme.DIMENSIONS['button_corner_radius'],
+        }
+        if self._width:
+            entry_kwargs["width"] = self._width
+
+        self.entry = ctk.CTkEntry(input_frame, **entry_kwargs)
+        self.entry.pack(side="left", fill="x", expand=True, padx=(0, Theme.DIMENSIONS['spacing_xs']))
+
+        self.btn = ctk.CTkButton(
+            input_frame,
+            text="浏览",
+            font=Theme.get_font('sm'),
+            width=60,
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['primary'],
+            hover_color=self._dark_colors['primary_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+        )
+        self.btn.pack(side="right")
+        self.btn.bind("<ButtonRelease-1>", lambda e: self._browse())
+
+    def _browse(self):
+        initial_dir = None
+        if self._path and os.path.exists(self._path):
+            initial_dir = os.path.dirname(self._path)
+
+        file_path = filedialog.askopenfilename(
+            initialdir=initial_dir,
+            title="选择文件",
+            filetypes=self.filetypes
+        )
+        if not file_path:
+            return
+
+        self._path = file_path
+        self.var.set(file_path)
+        self.on_change(self.key, file_path)
+
+    def set_value(self, value: Any):
+        if value:
+            self._path = str(value)
+            self.var.set(str(value))
+        else:
+            self._path = ""
+            self.var.set("")
+
+    def get_value(self) -> Any:
+        return self._path
 
 
 class FolderField(FieldWidget):
@@ -2138,6 +2242,19 @@ class WindowSelectField(FieldWidget):
         self.clear_btn.pack(side="right", padx=(Theme.DIMENSIONS['spacing_xs'], 0))
         self.clear_btn.bind("<ButtonRelease-1>", lambda e: self._clear_selection())
 
+        self.enum_popup_btn = ctk.CTkButton(
+            input_frame,
+            text="枚举弹窗",
+            font=Theme.get_font('sm'),
+            width=80,
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['info'],
+            hover_color=self._dark_colors['info_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+        )
+        self.enum_popup_btn.pack(side="right", padx=(Theme.DIMENSIONS['spacing_xs'], 0))
+        self.enum_popup_btn.bind("<ButtonRelease-1>", lambda e: self._enum_popup())
+
         # 再放置下拉框，使用剩余空间
         self.combobox = ctk.CTkOptionMenu(
             input_frame,
@@ -2165,6 +2282,8 @@ class WindowSelectField(FieldWidget):
             hwnd = self._window_hwnd_map[choice]
             if hwnd:
                 self.on_change("window_hwnd", hwnd)
+                if self._update_other_field:
+                    self._update_other_field("window_hwnd", hwnd)
                 self.on_change("bind_window", True)
                 if self._update_other_field:
                     self._update_other_field("bind_window", True)
@@ -2182,7 +2301,125 @@ class WindowSelectField(FieldWidget):
         self.on_change(self.key, "")
         self.on_change("window_pid", 0)
         self.on_change("window_hwnd", 0)
+        if self._update_other_field:
+            self._update_other_field("window_hwnd", 0)
         LogManager.debug_print(f"[DEBUG] WindowSelectField: 清空窗口选择")
+
+    def _enum_popup(self):
+        from bt_utils.window_manager import WindowManager
+
+        current_value = self.var.get()
+        if not current_value or current_value not in self._window_pids:
+            messagebox.showwarning("提示", "请先在窗口标题下拉框中选中一个微信窗口")
+            return
+
+        pid = self._window_pids.get(current_value)
+        main_hwnd = self._window_hwnd_map.get(current_value, 0)
+
+        if not pid:
+            messagebox.showwarning("提示", "无法获取进程PID")
+            return
+
+        countdown_win = tk.Toplevel(self.app)
+        countdown_win.overrideredirect(True)
+        countdown_win.attributes("-topmost", True)
+        countdown_win.configure(bg="#1a1a2e")
+
+        screen_w = countdown_win.winfo_screenwidth()
+        screen_h = countdown_win.winfo_screenheight()
+        cw, ch = 420, 120
+        countdown_win.geometry(f"{cw}x{ch}+{(screen_w - cw) // 2}+{(screen_h - ch) // 2}")
+
+        tk.Label(
+            countdown_win, text="请在 5 秒内打开目标弹窗窗口...",
+            font=("Microsoft YaHei", 14), bg="#1a1a2e", fg="#FFFFFF"
+        ).pack(expand=True)
+
+        count_label = tk.Label(
+            countdown_win, text="5",
+            font=("Microsoft YaHei", 32, "bold"), bg="#1a1a2e", fg="#60A5FA"
+        )
+        count_label.pack(expand=True)
+
+        def do_enum():
+            countdown_win.destroy()
+            self.app.iconify()
+            self.app.update()
+
+            all_hwnds = WindowManager.find_all_windows_by_pid(pid)
+            candidates = []
+            for hwnd in all_hwnds:
+                if hwnd == main_hwnd:
+                    continue
+                info = WindowManager.get_window_info(hwnd)
+                if info.get('title', '').strip() or info.get('class_name', ''):
+                    candidates.append(info)
+
+            self.app.deiconify()
+
+            if not candidates:
+                messagebox.showinfo("提示", "未找到该进程下的其他可见窗口")
+                return
+
+            sel_win = tk.Toplevel(self.app)
+            sel_win.title("选择标签弹窗")
+            sel_win.attributes("-topmost", True)
+
+            sw = sel_win.winfo_screenwidth()
+            sh = sel_win.winfo_screenheight()
+            ww, wh = 550, min(450, 60 + len(candidates) * 38)
+            sel_win.geometry(f"{ww}x{wh}+{(sw - ww) // 2}+{(sh - wh) // 2}")
+
+            tk.Label(
+                sel_win,
+                text=f"找到 {len(candidates)} 个窗口（已排除主窗口），请选择：",
+                font=("Microsoft YaHei", 11), padx=10, pady=8
+            ).pack()
+
+            frame = tk.Frame(sel_win)
+            frame.pack(fill="both", expand=True, padx=10)
+
+            selected_var = tk.StringVar()
+
+            for info in candidates:
+                title = info.get('title', '') or '(无标题)'
+                cls = info.get('class_name', '')
+                hwnd = info.get('hwnd', 0)
+                display = f"[{title}]  类名: {cls}  句柄: 0x{hwnd:08X}"
+                rb = tk.Radiobutton(
+                    frame, text=display, variable=selected_var,
+                    value=str(hwnd), anchor="w", padx=5, pady=1
+                )
+                rb.pack(fill="x")
+
+            def confirm():
+                hwnd_str = selected_var.get()
+                if hwnd_str:
+                    hwnd = int(hwnd_str)
+                    info = next((c for c in candidates if c.get('hwnd') == hwnd), None)
+                    if info:
+                        title = info.get('title', '')
+                        cls = info.get('class_name', '')        # === 枚举弹窗功能 ↓
+                        self.var.set(title if title else f"0x{hwnd:08X}")
+                        self.on_change(self.key, title)
+                        self.on_change("window_hwnd", hwnd)
+                        self.on_change("window_class", cls)     # === 枚举弹窗功能 ↑
+                sel_win.destroy()
+
+            tk.Button(sel_win, text="确定", command=confirm).pack(pady=8)
+            sel_win.protocol("WM_DELETE_WINDOW", sel_win.destroy)
+
+            if candidates:
+                selected_var.set(str(candidates[0]['hwnd']))
+
+        def countdown(n):
+            if n <= 0:
+                do_enum()
+            else:
+                count_label.configure(text=str(n))
+                self.app.after(1000, lambda: countdown(n - 1))
+
+        countdown(5)
 
     def _refresh_window_list(self):
         from bt_utils.window_manager import WindowManager
@@ -2228,6 +2465,296 @@ class WindowSelectField(FieldWidget):
         value = self.var.get()
         LogManager.debug_print(f"[DEBUG] WindowSelectField.get_value: 返回 '{value}'")
         return value
+
+
+class HwndPickField(FieldWidget):
+    """窗口句柄拾取字段 - 拖动鼠标到目标窗口获取句柄"""
+
+    def __init__(self, master, label: str, key: str, on_change: Callable, app, update_other_field: Callable = None, **kwargs):
+        self.app = app
+        self._update_other_field = update_other_field
+        self._current_hwnd = 0
+        super().__init__(master, label, key, on_change, **kwargs)
+        self._create_widget()
+
+    def _create_widget(self):
+        input_frame = ctk.CTkFrame(self, fg_color="transparent")
+        input_frame.pack(fill="x")
+
+        self.var = tk.StringVar(value="0")
+
+        self.clear_btn = ctk.CTkButton(
+            input_frame,
+            text="清空",
+            font=Theme.get_font('sm'),
+            width=50,
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['info'],
+            hover_color=self._dark_colors['info_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+        )
+        self.clear_btn.pack(side="right")
+        self.clear_btn.bind("<ButtonRelease-1>", lambda e: self._clear())
+
+        self.pick_btn = ctk.CTkButton(
+            input_frame,
+            text="拾取",
+            font=Theme.get_font('sm'),
+            width=60,
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['primary'],
+            hover_color=self._dark_colors['primary_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+        )
+        self.pick_btn.pack(side="right", padx=(0, Theme.DIMENSIONS['spacing_xs']))
+        self.pick_btn.bind("<ButtonRelease-1>", lambda e: self._pick_window())
+
+        self.hwnd_entry = ctk.CTkEntry(
+            input_frame,
+            textvariable=self.var,
+            font=Theme.get_font('sm'),
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['bg_tertiary'],
+            border_color=self._dark_colors['border'],
+            text_color=self._dark_colors['text_secondary'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+        )
+        self.hwnd_entry.pack(side="left", fill="x", expand=True, padx=(0, Theme.DIMENSIONS['spacing_xs']))
+
+    def _pick_window(self):
+        from bt_utils.window_manager import WindowManager
+
+        try:
+            self.app.iconify()
+            self.app.update()
+
+            tip_win = tk.Toplevel(self.app)
+            tip_win.overrideredirect(True)
+            tip_win.attributes("-topmost", True)
+            tip_win.configure(bg="#1a1a2e")
+
+            tip_inner = tk.Frame(tip_win, bg="#1a1a2e", padx=10, pady=6)
+            tip_inner.pack()
+
+            tip_header = tk.Label(
+                tip_inner,
+                text="拖动鼠标到目标窗口上，点击左键拾取   [ESC取消]",
+                font=("Microsoft YaHei", 11, "bold"),
+                bg="#1a1a2e",
+                fg="#FFFFFF",
+            )
+            tip_header.pack(anchor="w")
+
+            info_label = tk.Label(
+                tip_inner,
+                text="移动鼠标中...",
+                font=("Microsoft YaHei", 10),
+                bg="#1a1a2e",
+                fg="#CCCCCC",
+                anchor="w",
+                justify="left",
+            )
+            info_label.pack(anchor="w", pady=(4, 0))
+
+            tip_win.withdraw()
+
+            highlight_win = tk.Toplevel(self.app)
+            highlight_win.overrideredirect(True)
+            highlight_win.attributes("-topmost", True)
+            highlight_win.attributes("-alpha", 0.45)
+            highlight_win.configure(bg="#3B82F6", highlightthickness=0)
+            highlight_win.withdraw()
+
+            hl_canvas = tk.Canvas(
+                highlight_win,
+                bg="#3B82F6",
+                highlightthickness=0,
+            )
+            hl_canvas.pack(fill="both", expand=True)
+
+            state = {
+                "last_hwnd": None,
+                "last_info_hwnd": None,
+                "active": True,
+                "button_was_pressed": False,
+                "last_rect": None,
+            }
+
+            def update_highlight(hwnd):
+                rect = WindowManager.get_window_rect(hwnd)
+                if not rect:
+                    highlight_win.withdraw()
+                    return
+                left, top, right, bottom = rect
+                w = right - left
+                h = bottom - top
+                if w <= 0 or h <= 0:
+                    highlight_win.withdraw()
+                    return
+
+                state["last_rect"] = rect
+                highlight_win.geometry(f"{w}x{h}+{left}+{top}")
+                hl_canvas.delete("all")
+
+                border_color = "#60A5FA"
+                border_w = 3
+                hl_canvas.create_rectangle(
+                    border_w // 2, border_w // 2,
+                    w - border_w // 2, h - border_w // 2,
+                    outline=border_color,
+                    width=border_w,
+                )
+                hl_canvas.create_rectangle(
+                    border_w + 1, border_w + 1,
+                    w - border_w - 1, h - border_w - 1,
+                    outline="#93C5FD",
+                    width=1,
+                    dash=(6, 4),
+                )
+                highlight_win.deiconify()
+
+            def poll():
+                if not state["active"]:
+                    return
+
+                try:
+                    if WindowManager.is_escape_pressed():
+                        cleanup()
+                        return
+
+                    if state["last_hwnd"]:
+                        highlight_win.withdraw()
+
+                    x, y = WindowManager.get_cursor_pos()
+                    hwnd = WindowManager.get_window_at_point(x, y)
+
+                    if hwnd and WindowManager.is_window_valid(hwnd):
+                        if hwnd != state["last_hwnd"]:
+                            update_highlight(hwnd)
+                            state["last_hwnd"] = hwnd
+                        else:
+                            highlight_win.deiconify()
+
+                        if hwnd != state["last_info_hwnd"]:
+                            info = WindowManager.get_window_info(hwnd)
+                            info_text = (
+                                f"句柄: 0x{hwnd:08X}\n"
+                                f"标题: {info['title'][:50]}\n"
+                                f"PID:  {info['pid']}\n"
+                                f"类名: {info['class_name']}"
+                            )
+                            info_label.configure(text=info_text)
+                            state["last_info_hwnd"] = hwnd
+
+                        tip_win.deiconify()
+                        tip_x = x + 20
+                        tip_y = y + 20
+                        tip_win.geometry(f"+{tip_x}+{tip_y}")
+                    else:
+                        state["last_hwnd"] = None
+                        state["last_rect"] = None
+                        state["last_info_hwnd"] = None
+                        info_label.configure(text="移动鼠标中...")
+                        tip_win.withdraw()
+
+                    left_pressed = WindowManager.is_left_button_pressed()
+                    if left_pressed and not state["button_was_pressed"]:
+                        state["button_was_pressed"] = True
+                        captured_hwnd = state["last_hwnd"]
+                        cleanup()
+                        if captured_hwnd and WindowManager.is_window_valid(captured_hwnd):
+                            self._apply_hwnd(captured_hwnd)
+                        return
+                    elif not left_pressed:
+                        state["button_was_pressed"] = False
+
+                    self.app.after(50, poll)
+
+                except Exception:
+                    cleanup()
+
+            def cleanup():
+                state["active"] = False
+                try:
+                    highlight_win.destroy()
+                except Exception:
+                    pass
+                try:
+                    tip_win.destroy()
+                except Exception:
+                    pass
+                try:
+                    self.app.deiconify()
+                except Exception:
+                    pass
+
+            self.app.after(50, poll)
+
+        except Exception as e:
+            try:
+                self.app.deiconify()
+            except Exception:
+                pass
+            LogManager.debug_print(f"[ERROR] HwndPickField._pick_window: {e}")
+            messagebox.showerror("错误", f"窗口拾取失败: {str(e)}")
+
+    def _apply_hwnd(self, hwnd: int):
+        from bt_utils.window_manager import WindowManager
+
+        self._current_hwnd = hwnd
+
+        info = WindowManager.get_window_info(hwnd)
+        display = f"0x{hwnd:08X} - {info['title'][:30]}"
+        self.var.set(display)
+        self.hwnd_entry.configure(text_color=self._dark_colors['text_primary'])
+
+        self.on_change(self.key, hwnd)
+        self.on_change("window_hwnd", hwnd)
+
+        if info['title']:
+            self.on_change("window_title", info['title'])
+            if self._update_other_field:
+                self._update_other_field("window_title", info['title'])
+        if info['pid']:
+            self.on_change("window_pid", info['pid'])
+            if self._update_other_field:
+                self._update_other_field("window_pid", info['pid'])
+
+        self.on_change("bind_window", True)
+        if self._update_other_field:
+            self._update_other_field("bind_window", True)
+
+        LogManager.debug_print(f"[DEBUG] HwndPickField: 拾取窗口 hwnd=0x{hwnd:08X}, title='{info['title']}', pid={info['pid']}")
+
+    def _clear(self):
+        self._current_hwnd = 0
+        self.var.set("")
+        self.hwnd_entry.configure(text_color=self._dark_colors['text_secondary'])
+        self.on_change(self.key, 0)
+        self.on_change("window_hwnd", 0)
+        self.on_change("window_pid", 0)
+        LogManager.debug_print("[DEBUG] HwndPickField: 清空窗口句柄")
+
+    def set_value(self, value: Any):
+        if value and int(value) > 0:
+            hwnd = int(value)
+            self._current_hwnd = hwnd
+            from bt_utils.window_manager import WindowManager
+            title = WindowManager.get_window_title(hwnd)
+            if title:
+                display = f"0x{hwnd:08X} - {title[:30]}"
+            else:
+                display = f"0x{hwnd:08X}"
+            self.var.set(display)
+            self.hwnd_entry.configure(text_color=self._dark_colors['text_primary'])
+            LogManager.debug_print(f"[DEBUG] HwndPickField.set_value: hwnd=0x{hwnd:08X}")
+        else:
+            self._current_hwnd = 0
+            self.var.set("")
+            self.hwnd_entry.configure(text_color=self._dark_colors['text_secondary'])
+
+    def get_value(self) -> Any:
+        return self._current_hwnd
 
 
 class ScriptConvertField(FieldWidget):
@@ -2541,6 +3068,8 @@ class ColorField(FieldWidget):
 
 class TextListField(FieldWidget):
     def __init__(self, master, label: str, key: str, on_change: Callable, **kwargs):
+        self._mode_key = kwargs.pop("mode_key", None)
+        self._property_panel = kwargs.pop("property_panel", None)
         super().__init__(master, label, key, on_change, **kwargs)
         self._create_widget()
 
@@ -2563,17 +3092,41 @@ class TextListField(FieldWidget):
     def validate_and_save(self):
         self._on_change()
 
+    def _get_mode(self):
+        try:
+            if self._property_panel and self._mode_key:
+                w = self._property_panel.widgets.get(self._mode_key)
+                if w and hasattr(w, 'get_value'):
+                    return w.get_value()
+        except Exception:
+            pass
+        return None
+
     def set_value(self, value: Any):
         self.textbox.delete("1.0", tk.END)
         if isinstance(value, list) and value:
-            self.textbox.insert("1.0", '\n'.join(str(v) for v in value))
+            mode = self._get_mode()
+            if mode == "编号分隔":
+                lines = [f"{i+1}.{v}" for i, v in enumerate(value)]
+            else:
+                lines = value
+            self.textbox.insert("1.0", '\n'.join(str(v) for v in lines))
         elif isinstance(value, str) and value:
             self.textbox.insert("1.0", value)
 
     def get_value(self) -> Any:
+        import re
         text = self.textbox.get("1.0", tk.END).strip()
         if not text:
             return []
+        if re.search(r'^\d+\.', text, re.MULTILINE):
+            parts = re.split(r'\n(?=\d+\.)', text)
+            result = []
+            for part in parts:
+                stripped = re.sub(r'^\d+\.\s*', '', part.strip(), count=1)
+                if stripped:
+                    result.append(stripped)
+            return result
         return [line.strip() for line in text.split('\n') if line.strip()]
 
 
@@ -3292,6 +3845,12 @@ class PropertyPanel(ctk.CTkFrame):
                 app=self.app,
                 width=field.get("width")
             )
+        elif field_type == "browse":
+            field_widget = FileBrowseField(
+                container, label, key, self._on_field_change,
+                filetypes=field.get("filetypes", [("所有文件", "*.*")]),
+                width=field.get("width")
+            )
         elif field_type == "folder":
             field_widget = FolderField(
                 container, label, key, self._on_field_change,
@@ -3317,10 +3876,14 @@ class PropertyPanel(ctk.CTkFrame):
             field_widget = RegionOffsetField(container, label, key, self._on_field_change, self.app)
         elif field_type == "window_select":
             field_widget = WindowSelectField(container, label, key, self._on_field_change, self.app, self._update_widget_value)
+        elif field_type == "hwnd_select":
+            field_widget = HwndPickField(container, label, key, self._on_field_change, self.app, self._update_widget_value)
         elif field_type == "script_convert":
             field_widget = ScriptConvertField(container, label, key, self._on_field_change, self.app)
         elif field_type == "text_list":
-            field_widget = TextListField(container, label, key, self._on_field_change)
+            field_widget = TextListField(container, label, key, self._on_field_change,
+                                         mode_key=field.get("mode_key"),
+                                         property_panel=self)
         elif field_type == "variable_select":
             field_widget = VariableSelectField(container, label, key, self._on_field_change)
         elif field_type == "tree_select":
@@ -3429,9 +3992,6 @@ class PropertyPanel(ctk.CTkFrame):
                 self._create_field(field_def, value, group_frame)
 
     def _on_field_change(self, key: str, value: Any):
-        if self._is_loading:
-            return
-
         if key in self._hidden_values:
             self._hidden_values[key] = value
 

@@ -406,23 +406,10 @@ class SequenceNode(CompositeNode):
                 return NodeStatus.RUNNING
 
             if status == NodeStatus.FAILURE:
-                if self.continue_on_failure:
-                    has_failure = True
-                    self.current_index += 1
-                    self._last_child_finish_time = context.elapsed_time * 1000
-                    continue
-                else:
-                    LogManager.debug_print(
-                        f"[DEBUG] SequenceNode._tick_internal: '{self.name}' "
-                        f"FAILURE branch: setting current_index=0 (was {self.current_index})"
-                    )
-                    self.current_index = 0
-                    LogManager.instance().log_failure(
-                        node_type="顺序节点",
-                        node_name=self.name,
-                        reason=f"子节点 '{child.name}' 执行失败"
-                    )
-                    return NodeStatus.FAILURE
+                has_failure = True
+                self.current_index += 1
+                self._last_child_finish_time = context.elapsed_time * 1000
+                continue
 
             self.current_index += 1
             self._last_child_finish_time = context.elapsed_time * 1000
@@ -442,6 +429,83 @@ class SequenceNode(CompositeNode):
             )
         
         return NodeStatus.FAILURE if has_failure else NodeStatus.SUCCESS
+
+    def reset(self, reset_counters: bool = True) -> None:
+        super().reset(reset_counters)
+        self._last_child_finish_time = None
+
+    def _reset_for_retry(self) -> None:
+        super()._reset_for_retry()
+        self._last_child_finish_time = None
+
+
+class GroupNode(CompositeNode):
+    NODE_TYPE = "GroupNode"
+
+    def __init__(self, node_id: str = None, config: NodeConfig = None):
+        super().__init__(node_id, config)
+        self.continue_on_failure = self.config.get_bool("continue_on_failure", False)
+        self.child_interval = self.config.get_int("childinterval", 0)
+        self.child_interval_random = self.config.get_int("childinterval_random", 0)
+        self._last_child_finish_time = None
+
+    def tick(self, context: "ExecutionContext") -> NodeStatus:
+        return self._execute_with_decorators(context, self._tick_internal)
+
+    def _tick_internal(self, context: "ExecutionContext") -> NodeStatus:
+        if not self.children:
+            LogManager.instance().log_failure(
+                node_type="组合组",
+                node_name=self.name,
+                reason="没有子节点"
+            )
+            return NodeStatus.FAILURE
+
+        if self.current_index >= len(self.children):
+            self.current_index = 0
+
+        if self.current_index == 0:
+            self.status = NodeStatus.RUNNING
+            context.notify_node_status(self.node_id, "running")
+
+        while self.current_index < len(self.children):
+            child = self.children[self.current_index]
+
+            if not child.config.enabled:
+                self.current_index += 1
+                continue
+
+            if self.child_interval > 0 and self._last_child_finish_time is not None:
+                current_time = context.elapsed_time * 1000
+                if current_time - self._last_child_finish_time < self.child_interval:
+                    return NodeStatus.RUNNING
+
+            status = child.tick(context)
+
+            if status == NodeStatus.RUNNING:
+                return NodeStatus.RUNNING
+
+            if status == NodeStatus.FAILURE:
+                if self.continue_on_failure:
+                    self._last_child_finish_time = context.elapsed_time * 1000
+                    self.current_index += 1
+                    continue
+                else:
+                    LogManager.instance().log_failure(
+                        node_type="组合组",
+                        node_name=self.name,
+                        reason=f"子节点 '{child.name}' 执行失败"
+                    )
+                    return NodeStatus.FAILURE
+
+            self._last_child_finish_time = context.elapsed_time * 1000
+            self.current_index += 1
+
+        LogManager.instance().log_success(
+            node_type="组合组",
+            node_name=self.name
+        )
+        return NodeStatus.SUCCESS
 
     def reset(self, reset_counters: bool = True) -> None:
         super().reset(reset_counters)
@@ -944,18 +1008,12 @@ class ConditionNode(Node):
         return (255, 0, 0)
 
     def _apply_offset(self, position: tuple) -> tuple:
-        """应用坐标偏移
-
-        Args:
-            position: 原始位置 (x, y)
-
-        Returns:
-            tuple: 偏移后的位置
-        """
         if position is None:
             return None
-
         offset = self._get_offset()
+        ratio = self._get_dpi_scale_ratio()
+        if ratio != 1.0:
+            offset = (int(offset[0] * ratio), int(offset[1] * ratio))
         return (position[0] + offset[0], position[1] + offset[1])
 
     def _get_offset(self) -> tuple:
@@ -970,6 +1028,12 @@ class ConditionNode(Node):
             offset_x = self.config.get_int("offset_x", 0)
             offset_y = self.config.get_int("offset_y", 0)
             return (offset_x, offset_y)
+
+    def _get_dpi_scale_ratio(self) -> float:
+        dpi_base = int(self.config.get("dpi_base", "125%").replace("%", ""))
+        from bt_utils.dpi_awareness import get_dpi_scale
+        current = get_dpi_scale()
+        return current / (dpi_base / 100.0)
 
     def _save_position(self, context, position: tuple):
         """保存位置到黑板（应用偏移）
@@ -1057,7 +1121,7 @@ class ConditionNode(Node):
             f"consecutive_same={self._consecutive_same_count}"
         )
 
-        if status == NodeStatus.SUCCESS and self.children:
+        if status != NodeStatus.RUNNING and self.children:
             context.notify_node_status(self.node_id, "success")
             self._children_running = True
             return self._execute_children(context)
@@ -1102,9 +1166,12 @@ class ConditionNode(Node):
             else:
                 region = self._parse_region(self.config.get("region", None))
 
-            # 差异截图优化：无region时尝试使用上次检测位置附近的区域
             if region is None:
                 region = self._get_fallback_region(context)
+            
+            ratio = self._get_dpi_scale_ratio()
+            if region and ratio != 1.0:
+                region = (int(region[0]*ratio), int(region[1]*ratio), int(region[2]*ratio), int(region[3]*ratio))
 
             return context.get_screenshot(region)
         except Exception as e:
@@ -1115,12 +1182,15 @@ class ConditionNode(Node):
     def _get_effective_region(self, context):
         region_mode = self.config.get("region_mode", "fixed")
         if region_mode == "dynamic":
-            return self._resolve_dynamic_region(context)
+            region = self._resolve_dynamic_region(context)
         else:
             region = self._parse_region(self.config.get("region", None))
             if region is None:
                 region = self._get_fallback_region(context)
-            return region
+        ratio = self._get_dpi_scale_ratio()
+        if region and ratio != 1.0:
+            region = (int(region[0]*ratio), int(region[1]*ratio), int(region[2]*ratio), int(region[3]*ratio))
+        return region
 
     def _get_fallback_region(self, context):
         """当未配置region时，尝试使用上次检测位置附近的区域作为回退
@@ -1243,7 +1313,7 @@ class ActionNode(Node):
                     status = self._execute_action(context)
                     self.status = status
 
-                    if status == NodeStatus.SUCCESS and self.children:
+                    if status != NodeStatus.RUNNING and self.children:
                         context.notify_node_status(self.node_id, "success")
                         self._children_running = True
                         return self._execute_children(context)
@@ -1277,7 +1347,7 @@ class ActionNode(Node):
             
             self.status = status
 
-            if status == NodeStatus.SUCCESS and self.children:
+            if status != NodeStatus.RUNNING and self.children:
                 context.notify_node_status(self.node_id, "success")
                 self._children_running = True
                 return self._execute_children(context)
@@ -1288,7 +1358,7 @@ class ActionNode(Node):
             status = self._execute_action(context)
             self.status = status
 
-            if status == NodeStatus.SUCCESS and self.children:
+            if status != NodeStatus.RUNNING and self.children:
                 context.notify_node_status(self.node_id, "success")
                 self._children_running = True
                 return self._execute_children(context)
@@ -1354,7 +1424,8 @@ class StartNode(CompositeNode):
 
         bind_window = self.config.get_bool("bind_window", False)
         window_title = self.config.get("window_title", "")
-        if bind_window and window_title and not self._window_bound:
+        window_class = self.config.get("window_class", "")  # === 枚举弹窗功能
+        if bind_window and (window_title or window_class) and not self._window_bound:
             self._bind_window_to_context(context)
             self._window_bound = True
 
@@ -1425,15 +1496,28 @@ class StartNode(CompositeNode):
         window_hwnd = self.config.get_int("window_hwnd", 0)
         window_pid = self.config.get_int("window_pid", 0)
         window_title = self.config.get("window_title", "")
+        window_class = self.config.get("window_class", "")  # === 枚举弹窗功能
+
+        # === 枚举弹窗功能 ↓（跨电脑兼容）
+        if window_class:
+            current_hwnd = context.get_bound_window()
+            if current_hwnd:
+                current_pid = WindowManager.get_window_pid(current_hwnd)
+                if current_pid:
+                    window_pid = current_pid
+        # === 枚举弹窗功能 ↑
 
         hwnd, find_method = WindowManager.find_window_smart_with_hwnd(
             hwnd=window_hwnd if window_hwnd > 0 else 0,
             pid=window_pid if window_pid > 0 else None,
-            title_keyword=window_title
+            title_keyword=window_title,
+            window_class=window_class  # === 枚举弹窗功能
         )
 
         if hwnd:
             context.bind_window(hwnd)
+            if self.config.get_bool("keep_foreground", False):
+                context._keep_foreground = True
             rect = WindowManager.get_window_rect(hwnd)
             title = WindowManager.get_window_title(hwnd)
             actual_pid = WindowManager.get_window_pid(hwnd)
@@ -1456,7 +1540,8 @@ class StartNode(CompositeNode):
                 reason=f"未找到窗口: hwnd={window_hwnd}, pid={window_pid}, title='{window_title}'"
             )
             LogManager.debug_print(f"[DEBUG] StartNode 未找到窗口: hwnd={window_hwnd}, pid={window_pid}, title='{window_title}'")
-    
+
+
     def _reset_for_retry(self) -> None:
         """重试时重置状态（保留重试计数器）"""
         super()._reset_for_retry()
