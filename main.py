@@ -2,7 +2,9 @@ import sys
 import os
 import traceback
 
-LOG_DIR = os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "autodoor_behavior_tree")
+from bt_utils.brand_manager import user_data_dir
+_USER_DATA_DIR = user_data_dir()
+LOG_DIR = os.path.join(os.path.expanduser("~"), "AppData", "Roaming", _USER_DATA_DIR)
 try:
     os.makedirs(LOG_DIR, exist_ok=True)
 except Exception:
@@ -74,19 +76,23 @@ def load_version():
     return "1.2.2a"
 
 def load_github_info():
-    """从build_info.json加载GitHub仓库信息"""
-    build_info_file = get_resource_path('bt_utils/build_info.json')
+    """从build_info.json或brand.json加载GitHub仓库信息"""
+    from bt_utils.brand_manager import get
+    owner = get("repo_owner", "")
+    repo = get("repo_name", "")
+    if owner and repo:
+        return owner, repo
     
+    build_info_file = get_resource_path('bt_utils/build_info.json')
     if os.path.exists(build_info_file):
         try:
             with open(build_info_file, 'r', encoding='utf-8') as f:
                 build_info = json.load(f)
                 github = build_info.get('github', {})
-                return github.get('owner', 'wdhq4261761'), github.get('repo', 'autodoor_behavior_tree')
+                return github.get('owner', ''), github.get('repo', '')
         except Exception:
             pass
-    
-    return 'wdhq4261761', 'autodoor_behavior_tree'
+    return '', ''
 
 VERSION = load_version()
 write_log(f"Version loaded: {VERSION}")
@@ -283,18 +289,16 @@ def main():
     
     from bt_utils.version_checker import VersionChecker
     github_owner, github_repo = load_github_info()
-    version_checker = VersionChecker(
-        app=app,
-        owner=github_owner,
-        repo=github_repo,
-        current_version=VERSION
-    )
-    
-    app._version_checker = version_checker
-    
-    version_checker.check_force_update()
-    
-    version_checker.start_auto_check(app)
+    if github_owner and github_repo:
+        version_checker = VersionChecker(
+            app=app,
+            owner=github_owner,
+            repo=github_repo,
+            current_version=VERSION
+        )
+        app._version_checker = version_checker
+        version_checker.check_force_update()
+        version_checker.start_auto_check(app)
     
     app.mainloop()
 

@@ -1,0 +1,76 @@
+Third-Party Licenses
+=====================
+
+This product contains the following third-party open-source components.
+Their licenses and copyright notices are provided below.
+
+---
+
+## CustomTkinter
+License: MIT License
+Copyright (c) 2022 Tom Schimansky
+
+## Pillow
+License: Historical Permission Notice
+Copyright (c) 1995-2023 Fredrik Lundh, Jeffrey A. Clark, and contributors.
+
+## PyAutoGUI
+License: BSD 3-Clause License
+Copyright (c) 2014, Al Sweigart
+
+## RapidOCR
+License: Apache 2.0 License
+Copyright (c) 2022 RapidAI
+
+## ONNX Runtime
+License: MIT License
+Copyright (c) Microsoft Corporation
+
+## OpenCV (cv2)
+License: Apache 2.0 License
+Copyright (c) OpenCV team
+
+## NumPy
+License: BSD 3-Clause License
+Copyright (c) 2005-2023, NumPy Developers
+
+## Pygame
+License: LGPL 2.1
+Copyright (c) pygame community
+
+## Pynput
+License: LGPL 3.0
+Copyright (c) 2014-2023, Moses Palmér
+
+## Requests
+License: Apache 2.0 License
+Copyright (c) 2019 Kenneth Reitz
+
+## PyYAML
+License: MIT License
+Copyright (c) 2017-2021 Ingy döt Net
+
+## PyWin32
+License: Python Software Foundation License
+Copyright (c) Microsoft Corporation
+
+## CustomTkinter
+License: MIT License
+Copyright (c) 2022 Tom Schimansky
+
+## ImageHash
+License: BSD 2-Clause License
+Copyright (c) 2013, Johannes Buchner
+
+## PyPerclip
+License: BSD 3-Clause License
+Copyright (c) 2016, Al Sweigart
+
+## Screeninfo
+License: MIT License
+Copyright (c) 2018 Robert Gilham
+
+---
+
+For full license texts, please refer to the individual package documentation
+or run: pip-licenses --format=markdown

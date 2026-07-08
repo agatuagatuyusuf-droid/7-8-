@@ -62,3 +62,35 @@ build_cython/
 
 # Worktrees
 .worktrees/
+
+# C# build output
+csharp/**/bin/
+csharp/**/obj/
+
+# Commercial build artifacts
+*.spec
+dist/
+build/
+
+# Commercial config
+legal/*.json
+legal/*.pem
+legal/*.key
+
+# Goal state
+.goal/*.json
+
+# License cache (local)
+license/cache.dat
+license/*.key
+
+# Binary / archive builds
+*.zip
+*.7z
+*.rar
+*.exe
+*.msi
+*.dmg
+
+# Spec backups
+*.spec.bak

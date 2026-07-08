@@ -15,10 +15,15 @@ from bt_utils.log_manager import LogManager
 def _get_app_title() -> str:
     """获取应用标题，包含版本号"""
     try:
+        from bt_utils.brand_manager import product_name
         from main import VERSION
-        return f"autodoor - 行为树 {VERSION}"
+        return f"{product_name()} {VERSION}"
     except ImportError:
-        return "autodoor - 行为树"
+        try:
+            from bt_utils.brand_manager import product_name
+            return product_name()
+        except ImportError:
+            return "AutoDoor Pro"
 
 
 class BehaviorTreeApp(ctk.CTk):
@@ -119,10 +124,14 @@ class BehaviorTreeApp(ctk.CTk):
         
         if project_name:
             try:
-                from main import VERSION
-                self.title(f"autodoor - 行为树 {VERSION} - {project_name}")
+                from bt_utils.brand_manager import product_name
+                try:
+                    from main import VERSION
+                    self.title(f"{product_name()} {VERSION} - {project_name}")
+                except ImportError:
+                    self.title(f"{product_name()} - {project_name}")
             except ImportError:
-                self.title(f"autodoor - 行为树 - {project_name}")
+                self.title(_get_app_title())
         else:
             self.title(_get_app_title())
     
@@ -178,7 +187,7 @@ class BehaviorTreeApp(ctk.CTk):
         
         ctk.CTkLabel(
             left_section,
-            text='AutoDoor Behavior Tree',
+            text='AutoDoor Pro',
             font=Theme.get_font('lg'),
             text_color=self._dark_colors['text_primary']
         ).pack(side='left')

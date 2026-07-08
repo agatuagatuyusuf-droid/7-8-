@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ========================================
-echo AutoDoor Behavior Tree - Unified Build
+echo AutoDoor Pro - Commercial Build
 echo ========================================
 echo.
 
@@ -46,6 +46,6 @@ if errorlevel 1 (
 echo.
 echo ========================================
 echo Build completed successfully!
-echo Output: dist\autodoor-behaviortree-*\
+echo Output: dist\autodoor-pro-*\
 echo ========================================
 pause

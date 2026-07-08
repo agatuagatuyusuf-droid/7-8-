@@ -34,12 +34,18 @@ from bt_utils.global_hotkey import GlobalHotkeyManager
 
 def _get_user_data_dir() -> Path:
     """获取平台适用的用户数据目录"""
+    try:
+        from bt_utils.brand_manager import user_data_dir
+        data_dir_name = user_data_dir()
+    except Exception:
+        data_dir_name = "AutoDoorPro"
+    
     if platform.system() == "Windows":
         base = Path(os.environ.get("APPDATA", os.path.expanduser("~")))
     else:
         base = Path.home()
     
-    data_dir = base / "autodoor_behavior_tree" / "data"
+    data_dir = base / data_dir_name / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir
 

@@ -19,7 +19,6 @@
 
 ## 项目信息
 
-- **GitHub仓库**: <https://github.com/wdhq4261761/autodoor_behavior_tree>
 - **项目类型**: Windows平台可视化行为树自动化工具
 
 ***

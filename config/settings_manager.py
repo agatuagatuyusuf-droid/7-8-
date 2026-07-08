@@ -183,32 +183,30 @@ class SettingsManager:
     def _get_default_config_dir(self) -> str:
         """获取默认配置目录
         
-        Windows: %APPDATA%/autodoor_behavior_tree
-        Linux/Mac: ~/.config/autodoor_behavior_tree
+        Windows: %APPDATA%/AutoDoorPro
         """
+        from bt_utils.brand_manager import user_data_dir
+        data_dir_name = user_data_dir()
         if os.name == 'nt':
             base_dir = os.environ.get('APPDATA', os.path.expanduser('~'))
         else:
             base_dir = os.environ.get('XDG_CONFIG_HOME',
                                        os.path.join(os.path.expanduser('~'), '.config'))
         
-        return os.path.join(base_dir, "autodoor_behavior_tree")
+        return os.path.join(base_dir, data_dir_name)
     
     @staticmethod
     def get_default_workspace_path() -> str:
-        """获取默认workspace路径
-        
-        默认保存在系统持久化目录下，确保更换客户端不会丢失数据。
-        Windows: %APPDATA%/autodoor_behavior_tree/workspace
-        Linux/Mac: ~/.config/autodoor_behavior_tree/workspace
-        """
+        """获取默认workspace路径"""
+        from bt_utils.brand_manager import user_data_dir
+        data_dir_name = user_data_dir()
         if os.name == 'nt':
             base_dir = os.environ.get('APPDATA', os.path.expanduser('~'))
         else:
             base_dir = os.environ.get('XDG_CONFIG_HOME',
                                        os.path.join(os.path.expanduser('~'), '.config'))
         
-        return os.path.join(base_dir, "autodoor_behavior_tree", "workspace")
+        return os.path.join(base_dir, data_dir_name, "workspace")
     
     def _load_settings(self) -> None:
         """加载设置"""

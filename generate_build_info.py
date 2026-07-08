@@ -56,6 +56,17 @@ def generate_version_info():
         "enable_debug_mode": build_type != "release"
     }
     
+    try:
+        from bt_utils.brand_manager import load_brand
+        brand = load_brand()
+    except Exception:
+        brand = {}
+    
+    github_default = {
+        "owner": brand.get("repo_owner", ""),
+        "repo": brand.get("repo_name", "")
+    } if brand.get("repo_owner") else config.get("github", {"owner": "", "repo": ""})
+    
     build_info = {
         "version": config.get("version", "1.0.0"),
         "expire_date": config.get("expire_date", "2099-12-31"),
@@ -64,20 +75,17 @@ def generate_version_info():
         "build_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "git_commit": get_git_commit(),
         
-        "github": config.get("github", {
-            "owner": "wdhq4261761",
-            "repo": "autodoor_behavior_tree"
-        }),
+        "github": config.get("github", github_default),
         
         "update_links": config.get("update_links", {
-            "tool_intro": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink",
-            "download": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink",
-            "changelog": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink"
+            "tool_intro": brand.get("docs_url", ""),
+            "download": brand.get("download_url", ""),
+            "changelog": brand.get("support_url", "")
         }),
         
         "app_info": config.get("app_info", {
-            "name": "AutoDoor Behavior Tree",
-            "name_cn": "AutoDoor 行为树系统"
+            "name": brand.get("product_name_en", "AutoDoor Pro"),
+            "name_cn": brand.get("product_name_cn", "AutoDoor 自动化系统")
         }),
         
         "debug": debug_config

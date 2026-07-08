@@ -18,14 +18,14 @@
     "build_type": "beta",
     
     "github": {
-        "owner": "wdhq4261761",
-        "repo": "autodoor_behavior_tree"
+        "owner": "your-owner",
+        "repo": "your-repo"
     },
     
     "update_links": {
-        "tool_intro": "https://my.feishu.cn/wiki/...",
-        "download": "https://my.feishu.cn/wiki/...",
-        "changelog": "https://my.feishu.cn/wiki/..."
+        "tool_intro": "https://your-docs-url",
+        "download": "https://your-download-url",
+        "changelog": "https://your-changelog-url"
     },
     
     "app_info": {
@@ -52,8 +52,8 @@
 
 | 配置项 | 类型 | 说明 | 示例 |
 |--------|------|------|------|
-| github.owner | string | GitHub 仓库所有者 | "wdhq4261761" |
-| github.repo | string | GitHub 仓库名称 | "autodoor_behavior_tree" |
+| github.owner | string | GitHub 仓库所有者 | "your-owner" |
+| github.repo | string | GitHub 仓库名称 | "your-repo" |
 
 #### 更新链接配置
 
@@ -136,14 +136,14 @@ build_standard.bat
     "build_type": "beta",
     
     "github": {
-        "owner": "wdhq4261761",
-        "repo": "autodoor_behavior_tree"
+        "owner": "your-owner",
+        "repo": "your-repo"
     },
     
     "update_links": {
-        "tool_intro": "https://my.feishu.cn/wiki/...",
-        "download": "https://my.feishu.cn/wiki/...",
-        "changelog": "https://my.feishu.cn/wiki/..."
+        "tool_intro": "https://your-docs-url",
+        "download": "https://your-download-url",
+        "changelog": "https://your-changelog-url"
     },
     
     "app_info": {
@@ -163,14 +163,14 @@ build_standard.bat
     "build_type": "release",
     
     "github": {
-        "owner": "wdhq4261761",
-        "repo": "autodoor_behavior_tree"
+        "owner": "your-owner",
+        "repo": "your-repo"
     },
     
     "update_links": {
-        "tool_intro": "https://my.feishu.cn/wiki/...",
-        "download": "https://my.feishu.cn/wiki/...",
-        "changelog": "https://my.feishu.cn/wiki/..."
+        "tool_intro": "https://your-docs-url",
+        "download": "https://your-download-url",
+        "changelog": "https://your-changelog-url"
     },
     
     "app_info": {
@@ -190,14 +190,14 @@ build_standard.bat
     "build_type": "release",
     
     "github": {
-        "owner": "wdhq4261761",
-        "repo": "autodoor_behavior_tree"
+        "owner": "your-owner",
+        "repo": "your-repo"
     },
     
     "update_links": {
-        "tool_intro": "https://my.feishu.cn/wiki/...",
-        "download": "https://my.feishu.cn/wiki/...",
-        "changelog": "https://my.feishu.cn/wiki/..."
+        "tool_intro": "https://your-docs-url",
+        "download": "https://your-download-url",
+        "changelog": "https://your-changelog-url"
     },
     
     "app_info": {

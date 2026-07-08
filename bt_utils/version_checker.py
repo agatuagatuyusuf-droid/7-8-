@@ -30,25 +30,37 @@ def load_build_info():
         except Exception:
             pass
     
+    try:
+        from bt_utils.brand_manager import get
+        return {
+            "version": get("version", "1.0.0"),
+            "expire_date": "2099-12-31",
+            "force_update": False,
+            "build_type": "release",
+            "update_links": {
+                "tool_intro": get("docs_url", ""),
+                "download": get("download_url", ""),
+                "changelog": get("support_url", "")
+            }
+        }
+    except Exception:
+        pass
+    
     return {
         "version": "1.0.0",
         "expire_date": "2099-12-31",
         "force_update": False,
         "build_type": "release",
-        "update_links": {
-            "tool_intro": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink",
-            "download": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink",
-            "changelog": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink"
-        }
+        "update_links": {"tool_intro": "", "download": "", "changelog": ""}
     }
 
 
 _build_info = load_build_info()
 
 UPDATE_LINKS = _build_info.get('update_links', {
-    "tool_intro": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink",
-    "download": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink",
-    "changelog": "https://my.feishu.cn/wiki/Z2AAwPevRiavmwkFf3jcL0Emnye?from=from_copylink"
+    "tool_intro": "",
+    "download": "",
+    "changelog": ""
 })
 
 
@@ -169,8 +181,13 @@ class VersionChecker:
             settings = SettingsManager.get_instance()
             return settings.config_file
         except Exception:
+            try:
+                from bt_utils.brand_manager import user_data_dir
+                data_dir_name = user_data_dir()
+            except Exception:
+                data_dir_name = "AutoDoorPro"
             config_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 
-                                     "autodoor_behavior_tree")
+                                     data_dir_name)
             os.makedirs(config_dir, exist_ok=True)
             return os.path.join(config_dir, "config.json")
     

@@ -1,0 +1,12 @@
+NOTICE
+======
+
+AutoDoor Pro
+Copyright (c) Sky Ocean. All rights reserved.
+
+This software includes third-party open-source components.
+The copyright and license notices of these components are
+listed in THIRD_PARTY_LICENSES.txt.
+
+This product is a commercial closed-source distribution.
+Unauthorized copying, distribution, or modification is prohibited.
