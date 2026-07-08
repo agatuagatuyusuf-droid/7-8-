@@ -17,18 +17,25 @@ class CoreProcessManager:
     def _find_core_service() -> str:
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-        # Priority 1: PyInstaller dist directory
+        # Priority 1: PyInstaller bundle parent /CoreService
+        if hasattr(sys, 'frozen'):
+            bundle_dir = os.path.dirname(sys.executable)
+            bundle_core = os.path.join(bundle_dir, "CoreService", "AutoDoor.CoreService.exe")
+            if os.path.exists(bundle_core):
+                return bundle_core
+
+        # Priority 2: PyInstaller _MEIPASS
         if hasattr(sys, '_MEIPASS'):
             dist_core = os.path.join(sys._MEIPASS, "CoreService", "AutoDoor.CoreService.exe")
             if os.path.exists(dist_core):
                 return dist_core
 
-        # Priority 2: Project root / CoreService
+        # Priority 3: Project root / CoreService
         root_core = os.path.join(base, "CoreService", "AutoDoor.CoreService.exe")
         if os.path.exists(root_core):
             return root_core
 
-        # Priority 3: C# publish directory
+        # Priority 4: C# publish directory
         publish_core = os.path.join(base, "csharp", "AutoDoor.CoreService",
                                      "src", "AutoDoor.CoreService", "bin", "Release",
                                      "net8.0", "win-x64", "publish",
@@ -36,14 +43,14 @@ class CoreProcessManager:
         if os.path.exists(publish_core):
             return publish_core
 
-        # Priority 4: C# build directory
+        # Priority 5: C# build directory
         build_core = os.path.join(base, "csharp", "AutoDoor.CoreService",
                                    "src", "AutoDoor.CoreService", "bin", "Release",
                                    "net8.0", "win-x64", "AutoDoor.CoreService.exe")
         if os.path.exists(build_core):
             return build_core
 
-        # Priority 5: Current working directory / CoreService
+        # Priority 6: Current working directory / CoreService
         cwd_core = os.path.join(os.getcwd(), "CoreService", "AutoDoor.CoreService.exe")
         if os.path.exists(cwd_core):
             return cwd_core

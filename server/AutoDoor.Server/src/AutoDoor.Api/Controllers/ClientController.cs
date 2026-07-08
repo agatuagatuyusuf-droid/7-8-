@@ -26,6 +26,9 @@ public class ClientController : ControllerBase
     [HttpPost("activate")]
     public async Task<IActionResult> Activate([FromBody] ActivateRequest request)
     {
+        if (!request.IsValid())
+            return Ok(new { success = false, error_code = "INVALID_INPUT", message = "activation_code and machine_code must not be empty" });
+
         var activationCode = await _db.ActivationCodes
             .FirstOrDefaultAsync(a => a.Code == request.ActivationCode && !a.Used);
 
@@ -76,43 +79,34 @@ public class ClientController : ControllerBase
 
         await _db.SaveChangesAsync();
 
-        var ticket = new
+        var ticketFields = new Dictionary<string, object?>
         {
-            ticket_version = 1,
-            product_id = product.ProductId,
-            license_id = license.LicenseId,
-            user_id = userCode,
-            machine_code = request.MachineCode,
-            edition = license.Edition,
-            features = productFeatures.Select(f => f.FeatureCode).ToList(),
-            issued_at = license.IssuedAt.ToString("o"),
-            expire_at = license.ExpireAt.ToString("o"),
-            offline_until = DateTime.UtcNow.AddHours(72).ToString("o"),
-            force_update_min_version = "1.6.0",
-            signature = ""
+            ["ticket_version"] = 1,
+            ["product_id"] = product.ProductId,
+            ["license_id"] = license.LicenseId,
+            ["user_id"] = userCode,
+            ["machine_code"] = request.MachineCode,
+            ["edition"] = license.Edition,
+            ["features"] = productFeatures.Select(f => f.FeatureCode).ToList(),
+            ["issued_at"] = license.IssuedAt.ToString("o"),
+            ["expire_at"] = license.ExpireAt.ToString("o"),
+            ["offline_until"] = DateTime.UtcNow.AddHours(72).ToString("o"),
+            ["force_update_min_version"] = "1.6.0"
         };
 
-        var canonicalJson = JsonSerializer.Serialize(ticket);
+        var canonicalJson = JsonSerializer.Serialize(ticketFields);
+        var ticketDoc = JsonDocument.Parse(canonicalJson);
         var signature = _signer.Sign(canonicalJson);
+
+        var responseTicket = new Dictionary<string, object?>(ticketFields)
+        {
+            ["signature"] = signature
+        };
 
         return Ok(new
         {
             success = true,
-            ticket = new
-            {
-                ticket_version = 1,
-                product_id = product.ProductId,
-                license_id = license.LicenseId,
-                user_id = userCode,
-                machine_code = request.MachineCode,
-                edition = license.Edition,
-                features = productFeatures.Select(f => f.FeatureCode).ToList(),
-                issued_at = license.IssuedAt.ToString("o"),
-                expire_at = license.ExpireAt.ToString("o"),
-                offline_until = DateTime.UtcNow.AddHours(72).ToString("o"),
-                force_update_min_version = "1.6.0",
-                signature = signature
-            }
+            ticket = responseTicket
         });
     }
 
@@ -141,43 +135,33 @@ public class ClientController : ControllerBase
             .Join(_db.Features, lf => lf.FeatureId, f => f.Id, (lf, f) => f.FeatureCode)
             .ToListAsync();
 
-        var ticket = new
+        var ticketFields = new Dictionary<string, object?>
         {
-            ticket_version = 1,
-            product_id = license.Product.ProductId,
-            license_id = license.LicenseId,
-            user_id = (await _db.Users.FindAsync(license.UserId))?.UserCode ?? "",
-            machine_code = request.MachineCode,
-            edition = license.Edition,
-            features,
-            issued_at = license.IssuedAt.ToString("o"),
-            expire_at = license.ExpireAt.ToString("o"),
-            offline_until = DateTime.UtcNow.AddHours(72).ToString("o"),
-            force_update_min_version = "1.6.0",
-            signature = ""
+            ["ticket_version"] = 1,
+            ["product_id"] = license.Product.ProductId,
+            ["license_id"] = license.LicenseId,
+            ["user_id"] = (await _db.Users.FindAsync(license.UserId))?.UserCode ?? "",
+            ["machine_code"] = request.MachineCode,
+            ["edition"] = license.Edition,
+            ["features"] = features,
+            ["issued_at"] = license.IssuedAt.ToString("o"),
+            ["expire_at"] = license.ExpireAt.ToString("o"),
+            ["offline_until"] = DateTime.UtcNow.AddHours(72).ToString("o"),
+            ["force_update_min_version"] = "1.6.0"
         };
 
-        var canonicalJson = JsonSerializer.Serialize(ticket);
+        var canonicalJson = JsonSerializer.Serialize(ticketFields);
         var signature = _signer.Sign(canonicalJson);
+
+        var responseTicket = new Dictionary<string, object?>(ticketFields)
+        {
+            ["signature"] = signature
+        };
 
         return Ok(new
         {
             success = true,
-            ticket = new
-            {
-                ticket_version = 1,
-                product_id = license.Product.ProductId,
-                license_id = license.LicenseId,
-                user_id = (await _db.Users.FindAsync(license.UserId))?.UserCode ?? "",
-                machine_code = request.MachineCode,
-                edition = license.Edition,
-                features,
-                issued_at = license.IssuedAt.ToString("o"),
-                expire_at = license.ExpireAt.ToString("o"),
-                offline_until = DateTime.UtcNow.AddHours(72).ToString("o"),
-                force_update_min_version = "1.6.0",
-                signature
-            }
+            ticket = responseTicket
         });
     }
 
@@ -245,8 +229,50 @@ public class ClientController : ControllerBase
     }
 }
 
-public class ActivateRequest { public string ActivationCode { get; set; } = ""; public string MachineCode { get; set; } = ""; public string ProductId { get; set; } = "autodoor_pro"; }
-public class RefreshRequest { public string MachineCode { get; set; } = ""; public string ProductId { get; set; } = "autodoor_pro"; }
-public class StatusRequest { public string MachineCode { get; set; } = ""; }
-public class DeactivateRequest { public string MachineCode { get; set; } = ""; }
-public class HeartbeatRequest { public string MachineCode { get; set; } = ""; }
+public class ActivateRequest
+{
+    private string _activationCode = "";
+    private string _machineCode = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("activation_code")]
+    public string ActivationCode { get => _activationCode; set => _activationCode = value ?? ""; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("machine_code")]
+    public string MachineCode { get => _machineCode; set => _machineCode = value ?? ""; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("product_id")]
+    public string ProductId { get; set; } = "autodoor_pro";
+
+    public bool IsValid() => !string.IsNullOrWhiteSpace(ActivationCode) && !string.IsNullOrWhiteSpace(MachineCode);
+}
+public class RefreshRequest
+{
+    private string _machineCode = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("machine_code")]
+    public string MachineCode { get => _machineCode; set => _machineCode = value ?? ""; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("product_id")]
+    public string ProductId { get; set; } = "autodoor_pro";
+}
+public class StatusRequest
+{
+    private string _machineCode = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("machine_code")]
+    public string MachineCode { get => _machineCode; set => _machineCode = value ?? ""; }
+}
+public class DeactivateRequest
+{
+    private string _machineCode = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("machine_code")]
+    public string MachineCode { get => _machineCode; set => _machineCode = value ?? ""; }
+}
+public class HeartbeatRequest
+{
+    private string _machineCode = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("machine_code")]
+    public string MachineCode { get => _machineCode; set => _machineCode = value ?? ""; }
+}

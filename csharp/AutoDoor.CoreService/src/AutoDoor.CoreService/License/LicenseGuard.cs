@@ -105,7 +105,7 @@ public class LicenseGuard
             var currentMachine = _machineCode.Generate();
             var expired = expireAt < DateTime.UtcNow;
             var machineMatch = machineCode == currentMachine;
-            var signatureValid = true;
+            var signatureValid = _verifier.Verify(root);
 
             var activated = true;
             var valid = activated && signatureValid && !expired && machineMatch;

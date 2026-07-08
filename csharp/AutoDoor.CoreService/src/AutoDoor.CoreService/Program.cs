@@ -24,19 +24,18 @@ public class Program
 
         var serviceProvider = services.BuildServiceProvider();
 
+        var lifetime = serviceProvider.GetRequiredService<CoreServiceLifetime>();
         var ipcServer = serviceProvider.GetRequiredService<TcpIpcServer>();
-        var cts = new CancellationTokenSource();
 
         Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;
-            cts.Cancel();
+            lifetime.RequestShutdown();
         };
 
         try
         {
-            await ipcServer.StartAsync(cts.Token);
-            await Task.Delay(Timeout.Infinite, cts.Token);
+            await ipcServer.StartAsync(lifetime.Token);
         }
         catch (OperationCanceledException)
         {
@@ -52,6 +51,7 @@ public class Program
             ipcServer.Stop();
         }
 
+        Console.WriteLine("CoreService exited.");
         return 0;
     }
 
@@ -61,6 +61,7 @@ public class Program
         services.AddSingleton(appSettings.License);
         services.AddSingleton(appSettings.Ipc);
         services.AddSingleton(appSettings.Logging);
+        services.AddSingleton<CoreServiceLifetime>();
         services.AddSingleton<RuntimeHost>();
         services.AddSingleton<TcpIpcServer>();
         services.AddSingleton<LicenseClient>();

@@ -20,6 +20,7 @@ public class TcpIpcServer
     private readonly MachineCodeProvider _machineCodeProvider;
     private readonly FeatureGate _featureGate;
     private readonly RuntimeHost _runtimeHost;
+    private readonly CoreServiceLifetime _lifetime;
     private readonly IpcSettings _settings;
     private TcpListener? _listener;
     private bool _running;
@@ -31,6 +32,7 @@ public class TcpIpcServer
         MachineCodeProvider machineCodeProvider,
         FeatureGate featureGate,
         RuntimeHost runtimeHost,
+        CoreServiceLifetime lifetime,
         AppSettings appSettings)
     {
         _licenseGuard = licenseGuard;
@@ -38,6 +40,7 @@ public class TcpIpcServer
         _machineCodeProvider = machineCodeProvider;
         _featureGate = featureGate;
         _runtimeHost = runtimeHost;
+        _lifetime = lifetime;
         _settings = appSettings.Ipc;
         _concurrencySemaphore = new SemaphoreSlim(_settings.MaxConcurrentRequests);
     }
@@ -50,7 +53,7 @@ public class TcpIpcServer
 
         Console.WriteLine($"TCP IPC listening on {_settings.Host}:{_settings.Port}");
 
-        while (!ct.IsCancellationRequested)
+        while (_running && !ct.IsCancellationRequested)
         {
             try
             {
@@ -61,9 +64,14 @@ public class TcpIpcServer
             {
                 break;
             }
+            catch (ObjectDisposedException)
+            {
+                break;
+            }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Accept error: {ex.Message}");
+                if (_running && !ct.IsCancellationRequested)
+                    Console.Error.WriteLine($"Accept error: {ex.Message}");
             }
         }
     }
@@ -176,10 +184,10 @@ public class TcpIpcServer
         };
     }
 
-    private async Task<(bool, string?, string, object?)> HandleShutdownAsync()
+    private Task<(bool, string?, string, object?)> HandleShutdownAsync()
     {
-        await Task.Run(() => Stop());
-        return (true, null, "Shutting down", null);
+        _lifetime.RequestShutdown();
+        return Task.FromResult<(bool, string?, string, object?)>((true, null, "Shutting down", null));
     }
 
     private (bool, string?, string, object?) HandleMachineCode()

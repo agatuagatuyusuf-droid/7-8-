@@ -1,20 +1,19 @@
 """
-Check C# behavior tree runtime via TCP IPC.
+Check C# behavior tree runtime via TCP IPC with real assertions.
 
 Usage: python tools/check_core_runtime.py
 
 Steps:
 1. Start CoreService
 2. Connect via IPC
-3. Call tree.validate
-4. Send simple behavior tree JSON
-5. Call tree.start
-6. Poll tree.status
-7. Verify completed=true and status=success
-8. Call runtime.logs
-9. Verify logs not empty
-10. Call core.shutdown
-11. Output check_core_runtime OK
+3. Call tree.validate - assert success
+4. Call tree.start - assert success
+5. Poll tree.status until completed=true
+6. Assert completed=true
+7. Call runtime.logs - assert not-empty
+8. Call core.shutdown
+9. Assert process exits within 5s
+10. Output check_core_runtime OK
 """
 
 import json
@@ -53,6 +52,27 @@ def wait_for_port(host="127.0.0.1", port=19527, timeout=30):
         except (socket.timeout, ConnectionRefusedError):
             time.sleep(1)
     return False
+
+
+def assert_ok(result, label):
+    if not result.get("success"):
+        msg = result.get("message") or result.get("error_code") or "no message"
+        print(f"FAIL: {label} - {msg}")
+        sys.exit(1)
+    print(f"OK: {label}")
+
+
+def poll_status(client, expected_key="completed", expected_value=True, timeout=30):
+    start = time.time()
+    while time.time() - start < timeout:
+        status = client.send_request("tree.status")
+        if status.get("success"):
+            data = status.get("data") or {}
+            if data.get(expected_key) == expected_value:
+                return status
+        time.sleep(0.5)
+    print(f"FAIL: Timed out waiting for {expected_key}={expected_value}")
+    sys.exit(1)
 
 
 def main():
@@ -96,11 +116,11 @@ def main():
         from bt_bridge.core_client import CoreClient
         client = CoreClient(timeout=5)
         if not client.connect():
-            print("Failed to connect")
+            print("Failed to connect to CoreService")
             proc.kill()
             sys.exit(1)
 
-        # tree.validate - even if not fully implemented, should respond
+        # tree.validate
         validate_result = client.send_request("tree.validate", {
             "tree": {
                 "id": "test",
@@ -113,9 +133,10 @@ def main():
                 ]
             }
         })
-        print(f"tree.validate: {validate_result}")
+        assert_ok(validate_result, "tree.validate")
+        print(f"  validate result: {validate_result}")
 
-        # tree.start - will return RUNTIME_NOT_IMPLEMENTED for now
+        # tree.start
         start_result = client.send_request("tree.start", {
             "tree": {
                 "id": "test",
@@ -128,32 +149,49 @@ def main():
                 ]
             }
         })
-        print(f"tree.start: {start_result}")
+        assert_ok(start_result, "tree.start")
+        print(f"  start result: {start_result}")
 
-        # tree.status
-        status_result = client.send_request("tree.status")
-        print(f"tree.status: {status_result}")
+        # Poll tree.status until completed=true
+        status_result = poll_status(client, "completed", True)
+        assert_ok(status_result, "tree.status (completed=true)")
+        print(f"  status result: {status_result}")
 
         # runtime.logs
         logs_result = client.send_request("runtime.logs")
-        print(f"runtime.logs: {logs_result}")
+        assert_ok(logs_result, "runtime.logs")
+        logs_data = logs_result.get("data", {})
+        logs = logs_data.get("logs") or []
+        if not logs:
+            print("FAIL: runtime.logs returned empty")
+            sys.exit(1)
+        print(f"  logs contain {len(logs)} entries: {[l.get('message') for l in logs[:3]]}")
 
         # runtime.stats
         stats_result = client.send_request("runtime.stats")
-        print(f"runtime.stats: {stats_result}")
+        assert_ok(stats_result, "runtime.stats")
+        stats_data = stats_result.get("data", {})
+        print(f"  stats: {stats_data}")
 
         # Shutdown
-        client.send_request("core.shutdown")
+        shutdown_result = client.send_request("core.shutdown")
+        assert_ok(shutdown_result, "core.shutdown")
         client.disconnect()
 
         try:
             proc.wait(timeout=5)
+            print("CoreService exited gracefully")
         except subprocess.TimeoutExpired:
             proc.kill()
+            print("FAIL: CoreService did not exit after shutdown")
+            sys.exit(1)
 
         print("check_core_runtime OK")
         sys.exit(0)
 
+    except AssertionError:
+        proc.kill()
+        sys.exit(1)
     except Exception as e:
         print(f"Error: {e}")
         proc.kill()

@@ -5,36 +5,95 @@ namespace AutoDoor.CoreService.Input;
 
 public static class InputController
 {
+    [StructLayout(LayoutKind.Sequential)]
+    private struct INPUT
+    {
+        public uint type;
+        public InputUnion u;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct InputUnion
+    {
+        [FieldOffset(0)] public MOUSEINPUT mi;
+        [FieldOffset(0)] public KEYBDINPUT ki;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KEYBDINPUT
+    {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    private const uint INPUT_MOUSE = 0;
+    private const uint INPUT_KEYBOARD = 1;
+
+    private const uint KEYEVENTF_KEYDOWN = 0x0000;
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const uint KEYEVENTF_SCANCODE = 0x0008;
+
+    private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+    private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+    private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+    private const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
+    private const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
+    private const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
+    private const uint MOUSEEVENTF_MOVE = 0x0001;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint cInputs, INPUT[] pInputs, int cbSize);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    private static extern short VkKeyScanA(char ch);
+
     public static void KeyPress(string key)
     {
         if (string.IsNullOrEmpty(key)) return;
 
         var vk = GetVirtualKeyCode(key);
         if (vk == 0) return;
-
-        keybd_event(vk, 0, 0, 0);
-        keybd_event(vk, 0, 2, 0);
+        SendKey(vk, false);
     }
 
     public static void MouseClick(string button, int x, int y)
     {
-        SetCursorPos(x, y);
+        if (x >= 0 && y >= 0)
+            SetCursorPos(x, y);
 
         uint downFlag = button.ToLowerInvariant() switch
         {
-            "right" => 0x0008,
-            "middle" => 0x0020,
-            _ => 0x0002
+            "right" => MOUSEEVENTF_RIGHTDOWN,
+            "middle" => MOUSEEVENTF_MIDDLEDOWN,
+            _ => MOUSEEVENTF_LEFTDOWN
         };
         uint upFlag = button.ToLowerInvariant() switch
         {
-            "right" => 0x0010,
-            "middle" => 0x0040,
-            _ => 0x0004
+            "right" => MOUSEEVENTF_RIGHTUP,
+            "middle" => MOUSEEVENTF_MIDDLEUP,
+            _ => MOUSEEVENTF_LEFTUP
         };
 
-        mouse_event(downFlag, 0, 0, 0, 0);
-        mouse_event(upFlag, 0, 0, 0, 0);
+        SendMouse(downFlag);
+        SendMouse(upFlag);
     }
 
     public static void TypeText(string text)
@@ -45,45 +104,99 @@ public static class InputController
         {
             if (c >= 'a' && c <= 'z')
             {
-                var vk = (byte)(c - 'a' + 0x41);
-                keybd_event(vk, 0, 0, 0);
-                keybd_event(vk, 0, 2, 0);
+                var vk = (ushort)(c - 'a' + 0x41);
+                SendKey(vk, false);
             }
             else if (c >= 'A' && c <= 'Z')
             {
-                var vk = (byte)(c - 'A' + 0x41);
-                keybd_event(0x10, 0, 0, 0);
-                keybd_event(vk, 0, 0, 0);
-                keybd_event(vk, 0, 2, 0);
-                keybd_event(0x10, 0, 2, 0);
+                var vk = (ushort)(c - 'A' + 0x41);
+                SendModifierKey(0x10, vk);
             }
             else if (c >= '0' && c <= '9')
             {
-                var vk = (byte)(c - '0' + 0x30);
-                keybd_event(vk, 0, 0, 0);
-                keybd_event(vk, 0, 2, 0);
+                var vk = (ushort)(c - '0' + 0x30);
+                SendKey(vk, false);
             }
             else if (c == ' ')
             {
-                keybd_event(0x20, 0, 0, 0);
-                keybd_event(0x20, 0, 2, 0);
+                SendKey(0x20, false);
             }
             else if (c == '\n')
             {
-                keybd_event(0x0D, 0, 0, 0);
-                keybd_event(0x0D, 0, 2, 0);
+                SendKey(0x0D, false);
             }
         }
     }
 
-    private static byte GetVirtualKeyCode(string key)
+    private static void SendKey(ushort vk, bool isScanCode)
+    {
+        uint flags = isScanCode ? KEYEVENTF_SCANCODE : KEYEVENTF_KEYDOWN;
+
+        var inputs = new INPUT[2];
+        inputs[0] = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            u = new InputUnion
+            {
+                ki = new KEYBDINPUT { wVk = vk, dwFlags = flags }
+            }
+        };
+        inputs[1] = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            u = new InputUnion
+            {
+                ki = new KEYBDINPUT { wVk = vk, dwFlags = flags | KEYEVENTF_KEYUP }
+            }
+        };
+        SendInput(2, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    private static void SendModifierKey(ushort modifierVk, ushort vk)
+    {
+        var inputs = new INPUT[4];
+        inputs[0] = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            u = new InputUnion { ki = new KEYBDINPUT { wVk = modifierVk, dwFlags = KEYEVENTF_KEYDOWN } }
+        };
+        inputs[1] = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            u = new InputUnion { ki = new KEYBDINPUT { wVk = vk, dwFlags = KEYEVENTF_KEYDOWN } }
+        };
+        inputs[2] = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            u = new InputUnion { ki = new KEYBDINPUT { wVk = vk, dwFlags = KEYEVENTF_KEYUP } }
+        };
+        inputs[3] = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            u = new InputUnion { ki = new KEYBDINPUT { wVk = modifierVk, dwFlags = KEYEVENTF_KEYUP } }
+        };
+        SendInput(4, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    private static void SendMouse(uint flags)
+    {
+        var inputs = new INPUT[1];
+        inputs[0] = new INPUT
+        {
+            type = INPUT_MOUSE,
+            u = new InputUnion { mi = new MOUSEINPUT { dwFlags = flags } }
+        };
+        SendInput(1, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    private static ushort GetVirtualKeyCode(string key)
     {
         if (key.Length == 1 && key[0] >= 'a' && key[0] <= 'z')
-            return (byte)(key[0] - 'a' + 0x41);
+            return (ushort)(key[0] - 'a' + 0x41);
         if (key.Length == 1 && key[0] >= 'A' && key[0] <= 'Z')
-            return (byte)(key[0] - 'A' + 0x41);
+            return (ushort)(key[0] - 'A' + 0x41);
         if (key.Length == 1 && key[0] >= '0' && key[0] <= '9')
-            return (byte)(key[0] - '0' + 0x30);
+            return (ushort)(key[0] - '0' + 0x30);
 
         return key.ToLowerInvariant() switch
         {
@@ -115,13 +228,4 @@ public static class InputController
             _ => 0
         };
     }
-
-    [DllImport("user32.dll")]
-    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, uint dwExtraInfo);
-
-    [DllImport("user32.dll")]
-    private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, uint dwExtraInfo);
-
-    [DllImport("user32.dll")]
-    private static extern bool SetCursorPos(int x, int y);
 }

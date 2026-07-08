@@ -1,17 +1,22 @@
 {
-  "goal": "AutoDoor commercial P10-P15",
-  "branch": "commercial-p10-p15",
-  "current_phase": "p10_p15",
+  "goal": "AutoDoor commercial P10-P15 fix",
+  "branch": "commercial-p10-p15-fix",
+  "current_phase": "p10_p15_fix",
   "status": "completed",
   "tasks": [
-    {"id": "P0-P9", "title": "Fix blocking issues", "status": "completed"},
-    {"id": "P10", "title": "UI activation window", "status": "completed"},
-    {"id": "P11", "title": "C# runtime skeleton", "status": "completed"},
-    {"id": "P12", "title": "Core nodes first version", "status": "completed"},
-    {"id": "P13", "title": "OCR/Image/Input first version", "status": "partial"},
-    {"id": "P14", "title": "License server backend first version", "status": "completed"},
-    {"id": "P15", "title": "Commercial packaging verification", "status": "completed"}
+    {"id": "P10-P15-fix-1", "title": "core.shutdown graceful exit", "status": "completed"},
+    {"id": "P10-P15-fix-2", "title": "CoreService path lookup", "status": "completed"},
+    {"id": "P10-P15-fix-3", "title": "JSON field mapping", "status": "completed"},
+    {"id": "P10-P15-fix-4", "title": "RSA-SHA256 real signature verification", "status": "completed"},
+    {"id": "P10-P15-fix-5", "title": "LicenseGuard real valid", "status": "completed"},
+    {"id": "P10-P15-fix-6", "title": "TicketSigner stable keys", "status": "completed"},
+    {"id": "P10-P15-fix-7", "title": "check_core_runtime real assertions", "status": "completed"},
+    {"id": "P10-P15-fix-8", "title": "Image/OCR throw instead of silent Failure", "status": "completed"},
+    {"id": "P10-P15-fix-9", "title": "SendInput replace deprecated APIs", "status": "completed"},
+    {"id": "P10-P15-fix-10", "title": "Admin API security (dev-only)", "status": "completed"},
+    {"id": "P10-P15-fix-11", "title": "E2E license test script", "status": "completed"},
+    {"id": "P10-P15-fix-12", "title": "Documentation update", "status": "completed"}
   ],
   "blockers": [],
-  "last_updated": "2026-07-08"
+  "last_updated": "2026-07-09"
 }

@@ -28,7 +28,7 @@ public class IpcServer
     {
         _running = true;
 
-        while (!ct.IsCancellationRequested)
+        while (_running && !ct.IsCancellationRequested)
         {
             var serverStream = new NamedPipeServerStream(
                 _pipeName,
