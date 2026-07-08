@@ -10,6 +10,7 @@ namespace AutoDoor.CoreService.License;
 public class SignatureVerifier
 {
     private readonly RSA _rsa;
+    private bool _hasPublicKey;
 
     public SignatureVerifier()
     {
@@ -17,20 +18,32 @@ public class SignatureVerifier
         var pem = LoadPublicKeyPem();
         if (!string.IsNullOrEmpty(pem))
         {
-            try { _rsa.ImportFromPem(pem); }
+            try
+            {
+                _rsa.ImportFromPem(pem);
+                _hasPublicKey = true;
+            }
             catch { }
         }
     }
 
     private static string LoadPublicKeyPem()
     {
-        var envKey = Environment.GetEnvironmentVariable("TICKET_PUBLIC_KEY");
-        if (!string.IsNullOrEmpty(envKey))
-            return envKey;
+        var envVars = new[] { "AUTODOOR_LICENSE_PUBLIC_KEY", "TICKET_PUBLIC_KEY" };
+        foreach (var envVar in envVars)
+        {
+            var envKey = Environment.GetEnvironmentVariable(envVar);
+            if (!string.IsNullOrEmpty(envKey))
+                return envKey;
+        }
 
-        var envPath = Environment.GetEnvironmentVariable("TICKET_KEY_PATH");
-        if (!string.IsNullOrEmpty(envPath) && System.IO.File.Exists(envPath))
-            return System.IO.File.ReadAllText(envPath);
+        var envPaths = new[] { "AUTODOOR_LICENSE_PUBLIC_KEY_PATH", "TICKET_KEY_PATH" };
+        foreach (var envPathVar in envPaths)
+        {
+            var envPath = Environment.GetEnvironmentVariable(envPathVar);
+            if (!string.IsNullOrEmpty(envPath) && System.IO.File.Exists(envPath))
+                return System.IO.File.ReadAllText(envPath);
+        }
 
         var defaultPath = System.IO.Path.Combine(
             AppContext.BaseDirectory, "keys", "public_key.pem");
@@ -42,14 +55,14 @@ public class SignatureVerifier
 
     public bool Verify(JsonElement ticketElement)
     {
+        if (!_hasPublicKey) return false;
+
         try
         {
             if (!ticketElement.TryGetProperty("signature", out var sigProp))
                 return false;
 
             var signature = Convert.FromBase64String(sigProp.GetString() ?? "");
-            if (signature.Length == 0)
-                return false;
 
             var canonicalJson = BuildCanonicalJson(ticketElement);
             var data = Encoding.UTF8.GetBytes(canonicalJson);

@@ -104,3 +104,8 @@ license/*.key
 *.key
 server/**/private*.pem
 server/**/private*.key
+server/**/keys/
+csharp/**/keys/
+**/private_key.pem
+**/public_key.pem
+**/dev_public_key.pem

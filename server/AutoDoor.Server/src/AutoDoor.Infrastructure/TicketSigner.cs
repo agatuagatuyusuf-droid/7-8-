@@ -19,6 +19,7 @@ public class TicketSigner
 
     private void LoadOrGenerateKey()
     {
+        // DEV ONLY: generated key is for local development only.
         var envKey = Environment.GetEnvironmentVariable("TICKET_PRIVATE_KEY");
         if (!string.IsNullOrEmpty(envKey))
         {

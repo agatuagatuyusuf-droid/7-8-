@@ -71,7 +71,9 @@ public class ClientController : ControllerBase
         activationCode.UsedByUserId = user.Id;
         activationCode.UsedAt = DateTime.UtcNow;
 
-        var productFeatures = await _db.Features.ToListAsync();
+        var productFeatures = await _db.Features
+            .OrderBy(f => f.FeatureCode)
+            .ToListAsync();
         foreach (var f in productFeatures)
         {
             _db.LicenseFeatures.Add(new LicenseFeature { LicenseId = license.Id, FeatureId = f.Id });
@@ -94,8 +96,9 @@ public class ClientController : ControllerBase
             ["force_update_min_version"] = "1.6.0"
         };
 
-        var canonicalJson = JsonSerializer.Serialize(ticketFields);
-        var ticketDoc = JsonDocument.Parse(canonicalJson);
+        var payloadJson = JsonSerializer.Serialize(ticketFields);
+        using var ticketDoc = JsonDocument.Parse(payloadJson);
+        var canonicalJson = TicketSigner.BuildCanonicalJson(ticketDoc.RootElement);
         var signature = _signer.Sign(canonicalJson);
 
         var responseTicket = new Dictionary<string, object?>(ticketFields)
@@ -133,6 +136,7 @@ public class ClientController : ControllerBase
         var features = await _db.LicenseFeatures
             .Where(lf => lf.LicenseId == license.Id)
             .Join(_db.Features, lf => lf.FeatureId, f => f.Id, (lf, f) => f.FeatureCode)
+            .OrderBy(fc => fc)
             .ToListAsync();
 
         var ticketFields = new Dictionary<string, object?>
@@ -150,7 +154,9 @@ public class ClientController : ControllerBase
             ["force_update_min_version"] = "1.6.0"
         };
 
-        var canonicalJson = JsonSerializer.Serialize(ticketFields);
+        var payloadJson = JsonSerializer.Serialize(ticketFields);
+        using var ticketDoc = JsonDocument.Parse(payloadJson);
+        var canonicalJson = TicketSigner.BuildCanonicalJson(ticketDoc.RootElement);
         var signature = _signer.Sign(canonicalJson);
 
         var responseTicket = new Dictionary<string, object?>(ticketFields)
@@ -213,6 +219,17 @@ public class ClientController : ControllerBase
         }
 
         return Ok(new { success = true });
+    }
+
+    [HttpGet("public-key")]
+    public IActionResult PublicKey()
+    {
+        // DEV ONLY: for local E2E test public key exchange.
+        return Ok(new
+        {
+            success = true,
+            public_key = _signer.GetPublicKeyPem()
+        });
     }
 
     [HttpGet("version/latest")]

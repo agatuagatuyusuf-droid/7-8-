@@ -87,6 +87,7 @@ public class LicenseGuard
             {
                 activated = false,
                 valid = false,
+                signature_valid = false,
                 expired = false,
                 machine_match = false,
                 expire_at = (string?)null,
@@ -110,17 +111,23 @@ public class LicenseGuard
             var activated = true;
             var valid = activated && signatureValid && !expired && machineMatch;
 
+            var error = !signatureValid ? "Invalid license signature" :
+                        expired ? "License expired" :
+                        !machineMatch ? "Machine code mismatch" :
+                        null;
+
             return new
             {
                 activated,
                 valid,
+                signature_valid = signatureValid,
                 expired,
                 machine_match = machineMatch,
                 expire_at = expireAtStr,
                 edition = root.GetProperty("edition").GetString(),
                 license_id = root.GetProperty("license_id").GetString(),
                 features = GetFeatures(),
-                error = (string?)null
+                error
             };
         }
         catch (Exception ex)
@@ -129,6 +136,7 @@ public class LicenseGuard
             {
                 activated = false,
                 valid = false,
+                signature_valid = false,
                 expired = false,
                 machine_match = false,
                 expire_at = (string?)null,

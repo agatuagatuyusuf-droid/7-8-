@@ -5,12 +5,18 @@ Usage: python tools/check_license_e2e.py
 
 Steps:
 1. Start the ASP.NET license server
-2. Start CoreService
-3. Activate via POST /api/client/activate (TEST-ACTIVATE-123456)
-4. Save ticket to CoreService license cache
-5. Call core.status via IPC, verify valid=true
-6. Cleanup: stop both processes
-7. Output check_license_e2e OK
+2. Wait for server readiness
+3. Get public key from server (/api/client/public-key)
+4. Start CoreService with env AUTODOOR_LICENSE_SERVER_URL + TICKET_PUBLIC_KEY
+5. Wait for CoreService port
+6. Connect via CoreClient
+7. Call license.machine_code, verify success
+8. Call license.activate with TEST-ACTIVATE-123456, verify success
+9. Call license.status, verify data.valid=true, data.activated=true, data.signature_valid=true
+10. Call feature.list, verify expected features present
+11. Call core.shutdown, verify CoreService exits within 5s
+12. Stop server
+13. Output check_license_e2e OK
 """
 
 import json
@@ -25,9 +31,8 @@ import socket
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-SERVER_URL = "http://localhost:5000"
+SERVER_URL = "http://127.0.0.1:5000"
 ACTIVATE_CODE = "TEST-ACTIVATE-123456"
-MACHINE_CODE = "TEST-MACHINE-001"
 
 
 def find_core_service():
@@ -67,6 +72,12 @@ def wait_for_url(url, timeout=60):
     return False
 
 
+def http_get(path):
+    req = urllib.request.Request(f"{SERVER_URL}{path}", method="GET")
+    r = urllib.request.urlopen(req)
+    return json.loads(r.read().decode("utf-8"))
+
+
 def wait_for_port(host="127.0.0.1", port=19527, timeout=30):
     start = time.time()
     while time.time() - start < timeout:
@@ -79,21 +90,22 @@ def wait_for_port(host="127.0.0.1", port=19527, timeout=30):
     return False
 
 
-def http_post(path, body):
-    data = json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(
-        f"{SERVER_URL}{path}",
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
-    r = urllib.request.urlopen(req)
-    return json.loads(r.read().decode("utf-8"))
+def check_port_in_use(host="127.0.0.1", port=5000):
+    try:
+        s = socket.create_connection((host, port), timeout=2)
+        s.close()
+        return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
 
 
 def main():
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     processes = []
+
+    if check_port_in_use():
+        print(f"FAIL: Port 5000 is already in use. A previous server may still be running.")
+        sys.exit(1)
 
     try:
         # Start server
@@ -115,7 +127,19 @@ def main():
             sys.exit(1)
         print("License server is running")
 
-        # Start CoreService
+        # Get public key from server
+        print("Fetching public key from server...")
+        pubkey_result = http_get("/api/client/public-key")
+        if not pubkey_result.get("success"):
+            print(f"Failed to get public key: {pubkey_result}")
+            sys.exit(1)
+        public_key = pubkey_result.get("public_key", "")
+        if not public_key:
+            print("FAIL: Empty public key from server")
+            sys.exit(1)
+        print(f"Public key acquired ({len(public_key)} chars)")
+
+        # Start CoreService with env vars
         exe_path = find_core_service()
         if exe_path is None:
             print("CoreService.exe not found, attempting dotnet publish...")
@@ -135,10 +159,16 @@ def main():
                 sys.exit(1)
 
         print(f"CoreService found: {exe_path}")
+
+        core_env = os.environ.copy()
+        core_env["AUTODOOR_LICENSE_SERVER_URL"] = "http://127.0.0.1:5000"
+        core_env["TICKET_PUBLIC_KEY"] = public_key
+
         core_proc = subprocess.Popen(
             [exe_path],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=core_env,
             creationflags=subprocess.CREATE_NO_WINDOW
         )
         processes.append(("core", core_proc))
@@ -148,79 +178,94 @@ def main():
             sys.exit(1)
         print("CoreService is listening")
 
-        # Activate via server API
-        print(f"Activating with code {ACTIVATE_CODE}...")
-        activate_result = http_post("/api/client/activate", {
-            "activation_code": ACTIVATE_CODE,
-            "machine_code": MACHINE_CODE
-        })
-        if not activate_result.get("success"):
-            print(f"Activation failed: {activate_result.get('message')}")
-            sys.exit(1)
-        print(f"Activation successful")
-
-        ticket = activate_result.get("ticket", {})
-        if not ticket.get("signature"):
-            print("FAIL: No signature in activation response")
-            sys.exit(1)
-        print(f"Signature present: {ticket['signature'][:20]}...")
-
-        # Save ticket to CoreService cache
+        # Connect via CoreClient
         from bt_bridge.core_client import CoreClient
         client = CoreClient(timeout=5)
         if not client.connect():
             print("Failed to connect to CoreService")
             sys.exit(1)
+        print("Connected to CoreService")
 
-        save_result = client.send_request("license.save_ticket", {
-            "ticket_json": json.dumps(ticket)
-        })
-        if not save_result.get("success"):
-            print(f"FAIL: license.save_ticket failed: {save_result.get('message')}")
+        # Check machine_code
+        mc_result = client.send_request("license.machine_code")
+        if not mc_result.get("success"):
+            print(f"FAIL: license.machine_code failed: {mc_result.get('message')}")
             client.disconnect()
             sys.exit(1)
-        print("Ticket saved to CoreService cache")
+        mc_data = mc_result.get("data") or {}
+        machine_code = mc_data.get("machine_code", "")
+        print(f"Machine code: {machine_code}")
 
-        # Reload cache
-        reload_result = client.send_request("license.reload")
-        if not reload_result.get("success"):
-            print(f"FAIL: license.reload failed: {reload_result.get('message')}")
+        # Activate via CoreService
+        print(f"Activating with code {ACTIVATE_CODE}...")
+        activate_result = client.send_request("license.activate", {"code": ACTIVATE_CODE})
+        if not activate_result.get("success"):
+            print(f"FAIL: license.activate failed: {activate_result.get('message')}")
             client.disconnect()
             sys.exit(1)
-        print("CoreService cache reloaded")
+        print("Activation successful")
 
-        # Check status
+        # Check license status
         status_result = client.send_request("license.status")
         if not status_result.get("success"):
             print(f"FAIL: license.status failed: {status_result.get('message')}")
             client.disconnect()
             sys.exit(1)
 
-        activated = status_result.get("activated", False)
-        valid = status_result.get("valid", False)
+        status_data = status_result.get("data") or {}
+        activated = status_data.get("activated", False)
+        valid = status_data.get("valid", False)
+        signature_valid = status_data.get("signature_valid", False)
 
         if not activated:
             print("FAIL: license.status shows not activated")
             client.disconnect()
             sys.exit(1)
 
-        if not valid:
-            print("FAIL: license.status shows not valid (signature verification failed)")
+        if not signature_valid:
+            print("FAIL: license.status shows signature_valid=false")
             client.disconnect()
             sys.exit(1)
 
-        print(f"License status: activated={activated}, valid={valid}")
-        print(f"  edition: {status_result.get('edition')}")
-        print(f"  license_id: {status_result.get('license_id')}")
-        print(f"  expire_at: {status_result.get('expire_at')}")
+        if not valid:
+            print("FAIL: license.status shows valid=false")
+            client.disconnect()
+            sys.exit(1)
+
+        print(f"License status: activated={activated}, valid={valid}, signature_valid={signature_valid}")
+        print(f"  edition: {status_data.get('edition')}")
+        print(f"  license_id: {status_data.get('license_id')}")
+        print(f"  expire_at: {status_data.get('expire_at')}")
+        print(f"  error: {status_data.get('error')}")
+
+        # Check features
+        features_result = client.send_request("feature.list")
+        if not features_result.get("success"):
+            print(f"FAIL: feature.list failed: {features_result.get('message')}")
+            client.disconnect()
+            sys.exit(1)
+        features_data = features_result.get("data") or {}
+        features = features_data.get("features") or []
+        print(f"Features: {features}")
+
+        expected_features = {"basic_editor", "basic_input", "schedule", "ocr", "image_match"}
+        for feat in expected_features:
+            if feat not in features:
+                print(f"FAIL: Expected feature '{feat}' not found in {features}")
+                client.disconnect()
+                sys.exit(1)
+        print("All expected features present")
 
         # Shutdown CoreService
         client.send_request("core.shutdown")
         client.disconnect()
         try:
             core_proc.wait(timeout=5)
+            print("CoreService exited gracefully")
         except subprocess.TimeoutExpired:
             core_proc.kill()
+            print("FAIL: CoreService did not exit after core.shutdown")
+            sys.exit(1)
 
         # Stop server
         server_proc.terminate()
