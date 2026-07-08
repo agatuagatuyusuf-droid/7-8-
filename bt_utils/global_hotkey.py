@@ -48,7 +48,7 @@ class GlobalHotkeyManager:
         if cls._instance is not None:
             cls._instance.stop()
             cls._instance = None
-    
+
     def start(self):
         """启动全局热键监听"""
         with self._lock:

@@ -5,6 +5,7 @@ NODE_CATEGORY_MAP = {
     "ParallelNode": "composite",
     "RandomNode": "composite",
     "SubtreeNode": "composite",
+    "GroupNode": "composite",
     "OCRConditionNode": "condition",
     "ImageConditionNode": "condition",
     "ColorConditionNode": "condition",
@@ -23,6 +24,9 @@ NODE_CATEGORY_MAP = {
     "TextInputNode": "action",
     "StartTreeNode": "action",
     "StopTreeNode": "action",
+    "RunProgramNode": "action",
+    "LogStatusNode": "action",
+    "SetDisplayNode": "action",
 }
 
 NODE_DISPLAY_NAMES = {
@@ -32,6 +36,7 @@ NODE_DISPLAY_NAMES = {
     "ParallelNode": "并行",
     "RandomNode": "随机",
     "SubtreeNode": "子树引用",
+    "GroupNode": "组合组",
     "OCRConditionNode": "文字检测",
     "ImageConditionNode": "图像匹配",
     "ColorConditionNode": "颜色检测",
@@ -50,15 +55,19 @@ NODE_DISPLAY_NAMES = {
     "TextInputNode": "文本输入",
     "StartTreeNode": "启动树",
     "StopTreeNode": "停止树",
+    "RunProgramNode": "运行程序",
+    "LogStatusNode": "日志状态",
+    "SetDisplayNode": "设置分辨率",
 }
 
 NODE_DESCRIPTIONS = {
-    "StartNode": "行为树根节点,控制整体执行流程",
-    "SequenceNode": "按顺序执行子节点",
+    "StartNode": "入口节点,支持窗口绑定,可在不同阶段切换窗口",
+    "SequenceNode": "按顺序执行子节点，支持失败后继续执行",
     "SelectorNode": "选择第一个成功的子节点",
     "ParallelNode": "同时执行所有子节点",
     "RandomNode": "随机执行子节点",
     "SubtreeNode": "引用外部行为树文件作为子树",
+    "GroupNode": "可折叠的组合节点,顺序执行子节点，支持收起/展开",
     "OCRConditionNode": "检测文字内容",
     "ImageConditionNode": "匹配图像模板",
     "ColorConditionNode": "检测颜色值",
@@ -77,11 +86,14 @@ NODE_DESCRIPTIONS = {
     "TextInputNode": "向目标位置输入文本",
     "StartTreeNode": "启动其他已加载的行为树",
     "StopTreeNode": "停止当前或其他行为树",
+    "RunProgramNode": "运行外部程序",
+    "LogStatusNode": "检查前一个节点的执行结果并记录日志",
+    "SetDisplayNode": "设置屏幕分辨率，树停止后自动恢复",
 }
 
-COMPOSITE_NODES = ["SequenceNode", "SelectorNode", "ParallelNode", "RandomNode", "SubtreeNode"]
+COMPOSITE_NODES = ["StartNode", "SequenceNode", "SelectorNode", "ParallelNode", "RandomNode", "SubtreeNode", "GroupNode"]
 CONDITION_NODES = ["OCRConditionNode", "ImageConditionNode", "ColorConditionNode", "NumberConditionNode", "VariableConditionNode", "TextExtractNode"]
-ACTION_NODES = ["KeyPressNode", "MouseClickNode", "MouseMoveNode", "MouseScrollNode", "DelayNode", "SetVariableNode", "ScriptNode", "CodeNode", "AlarmNode", "TextInputNode", "StartTreeNode", "StopTreeNode"]
+ACTION_NODES = ["KeyPressNode", "MouseClickNode", "MouseMoveNode", "MouseScrollNode", "DelayNode", "SetVariableNode", "ScriptNode", "CodeNode", "AlarmNode", "TextInputNode", "StartTreeNode", "StopTreeNode", "RunProgramNode", "LogStatusNode", "SetDisplayNode"]
 
 ALL_NODE_TYPES = COMPOSITE_NODES + CONDITION_NODES + ACTION_NODES
 
@@ -104,11 +116,13 @@ def build_node_categories(theme_colors: dict) -> dict:
             "icon": "◇",
             "color": theme_colors.get('composite', '#6366F1'),
             "nodes": [
-                ("SequenceNode", "顺序", "按顺序执行子节点"),
+                ("StartNode", "开始", "窗口绑定与入口节点"),
+                ("SequenceNode", "顺序", "按顺序执行子节点，支持失败后继续"),
                 ("SelectorNode", "选择", "选择第一个成功的子节点"),
                 ("ParallelNode", "并行", "同时执行所有子节点"),
                 ("RandomNode", "随机", "随机执行子节点"),
                 ("SubtreeNode", "子树引用", "引用外部行为树文件作为子树"),
+                ("GroupNode", "组合组", "可折叠的组合节点"),
             ]
         },
         "条件节点": {
@@ -139,6 +153,9 @@ def build_node_categories(theme_colors: dict) -> dict:
                 ("TextInputNode", "文本输入", "向目标位置输入文本"),
                 ("StartTreeNode", "启动树", "启动其他已加载的行为树"),
                 ("StopTreeNode", "停止树", "停止当前或其他行为树"),
+                ("RunProgramNode", "运行程序", "运行外部可执行程序"),
+                ("LogStatusNode", "日志状态", "检查前一个节点的执行结果并记录日志"),
+                ("SetDisplayNode", "设置分辨率", "设置屏幕分辨率，停止后自动恢复"),
             ]
         },
     }

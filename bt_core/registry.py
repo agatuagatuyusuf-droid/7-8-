@@ -35,7 +35,7 @@ class NodeRegistry:
 
 
 def register_core_nodes():
-    from .nodes import SequenceNode, SelectorNode, ParallelNode, StartNode, RandomNode, SubtreeNode
+    from .nodes import SequenceNode, SelectorNode, ParallelNode, StartNode, RandomNode, SubtreeNode, GroupNode
 
     NodeRegistry.register("SequenceNode", SequenceNode)
     NodeRegistry.register("SelectorNode", SelectorNode)
@@ -43,10 +43,11 @@ def register_core_nodes():
     NodeRegistry.register("RandomNode", RandomNode)
     NodeRegistry.register("StartNode", StartNode)
     NodeRegistry.register("SubtreeNode", SubtreeNode)
+    NodeRegistry.register("GroupNode", GroupNode)
 
 
 def register_all_nodes():
-    from .nodes import SequenceNode, SelectorNode, ParallelNode, StartNode, RandomNode, SubtreeNode
+    from .nodes import SequenceNode, SelectorNode, ParallelNode, StartNode, RandomNode, SubtreeNode, GroupNode
     
     NodeRegistry.register("SequenceNode", SequenceNode)
     NodeRegistry.register("SelectorNode", SelectorNode)
@@ -54,6 +55,7 @@ def register_all_nodes():
     NodeRegistry.register("RandomNode", RandomNode)
     NodeRegistry.register("StartNode", StartNode)
     NodeRegistry.register("SubtreeNode", SubtreeNode)
+    NodeRegistry.register("GroupNode", GroupNode)
     
     from bt_nodes.actions.keyboard import KeyPressNode
     from bt_nodes.actions.mouse import MouseClickNode, MouseMoveNode
@@ -66,6 +68,9 @@ def register_all_nodes():
     from bt_nodes.actions.text_input import TextInputNode
     from bt_nodes.actions.start_tree import StartTreeNode
     from bt_nodes.actions.stop_tree import StopTreeNode
+    from bt_nodes.actions.run_program import RunProgramNode
+    from bt_nodes.actions.log_status import LogStatusNode
+    from bt_nodes.actions.set_display import SetDisplayNode
 
     NodeRegistry.register("KeyPressNode", KeyPressNode)
     NodeRegistry.register("MouseClickNode", MouseClickNode)
@@ -79,6 +84,9 @@ def register_all_nodes():
     NodeRegistry.register("TextInputNode", TextInputNode)
     NodeRegistry.register("StartTreeNode", StartTreeNode)
     NodeRegistry.register("StopTreeNode", StopTreeNode)
+    NodeRegistry.register("RunProgramNode", RunProgramNode)
+    NodeRegistry.register("LogStatusNode", LogStatusNode)
+    NodeRegistry.register("SetDisplayNode", SetDisplayNode)
     
     from bt_nodes.conditions.ocr import OCRConditionNode
     from bt_nodes.conditions.image import ImageConditionNode

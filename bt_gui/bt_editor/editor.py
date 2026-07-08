@@ -120,16 +120,19 @@ class BehaviorTreeEditor(ctk.CTkFrame):
                 return
             self._handle_tab_stop(tab_id)
         
+        user_chose_save = False
         if instance.modified:
             result = messagebox.askyesnocancel("保存", f"项目 \"{instance.name}\" 有未保存的改动。\n\n是否保存？")
             if result is None:
                 return
             if result:
                 self._save_tab(tab_id)
+                user_chose_save = True
         
         if hasattr(instance, '_autosave_manager') and instance._autosave_manager:
             instance._autosave_manager.stop()
-            instance._autosave_manager.save_now()
+            if user_chose_save:
+                instance._autosave_manager.save_now()
         
         if instance.canvas:
             instance.canvas.place_forget()
@@ -412,7 +415,8 @@ class BehaviorTreeEditor(ctk.CTkFrame):
     def _create_palette(self):
         self.palette = NodePalette(
             self.main_area,
-            on_node_add=self._on_node_add_from_palette
+            on_node_add=self._on_node_add_from_palette,
+            on_shortcut_change=self.update_node_shortcuts
         )
         self.palette.pack(side="left", fill="y")
     
@@ -532,10 +536,18 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         self._tab_shortcut_keys = []  # 单树快捷键注册列表
         
         def start_callback():
+            # === 前台热键 ↓
+            if not self._is_foreground():
+                return
+            # === 前台热键 ↑
             LogManager.debug_print(f"[DEBUG] F10 pressed, _is_running={self._is_running}")
             self._start_running()
         
         def stop_callback():
+            # === 停止键全局响应（仅运行时有效） ↓
+            if not self._is_running:
+                return
+            # === 停止键全局响应（仅运行时有效） ↑
             LogManager.debug_print(f"[DEBUG] F12 pressed, _is_running={self._is_running}")
             self._stop_running()
         
@@ -545,6 +557,9 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         
         # 注册单树快捷键
         self._register_tab_shortcuts()
+        
+        # 注册节点面板快捷键
+        self._register_node_shortcuts()
         
         self._hotkey_manager.start()
     
@@ -565,9 +580,11 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         if hasattr(self, '_record_shortcut') and self._record_shortcut and record_key:
             self._hotkey_manager.unregister(self._record_shortcut)
         
-        self._hotkey_manager.register(start_key, self._start_running)
-        self._hotkey_manager.register(stop_key, self._stop_running)
-        
+        # === 前台热键 / 停止键运行时全局响应 ↓
+        self._hotkey_manager.register(start_key, lambda: self._start_running() if self._is_foreground() else None)
+        self._hotkey_manager.register(stop_key, lambda: self._stop_running() if self._is_running else None)
+        # === 前台热键 / 停止键运行时全局响应 ↑
+
         self._start_shortcut = start_key
         self._stop_shortcut = stop_key
         
@@ -592,8 +609,9 @@ class BehaviorTreeEditor(ctk.CTkFrame):
                 if not hotkey:
                     continue
                 tab_name = ts.get("tab_name", "").strip()
-                # 使用闭包绑定 tab_name
-                callback = lambda tn=tab_name: self._toggle_tab(tn)
+                # === 前台热键 ↓
+                callback = lambda tn=tab_name: self._toggle_tab(tn) if self._is_foreground() else None
+                # === 前台热键 ↑
                 self._hotkey_manager.register(hotkey, callback)
                 self._tab_shortcut_keys.append(hotkey)
         except Exception:
@@ -611,10 +629,36 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             if not hotkey:
                 continue
             tab_name = ts.get("tab_name", "").strip()
-            callback = lambda tn=tab_name: self._toggle_tab(tn)
+            # === 前台热键 ↓
+            callback = lambda tn=tab_name: self._toggle_tab(tn) if self._is_foreground() else None
+            # === 前台热键 ↑
             self._hotkey_manager.register(hotkey, callback)
             self._tab_shortcut_keys.append(hotkey)
     
+    def _register_node_shortcuts(self):
+        """注册节点面板快捷键"""
+        from config.settings_manager import SettingsManager
+        sm = SettingsManager.get_instance()
+        node_shortcuts = sm.get("node_shortcuts", {})
+        self._node_shortcut_keys = []
+        for node_type, key in node_shortcuts.items():
+            if key:
+                # === 前台热键 ↓
+                wrapped = lambda nt=node_type: self.after(0, self._on_node_add_from_palette, nt, True) if self._is_foreground() else None
+                # === 前台热键 ↑
+                self._hotkey_manager.register(key, wrapped)
+                self._node_shortcut_keys.append(key)
+
+    def update_node_shortcuts(self):
+        """由面板回调：重新注册节点快捷键"""
+        if hasattr(self, '_node_shortcut_keys'):
+            for key in self._node_shortcut_keys:
+                try:
+                    self._hotkey_manager.unregister(key)
+                except Exception:
+                    pass
+        self._register_node_shortcuts()
+
     def _toggle_tab(self, tab_name: str):
         """切换指定行为树的运行/停止状态"""
         if not tab_name:
@@ -639,7 +683,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         else:
             self._handle_tab_run(target_tab_id)
     
-    def _on_node_add_from_palette(self, node_type: str):
+    def _on_node_add_from_palette(self, node_type: str, at_mouse: bool = False):
         self._node_counter += 1
         node_id = f"node_{self._node_counter}"
         
@@ -647,11 +691,17 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             self._node_counter += 1
             node_id = f"node_{self._node_counter}"
         
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        
-        x = (canvas_width / 2 - self.canvas.pan_x) / self.canvas.zoom
-        y = (canvas_height / 3 - self.canvas.pan_y) / self.canvas.zoom
+        if at_mouse:
+            canvas_widget = self.canvas.canvas
+            mx = canvas_widget.winfo_pointerx() - canvas_widget.winfo_rootx()
+            my = canvas_widget.winfo_pointery() - canvas_widget.winfo_rooty()
+            x = (canvas_widget.canvasx(mx) - self.canvas.pan_x) / self.canvas.zoom
+            y = (canvas_widget.canvasy(my) - self.canvas.pan_y) / self.canvas.zoom
+        else:
+            canvas_width = self.canvas.winfo_width()
+            canvas_height = self.canvas.winfo_height()
+            x = (canvas_width / 2 - self.canvas.pan_x) / self.canvas.zoom
+            y = (canvas_height / 3 - self.canvas.pan_y) / self.canvas.zoom
         
         offset = 0
         for existing_node in self.canvas.nodes.values():
@@ -681,6 +731,14 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         elif node_type == "DelayNode":
             node_config = {
                 "duration_ms": 1000
+            }
+        elif node_type == "RunProgramNode":
+            node_config = {
+                "program_path": "",
+                "arguments": "",
+                "working_dir": "",
+                "wait_complete": False,
+                "timeout_ms": 0,
             }
         
         command = AddNodeCommand(
@@ -862,6 +920,22 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             self.command_manager.execute(command)
         self.canvas.selected_connections = []
         self.canvas.selected_connection = None
+        self._update_toolbar()
+        self._set_modified(True)
+    
+    def _wrap_in_group_undo(self, group_id: str, to_wrap: List[str],
+                             common_parent: str, old_connections: List[tuple],
+                             original_positions: dict = None) -> None:
+        from .undo_redo import WrapInGroupCommand
+        command = WrapInGroupCommand(
+            canvas=self.canvas,
+            group_id=group_id,
+            to_wrap=to_wrap,
+            common_parent=common_parent,
+            old_connections=old_connections,
+            original_positions=original_positions or {}
+        )
+        self.command_manager.undo_stack.append(command)
         self._update_toolbar()
         self._set_modified(True)
     
@@ -1684,16 +1758,25 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         if self._is_running:
             return
         
-        started_count = 0
-        for tab_id in list(self.tab_manager._trees.keys()):
-            instance = self.tab_manager.get_tab(tab_id)
-            if instance and not instance.is_running:
-                self._handle_tab_run(tab_id)
-                started_count += 1
-        
-        if started_count > 0:
+        active_tab = self.tab_manager.get_active_tab()
+        if active_tab and not active_tab.is_running:
+            self._handle_tab_run(active_tab.tab_id)
             self._is_running = True
             self.toolbar.set_running(True)
+
+    # === 前台热键 ↓
+    def _is_foreground(self):
+        try:
+            from bt_utils.window_manager import WindowManager
+            import os
+            fg = WindowManager.get_foreground_window()
+            if fg is None:
+                return True
+            pid = WindowManager.get_window_pid(fg)
+            return pid == os.getpid()
+        except Exception:
+            return True
+    # === 前台热键 ↑
 
     def _stop_running(self):
         # ★ 通知DD输入控制器停止所有操作
@@ -2021,7 +2104,8 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             y=y,
             name="开始",
             config={},
-            enabled=True
+            enabled=True,
+            protected=True
         )
         
         if script_path and os.path.exists(script_path):

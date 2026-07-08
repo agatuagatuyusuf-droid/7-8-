@@ -2,6 +2,7 @@ import tkinter as tk
 import tkinter.font as tkFont
 from enum import Enum
 import math
+import traceback
 
 from ..theme import Theme
 from .constants import NODE_CATEGORY_MAP, NODE_DISPLAY_NAMES
@@ -48,7 +49,7 @@ class NodeItem:
         self._zoom = zoom
         self._pan_x = pan_x
         self._pan_y = pan_y
-        self._protected = (node_type == "StartNode")
+        self._protected = False
         
         self._status = NodeExecutionStatus.IDLE
         self._selected = False
@@ -84,7 +85,7 @@ class NodeItem:
             old_value = getattr(self, key, None)
             setattr(self, key, value)
             
-            if key == "name" and old_value != value:
+            if key in ("name", "enabled") and old_value != value:
                 self.redraw()
         else:
             if self.config is None:
@@ -100,6 +101,7 @@ class NodeItem:
         h = self._scale(self.height)
         x = self._transform_x(self.x)
         y = self._transform_y(self.y)
+        is_disabled = not self.enabled
         
         self.shadow = self.canvas.create_rectangle(
             x - w/2 + self._scale(shadow_offset),
@@ -112,33 +114,39 @@ class NodeItem:
             tags=("node_shadow", self.node_id)
         )
         
+        rect_fill = self._dark_colors.get('node_bg_disabled', '#2a2a2a') if is_disabled else self._dark_colors['node_bg']
+        rect_outline = self._dark_colors.get('node_border_disabled', '#555555') if is_disabled else self._dark_colors['node_border']
         self.rect = self.canvas.create_rectangle(
             x - w/2,
             y - h/2,
             x + w/2,
             y + h/2,
-            fill=self._dark_colors['node_bg'],
-            outline=self._dark_colors['node_border'],
+            fill=rect_fill,
+            outline=rect_outline,
             width=1,
             tags=("node", self.node_id)
         )
         
+        bar_color = '#666666' if is_disabled else self._color_config['bg']
         self.color_bar = self.canvas.create_rectangle(
             x - w/2,
             y - h/2,
             x - w/2 + self._scale(4),
             y + h/2,
-            fill=self._color_config['bg'],
+            fill=bar_color,
             outline="",
             tags=("node_color", self.node_id)
         )
         
         display_name = self._get_display_name()
+        if not self.enabled:
+            display_name = display_name + " (已禁用)"
+        text_color = self._dark_colors.get('text_disabled', '#888888') if not self.enabled else self._dark_colors['text_primary']
         self.text = self.canvas.create_text(
             x + self._scale(10),
             y,
             text=display_name,
-            fill=self._dark_colors['text_primary'],
+            fill=text_color,
             font=("Microsoft YaHei", max(8, int(10 * self._zoom)), "bold"),
             anchor="center",
             tags=("node_text", self.node_id)
@@ -168,10 +176,10 @@ class NodeItem:
         
         port_radius = self._scale(PORT_RADIUS)
         self.input_port = self.canvas.create_oval(
-            x - port_radius,
-            y - h/2 - port_radius,
-            x + port_radius,
-            y - h/2 + port_radius,
+            x - w/2 - port_radius,
+            y - port_radius,
+            x - w/2 + port_radius,
+            y + port_radius,
             fill=self._dark_colors['bg_tertiary'],
             outline=self._dark_colors['border'],
             width=2,
@@ -179,10 +187,10 @@ class NodeItem:
         )
         
         self.output_port = self.canvas.create_oval(
-            x - port_radius,
-            y + h/2 - port_radius,
-            x + port_radius,
-            y + h/2 + port_radius,
+            x + w/2 - port_radius,
+            y - port_radius,
+            x + w/2 + port_radius,
+            y + port_radius,
             fill=self._color_config['bg'],
             outline=self._dark_colors['border'],
             width=2,
@@ -272,10 +280,10 @@ class NodeItem:
         return x1 <= x <= x2 and y1 <= y <= y2
     
     def get_input_port_pos(self) -> tuple:
-        return (self.x, self.y - self.height/2)
+        return (self.x - self.width/2, self.y)
     
     def get_output_port_pos(self) -> tuple:
-        return (self.x, self.y + self.height/2)
+        return (self.x + self.width/2, self.y)
     
     def is_on_input_port(self, x: float, y: float) -> bool:
         px, py = self.get_input_port_pos()
@@ -382,6 +390,21 @@ class NodeItem:
             self.canvas.itemconfig(self.status_bg, fill=self._dark_colors['bg_tertiary'])
         self.hide_status_indicator()
 
+    def hide(self):
+        if not self._canvas_items_exist:
+            return
+        items = self.canvas.find_withtag(self.node_id)
+        for item_id in items:
+            self.canvas.itemconfig(item_id, state='hidden')
+
+    def show(self):
+        if not self._canvas_items_exist:
+            self.redraw()
+            return
+        items = self.canvas.find_withtag(self.node_id)
+        for item_id in items:
+            self.canvas.itemconfig(item_id, state='normal')
+
 
 class SubtreeNodeItem(NodeItem):
     """子树节点视觉项
@@ -417,6 +440,7 @@ class SubtreeNodeItem(NodeItem):
         h = self._scale(self.height)
         x = self._transform_x(self.x)
         y = self._transform_y(self.y)
+        is_disabled = not self.enabled
 
         self.shadow = self.canvas.create_rectangle(
             x - w/2 + self._scale(shadow_offset),
@@ -429,24 +453,27 @@ class SubtreeNodeItem(NodeItem):
             tags=("node_shadow", self.node_id)
         )
 
+        rect_fill = self._dark_colors.get('node_bg_disabled', '#2a2a2a') if is_disabled else self._dark_colors['node_bg']
+        rect_outline = self._dark_colors.get('node_border_disabled', '#555555') if is_disabled else self._dark_colors['node_border']
         self.rect = self.canvas.create_rectangle(
             x - w/2,
             y - h/2,
             x + w/2,
             y + h/2,
-            fill=self._dark_colors['node_bg'],
-            outline=self._dark_colors['node_border'],
+            fill=rect_fill,
+            outline=rect_outline,
             width=2,
             dash=(5, 3),
             tags=("node", self.node_id)
         )
 
+        bar_color = '#666666' if is_disabled else '#8B5CF6'
         self.color_bar = self.canvas.create_rectangle(
             x - w/2,
             y - h/2,
             x - w/2 + self._scale(4),
             y + h/2,
-            fill="#8B5CF6",
+            fill=bar_color,
             outline="",
             tags=("node_color", self.node_id)
         )
@@ -473,11 +500,14 @@ class SubtreeNodeItem(NodeItem):
         )
 
         display_name = self._get_display_name()
+        if not self.enabled:
+            display_name = display_name + " (已禁用)"
+        text_color = self._dark_colors.get('text_disabled', '#888888') if not self.enabled else self._dark_colors['text_primary']
         self.text = self.canvas.create_text(
             x + self._scale(8),
             y,
             text=display_name,
-            fill=self._dark_colors['text_primary'],
+            fill=text_color,
             font=("Microsoft YaHei", max(8, int(10 * self._zoom)), "bold"),
             anchor="center",
             tags=("node_text", self.node_id)
@@ -507,10 +537,10 @@ class SubtreeNodeItem(NodeItem):
 
         port_radius = self._scale(PORT_RADIUS)
         self.input_port = self.canvas.create_oval(
-            x - port_radius,
-            y - h/2 - port_radius,
-            x + port_radius,
-            y - h/2 + port_radius,
+            x - w/2 - port_radius,
+            y - port_radius,
+            x - w/2 + port_radius,
+            y + port_radius,
             fill=self._dark_colors['bg_tertiary'],
             outline=self._dark_colors['border'],
             width=2,
@@ -518,10 +548,10 @@ class SubtreeNodeItem(NodeItem):
         )
 
         self.output_port = self.canvas.create_oval(
-            x - port_radius,
-            y + h/2 - port_radius,
-            x + port_radius,
-            y + h/2 + port_radius,
+            x + w/2 - port_radius,
+            y - port_radius,
+            x + w/2 + port_radius,
+            y + port_radius,
             fill="#8B5CF6",
             outline=self._dark_colors['border'],
             width=2,
@@ -896,3 +926,195 @@ class SubtreeNodeItem(NodeItem):
 
     def is_readonly(self) -> bool:
         return self._is_readonly
+
+
+class GroupNodeItem(NodeItem):
+
+    def __init__(self, canvas: tk.Canvas, node_id: str, node_type: str,
+                 x: float, y: float, name: str = "", config: dict = None,
+                 enabled: bool = True, zoom: float = 1.0,
+                 pan_x: float = 0, pan_y: float = 0):
+        self._collapsed = False
+        if config and config.get("collapsed"):
+            self._collapsed = True
+        super().__init__(canvas, node_id, node_type, x, y, name, config,
+                         enabled, zoom, pan_x, pan_y)
+        self.height = 50
+
+    def _create_visuals(self):
+        shadow_offset = 3
+        w = self._scale(self.width)
+        h = self._scale(self.height)
+        x = self._transform_x(self.x)
+        y = self._transform_y(self.y)
+        is_disabled = not self.enabled
+
+        self.shadow = self.canvas.create_rectangle(
+            x - w/2 + self._scale(shadow_offset),
+            y - h/2 + self._scale(shadow_offset),
+            x + w/2 + self._scale(shadow_offset),
+            y + h/2 + self._scale(shadow_offset),
+            fill="#000000",
+            stipple="gray50",
+            outline="",
+            tags=("node_shadow", self.node_id)
+        )
+
+        rect_fill = self._dark_colors.get('node_bg_disabled', '#2a2a2a') if is_disabled else self._dark_colors['node_bg']
+        rect_outline = self._dark_colors.get('node_border_disabled', '#555555') if is_disabled else self._dark_colors['node_border']
+        self.rect = self.canvas.create_rectangle(
+            x - w/2,
+            y - h/2,
+            x + w/2,
+            y + h/2,
+            fill=rect_fill,
+            outline=rect_outline,
+            width=2,
+            tags=("node", self.node_id)
+        )
+
+        bar_color = '#666666' if is_disabled else '#8B5CF6'
+        self.color_bar = self.canvas.create_rectangle(
+            x - w/2,
+            y - h/2,
+            x - w/2 + self._scale(4),
+            y + h/2,
+            fill=bar_color,
+            outline="",
+            tags=("node_color", self.node_id)
+        )
+
+        self._toggle_btn_bg = self.canvas.create_rectangle(
+            x - w/2 + self._scale(8),
+            y - self._scale(10),
+            x - w/2 + self._scale(28),
+            y + self._scale(10),
+            fill=self._dark_colors['bg_tertiary'],
+            outline=self._dark_colors['border'],
+            width=1,
+            tags=("group_toggle", self.node_id)
+        )
+
+        self._toggle_btn_text = self.canvas.create_text(
+            x - w/2 + self._scale(18),
+            y,
+            text="▼" if not self._collapsed else "▶",
+            fill=self._dark_colors['text_primary'],
+            font=("Arial", max(8, int(9 * self._zoom)), "bold"),
+            anchor="center",
+            tags=("group_toggle", self.node_id)
+        )
+
+        child_count = self._get_child_count()
+        display_name = self._get_display_name()
+        if child_count > 0:
+            display_name = f"{display_name} ({child_count})"
+        if not self.enabled:
+            display_name = display_name + " (已禁用)"
+        text_color = self._dark_colors.get('text_disabled', '#888888') if not self.enabled else self._dark_colors['text_primary']
+        self.text = self.canvas.create_text(
+            x + self._scale(8),
+            y,
+            text=display_name,
+            fill=text_color,
+            font=("Microsoft YaHei", max(8, int(10 * self._zoom)), "bold"),
+            anchor="center",
+            tags=("node_text", self.node_id)
+        )
+
+        status_radius = self._scale(10)
+        self.status_bg = self.canvas.create_oval(
+            x + w/2 - self._scale(24),
+            y - status_radius,
+            x + w/2 - self._scale(4),
+            y + status_radius,
+            fill=self._dark_colors['bg_tertiary'],
+            outline="",
+            tags=("node_status_bg", self.node_id),
+            state='hidden'
+        )
+
+        self.status_icon = self.canvas.create_text(
+            x + w/2 - self._scale(14),
+            y,
+            text="",
+            fill=self._dark_colors['text_secondary'],
+            font=("Arial", max(8, int(10 * self._zoom)), "bold"),
+            tags=("node_icon", self.node_id),
+            state='hidden'
+        )
+
+        port_radius = self._scale(PORT_RADIUS)
+        self.input_port = self.canvas.create_oval(
+            x - w/2 - port_radius,
+            y - port_radius,
+            x - w/2 + port_radius,
+            y + port_radius,
+            fill=self._dark_colors['bg_tertiary'],
+            outline=self._dark_colors['border'],
+            width=2,
+            tags=("node_port_in", self.node_id, "port")
+        )
+
+        self.output_port = self.canvas.create_oval(
+            x + w/2 - port_radius,
+            y - port_radius,
+            x + w/2 + port_radius,
+            y + port_radius,
+            fill="#8B5CF6",
+            outline=self._dark_colors['border'],
+            width=2,
+            tags=("node_port_out", self.node_id, "port")
+        )
+
+        self._update_outline()
+
+    def _get_child_count(self) -> int:
+        try:
+            canvas_frame = self.canvas.master
+            if canvas_frame and hasattr(canvas_frame, 'connections'):
+                return len([c for c in canvas_frame.connections if c[0] == self.node_id])
+        except Exception:
+            pass
+        return 0
+
+    def is_on_toggle_btn(self, x: float, y: float) -> bool:
+        btn_x = self.x - self.width/2 + 18
+        btn_y = self.y
+        btn_w = 20
+        btn_h = 20
+        return (btn_x - btn_w/2 <= x <= btn_x + btn_w/2 and
+                btn_y - btn_h/2 <= y <= btn_y + btn_h/2)
+
+    def toggle_collapse(self):
+        self._collapsed = not self._collapsed
+        try:
+            self.canvas.itemconfig(self._toggle_btn_text,
+                                   text="▶" if self._collapsed else "▼")
+        except Exception:
+            traceback.print_exc()
+        try:
+            canvas_frame = self.canvas.master
+            if canvas_frame:
+                if self._collapsed:
+                    canvas_frame._collapse_group(self.node_id)
+                else:
+                    canvas_frame._expand_group(self.node_id)
+        except Exception:
+            traceback.print_exc()
+        if self.config:
+            self.config["collapsed"] = self._collapsed
+
+    @property
+    def is_collapsed(self) -> bool:
+        return self._collapsed
+
+    def redraw(self):
+        super().redraw()
+        if self._collapsed:
+            try:
+                canvas_frame = self.canvas.master
+                if canvas_frame and hasattr(canvas_frame, '_collapse_group'):
+                    canvas_frame._collapse_group(self.node_id)
+            except Exception:
+                pass

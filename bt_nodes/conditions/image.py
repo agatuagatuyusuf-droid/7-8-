@@ -35,6 +35,12 @@ class ImageConditionNode(ConditionNode):
                 self._log_condition_result(False, f"无法加载模板文件: {template_path}")
                 return False
 
+            ratio = self._get_dpi_scale_ratio()
+            if ratio != 1.0:
+                new_w = max(1, int(template.width * ratio))
+                new_h = max(1, int(template.height * ratio))
+                template = template.resize((new_w, new_h), Image.LANCZOS)
+
             raw_threshold = self.config.get_float("threshold", 80)
             threshold = raw_threshold / 100.0 if raw_threshold > 1 else raw_threshold
 

@@ -103,7 +103,10 @@ class SettingsManager:
                 {"hotkey": "F1"},
                 {"hotkey": "F2"},
                 {"hotkey": "F3"}
-            ]
+            ],
+            "toggle_disable": "Space",
+            "auto_arrange": "X",
+            "fit_view": "Z"
         },
         "behavior_tree": {
             "tick_interval": 50,
@@ -142,6 +145,7 @@ class SettingsManager:
             "ib_send_mode": "any_driver",
             "ib_target_pid": 0,
         },
+        "node_shortcuts": {},
         "update": {
             "ignored_version": "",
             "last_check_time": "",

@@ -96,14 +96,7 @@ class AutoSaveManager:
                 
                 self._add_metadata(data)
                 
-                if self._get_file_path_func:
-                    file_path = self._get_file_path_func()
-                    if file_path:
-                        self._save_to_file(data, file_path)
-                    else:
-                        self._rotate_and_save(data)
-                else:
-                    self._rotate_and_save(data)
+                self._rotate_and_save(data)
                 
                 self._last_save_time = time.time()
                 

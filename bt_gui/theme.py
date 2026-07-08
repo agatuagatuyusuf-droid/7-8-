@@ -69,6 +69,9 @@ class Theme:
         'node_bg': '#1E293B',
         'node_border': '#475569',
         'node_selected': '#3B82F6',
+        'node_bg_disabled': '#1a1a2e',
+        'node_border_disabled': '#555555',
+        'text_disabled': '#666666',
         'connection_line': '#475569',
     }
     

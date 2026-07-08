@@ -97,7 +97,14 @@ class TextInputNode(ActionNode):
             return context.blackboard.get(self.config.get("blackboard_key", "last_extracted_text"), "")
 
         elif input_mode == "file":
-            return self._read_file(context)
+            file_lines = self._get_file_lines(context)
+            if not file_lines:
+                return ""
+            execution_mode = EXECUTION_MODE_MAP.get(self.config.get("execution_mode", "顺序"), "sequential")
+            if execution_mode == "sequential":
+                return self._get_next_preset_text(context, file_lines)
+            else:
+                return self._get_random_preset_text(file_lines)
 
         return ""
 
@@ -137,6 +144,18 @@ class TextInputNode(ActionNode):
                 return f.read()
         except Exception:
             return ""
+
+    def _get_file_lines(self, context) -> List[str]:
+        cache_key = f"{self.node_id}_file_lines"
+        lines = context.blackboard.get(cache_key)
+        if lines is not None:
+            return lines
+        content = self._read_file(context)
+        if not content:
+            return []
+        lines = [line.strip() for line in content.split('\n') if line.strip()]
+        context.blackboard.set(cache_key, lines)
+        return lines
 
     def _input_text(self, context, text: str) -> None:
         import pyautogui

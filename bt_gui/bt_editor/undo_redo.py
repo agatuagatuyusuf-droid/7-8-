@@ -256,11 +256,54 @@ class MoveNodesCommand(Command):
         
         for node_id, (old_x, old_y) in self.old_positions.items():
             if node_id in self.canvas.nodes:
-                self.canvas.nodes[node_id].move_to(old_x, old_y)
+                node = self.canvas.nodes[node_id]
+                node.x = old_x
+                node.y = old_y
         
+        if hasattr(self.canvas, '_update_visible_nodes'):
+            self.canvas._update_visible_nodes()
         if hasattr(self.canvas, '_redraw_connections'):
             self.canvas._redraw_connections()
         
+        return True
+
+
+@dataclass
+class WrapInGroupCommand(Command):
+    canvas: Any = None
+    group_id: str = ""
+    to_wrap: List[str] = field(default_factory=list)
+    common_parent: str = ""
+    old_connections: List[tuple] = field(default_factory=list)
+    original_positions: dict = field(default_factory=dict)
+    
+    description: str = "打包成组"
+    
+    def execute(self) -> bool:
+        return True
+    
+    def undo(self) -> bool:
+        if not self.canvas:
+            return False
+        if self.group_id in self.canvas.nodes:
+            gn = self.canvas.nodes[self.group_id]
+            if hasattr(gn, '_collapsed') and gn._collapsed:
+                self.canvas._expand_group(self.group_id)
+        for nid in self.to_wrap:
+            node = self.canvas.nodes.get(nid)
+            if node:
+                orig = self.original_positions.get(nid)
+                if orig:
+                    node.move_to(orig[0], orig[1])
+                else:
+                    node.move_to(node.x, node.y - 40)
+        self.canvas.connections = [c for c in self.canvas.connections
+                                    if not (c[0] == self.group_id or c[1] == self.group_id)]
+        if self.group_id in self.canvas.nodes:
+            self.canvas.remove_node(self.group_id)
+        for parent_id, child_id in self.old_connections:
+            if parent_id in self.canvas.nodes and child_id in self.canvas.nodes:
+                self.canvas.add_connection(parent_id, child_id)
         return True
 
 

@@ -40,6 +40,7 @@ class ExecutionContext:
         self._stats_collector = None
         self._bound_window: Optional[int] = None
         self._previous_foreground_window: Optional[int] = None
+        self._keep_foreground: bool = False
         self._subtree_stack: List[str] = []
         self._parent_context: Optional['ExecutionContext'] = None
         # 帧级截图缓存：同一tick内相同region只截图一次
@@ -372,6 +373,8 @@ class ExecutionContext:
         return WindowManager.set_foreground_window(self._bound_window)
 
     def smart_restore_foreground_window(self) -> bool:
+        if self._keep_foreground:
+            return True
         if self._previous_foreground_window is None:
             return False
         from bt_utils.window_manager import WindowManager

@@ -5,7 +5,7 @@ import math
 
 from ..theme import Theme
 from .constants import NODE_DISPLAY_NAMES
-from .node_item import NodeItem, NodeExecutionStatus, SubtreeNodeItem
+from .node_item import NodeItem, NodeExecutionStatus, SubtreeNodeItem, GroupNodeItem
 from bt_utils.log_manager import LogManager
 
 
@@ -90,6 +90,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         # Canvas虚拟化：仅渲染视口内可见节点
         self._visible_node_ids: Set[str] = set()
         self._virtualization_enabled = True
+        self._group_contents: Dict[str, set] = {}   # 组ID -> 打包节点ID集合
+        self._collapsed_descendants: Set[str] = set()  # 所有被折叠的节点ID
+        self._group_proxy_connections: Dict[str, list] = {}  # 组ID -> [临时线ID列表]
 
         self._create_canvas()
         self._bind_events()
@@ -159,15 +162,17 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self.canvas.bind("<B1-Motion>", self._on_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
         self.canvas.bind("<MouseWheel>", self._on_scroll)
-        self.canvas.bind("<Button-3>", self._on_right_click)
-        self.canvas.bind("<B3-Motion>", self._on_right_drag)
-        self.canvas.bind("<ButtonRelease-3>", self._on_right_release)
+        self.canvas.bind("<Button-3>", self._on_right_click_menu)
+        self.canvas.bind("<Button-2>", self._on_middle_click)
+        self.canvas.bind("<B2-Motion>", self._on_middle_drag)
+        self.canvas.bind("<ButtonRelease-2>", self._on_middle_release)
         self.canvas.bind("<Double-Button-1>", self._on_double_click)
         self.canvas.bind("<Control-Button-1>", self._on_ctrl_click)
         self.canvas.bind("<Configure>", self._on_resize)
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<FocusIn>", self._on_canvas_focus_in)
         self.canvas.bind("<FocusOut>", self._on_canvas_focus_out)
+        self.canvas.bind("<KeyPress>", self._on_key_press)
     
     def _on_resize(self, event):
         self._draw_grid()
@@ -213,6 +218,10 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                 if node.node_type == "SubtreeNode" and isinstance(node, SubtreeNodeItem):
                     if node.is_on_toggle_btn(x, y):
                         node.toggle_preview()
+                        return
+                if node.node_type == "GroupNode" and isinstance(node, GroupNodeItem):
+                    if node.is_on_toggle_btn(x, y):
+                        node.toggle_collapse()
                         return
                 self._click_pos = (x, y)
                 self._click_node_id = node_id
@@ -416,6 +425,27 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                     self._drag_start_pos[0], self._drag_start_pos[1],
                     node.x, node.y
                 )
+
+            selected_set = set(self.selected_nodes)
+            for node_id in list(self.selected_nodes):
+                if node_id not in self.nodes:
+                    continue
+                gn = self.nodes[node_id]
+                if not (isinstance(gn, GroupNodeItem) and gn._collapsed):
+                    continue
+                old_x, old_y = self._drag_start_positions.get(node_id, self._drag_start_pos)
+                dx = gn.x - old_x
+                dy = gn.y - old_y
+                if dx != 0 or dy != 0:
+                    for child_id in self._group_contents.get(node_id, set()):
+                        if child_id in selected_set:
+                            continue
+                        if child_id in self.nodes:
+                            child = self.nodes[child_id]
+                            child.x += dx
+                            child.y += dy
+                            if child._canvas_items_exist:
+                                self.canvas.move(child.node_id, dx * self.zoom, dy * self.zoom)
         
         if not self._dragging and self._click_node_id:
             if self._click_node_id in self.nodes and self.on_node_select:
@@ -449,17 +479,30 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self._redraw_all()
         self._draw_grid()
     
-    def _on_right_click(self, event):
+    def _on_right_click_menu(self, event):
+        x = (self.canvas.canvasx(event.x) - self.pan_x) / self.zoom
+        y = (self.canvas.canvasy(event.y) - self.pan_y) / self.zoom
+        self._right_click_canvas_pos = (x, y)
+
+        clicked = self.canvas.find_closest(event.x, event.y)
+        if clicked:
+            tags = self.canvas.gettags(clicked[0])
+            node_id = None
+            for tag in tags:
+                if tag.startswith("node:"):
+                    node_id = tag[5:]
+                    break
+            if node_id and node_id in self.nodes:
+                self._on_click(event)
+        self._show_context_menu(event)
+
+    def _on_middle_click(self, event):
         self._right_panning = True
         self._right_pan_start = (event.x, event.y)
         self._right_pan_start_offset = (self.pan_x, self.pan_y)
         self._right_pan_moved = False
-        self._right_click_canvas_pos = (
-            (self.canvas.canvasx(event.x) - self.pan_x) / self.zoom,
-            (self.canvas.canvasy(event.y) - self.pan_y) / self.zoom
-        )
     
-    def _on_right_drag(self, event):
+    def _on_middle_drag(self, event):
         if not self._right_panning:
             return
         
@@ -476,14 +519,10 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             self._schedule_drag_redraw()
             self._draw_grid()
     
-    def _on_right_release(self, event):
+    def _on_middle_release(self, event):
         if not self._right_panning:
             return
-        
         self._right_panning = False
-        
-        if not self._right_pan_moved:
-            self._show_context_menu(event)
     
     def _show_context_menu(self, event):
         menu = tk.Menu(self, tearoff=0, bg=self._dark_colors['bg_secondary'], 
@@ -495,9 +534,22 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                            command=lambda: self._delete_selected_nodes())
             menu.add_command(label=f"复制 {len(self.selected_nodes)} 个节点", 
                            command=self._copy_selected_nodes_to_clipboard)
+            menu.add_separator()
+            menu.add_command(label="禁用选中节点" if any(self.nodes[nid].enabled for nid in self.selected_nodes) else "启用选中节点",
+                           command=lambda: self._toggle_selected_nodes_enabled())
+            menu.add_separator()
+            menu.add_command(label="打包成组",
+                           command=self._wrap_in_group)
         elif self.selected_node:
             menu.add_command(label="删除节点", command=lambda: self.remove_node(self.selected_node))
             menu.add_command(label="复制节点", command=lambda: self._copy_node(self.selected_node))
+            menu.add_separator()
+            node = self.nodes.get(self.selected_node)
+            if node:
+                if node.enabled:
+                    menu.add_command(label="禁用节点", command=lambda: self._toggle_node_enabled(self.selected_node))
+                else:
+                    menu.add_command(label="启用节点", command=lambda: self._toggle_node_enabled(self.selected_node))
         elif self.selected_connections:
             if len(self.selected_connections) > 1:
                 menu.add_command(label=f"删除 {len(self.selected_connections)} 条连线", 
@@ -512,10 +564,57 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                 paste_pos = getattr(self, '_right_click_canvas_pos', None)
                 menu.add_command(label="粘贴节点", 
                                command=lambda: self._paste_at_position(paste_pos))
+            if self.nodes:
+                menu.add_separator()
+                menu.add_command(label="自动整理 (X)", command=self.auto_arrange)
         
         if menu.index("end") is not None:
             menu.post(event.x_root, event.y_root)
     
+    def _toggle_node_enabled(self, node_id: str):
+        node = self.nodes.get(node_id)
+        if not node:
+            return
+        new_enabled = not node.enabled
+        node.update_config("enabled", new_enabled)
+        editor = self._get_editor()
+        if editor:
+            editor._on_property_change(node_id, "enabled", new_enabled)
+
+    def _toggle_selected_nodes_enabled(self):
+        if not self.selected_nodes:
+            return
+        any_enabled = any(self.nodes[nid].enabled for nid in self.selected_nodes if nid in self.nodes)
+        new_enabled = False if any_enabled else True
+        editor = self._get_editor()
+        for node_id in self.selected_nodes:
+            node = self.nodes.get(node_id)
+            if node:
+                node.update_config("enabled", new_enabled)
+                if editor:
+                    editor._on_property_change(node_id, "enabled", new_enabled)
+
+    def _on_key_press(self, event):
+        from config.settings_manager import SettingsManager
+        try:
+            settings_mgr = SettingsManager.get_instance()
+            toggle_key = settings_mgr.get("shortcuts.toggle_disable", "Space")
+            if event.keysym.lower() == toggle_key.lower():
+                if self.selected_nodes:
+                    self._toggle_selected_nodes_enabled()
+                elif self.selected_node:
+                    self._toggle_node_enabled(self.selected_node)
+            
+            arrange_key = settings_mgr.get("shortcuts.auto_arrange", "X")
+            if event.char in (arrange_key.lower(), arrange_key.upper()):
+                self.auto_arrange()
+            
+            fit_key = settings_mgr.get("shortcuts.fit_view", "Z")
+            if event.char in (fit_key.lower(), fit_key.upper()):
+                self.reset_view()
+        except Exception:
+            pass
+
     def _get_editor(self):
         try:
             app = self.canvas.winfo_toplevel()
@@ -668,14 +767,17 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
     def _copy_node(self, node_id: str):
         pass
     
-    def add_node(self, node_id: str, node_type: str, x: float, y: float, name: str = "", config: dict = None, enabled: bool = True) -> NodeItem:
+    def add_node(self, node_id: str, node_type: str, x: float, y: float, name: str = "", config: dict = None, enabled: bool = True, protected: bool = False) -> NodeItem:
         if not name:
             name = NODE_DISPLAY_NAMES.get(node_type, node_type)
 
         if node_type == "SubtreeNode":
             node = SubtreeNodeItem(self.canvas, node_id, node_type, x, y, name, config, enabled, self.zoom, self.pan_x, self.pan_y)
+        elif node_type == "GroupNode":
+            node = GroupNodeItem(self.canvas, node_id, node_type, x, y, name, config, enabled, self.zoom, self.pan_x, self.pan_y)
         else:
             node = NodeItem(self.canvas, node_id, node_type, x, y, name, config, enabled, self.zoom, self.pan_x, self.pan_y)
+        node._protected = protected
         self.nodes[node_id] = node
 
         # 虚拟化：如果节点在视口内，立即渲染；否则删除构造函数创建的图元
@@ -698,6 +800,8 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             node.reset_status()
             if isinstance(node, SubtreeNodeItem) and node._expanded:
                 node._collapse_preview()
+            if isinstance(node, GroupNodeItem) and node._collapsed:
+                self._expand_group(node_id)
             self.canvas.delete(node.node_id)
             del self.nodes[node_id]
             
@@ -728,6 +832,17 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             self._node_connections_map.pop(node_id, None)
             # 清理可见集合
             self._visible_node_ids.discard(node_id)
+            # 清理组相关数据
+            self._group_contents.pop(node_id, None)
+            for contents in self._group_contents.values():
+                contents.discard(node_id)
+            self._collapsed_descendants.discard(node_id)
+            proxy_lines = self._group_proxy_connections.pop(node_id, [])
+            for line_id in proxy_lines:
+                try:
+                    self.canvas.delete(line_id)
+                except Exception:
+                    pass
             self._redraw_connections()
     
     def redraw_node(self, node_id: str):
@@ -793,6 +908,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
     def _redraw_connections(self):
         self.canvas.delete("connection")
         self.canvas.delete("connection_order")
+        self.canvas.delete("group_proxy")
         self.connection_items.clear()
         self.connection_order_items.clear()
         # 重建反向索引
@@ -815,6 +931,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             if self._virtualization_enabled:
                 if parent_id not in self._visible_node_ids or child_id not in self._visible_node_ids:
                     continue
+            # 跳过已被折叠的节点之间的连线
+            if parent_id in self._collapsed_descendants or child_id in self._collapsed_descendants:
+                continue
 
             order_num = conn_order_map.get((parent_id, child_id), 1)
             
@@ -830,7 +949,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                 end_x = end_x * self.zoom + self.pan_x
                 end_y = end_y * self.zoom + self.pan_y
                 
-                mid_y = (start_y + end_y) / 2
+                mid_x = (start_x + end_x) / 2
                 
                 is_selected = ((parent_id, child_id) == self.selected_connection or 
                               (parent_id, child_id) in self.selected_connections)
@@ -839,8 +958,8 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                 
                 line_id = self.canvas.create_line(
                     start_x, start_y,
-                    start_x, mid_y,
-                    end_x, mid_y,
+                    mid_x, start_y,
+                    mid_x, end_y,
                     end_x, end_y,
                     fill=line_color,
                     width=line_width,
@@ -854,7 +973,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
 
                 if order_num > 1 or len([c for c in self.connections if c[0] == parent_id]) > 1:
                     text_id = self.canvas.create_text(
-                        end_x + 15,
+                        mid_x,
                         end_y - 15,
                         text=str(order_num),
                         fill=self._dark_colors['text_secondary'],
@@ -866,6 +985,46 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self.canvas.tag_lower("connection_order")
         self.canvas.tag_lower("connection")
         self.canvas.tag_lower("grid")
+        self._rebuild_proxy_connections()
+
+    def _rebuild_proxy_connections(self):
+        for group_id in list(self._group_proxy_connections.keys()):
+            old_lines = self._group_proxy_connections.pop(group_id, [])
+            for line_id in old_lines:
+                try:
+                    self.canvas.delete(line_id)
+                except Exception:
+                    pass
+            if group_id not in self.nodes:
+                continue
+            contents = self._group_contents.get(group_id, set())
+            if not contents:
+                continue
+            proxy_lines = []
+            group_node = self.nodes[group_id]
+            gx = group_node._transform_x(group_node.x)
+            gy = group_node._transform_y(group_node.y)
+            gw = group_node._scale(group_node.width)
+            start_x = gx + gw / 2
+            start_y = gy
+            for conn in self.connections:
+                if conn[0] in contents and conn[1] not in contents:
+                    child = self.nodes.get(conn[1])
+                    if child:
+                        cx = child._transform_x(child.x)
+                        cy = child._transform_y(child.y)
+                        cw = child._scale(child.width)
+                        end_x = cx - cw / 2
+                        end_y = cy
+                        mid_y = (start_y + end_y) / 2
+                        line_id = self.canvas.create_line(
+                            start_x, start_y, start_x, mid_y,
+                            end_x, mid_y, end_x, end_y,
+                            fill="#8B5CF6", width=2, dash=(4, 3),
+                            smooth=True, tags=("group_proxy",)
+                        )
+                        proxy_lines.append(line_id)
+            self._group_proxy_connections[group_id] = proxy_lines
     
     def _scale(self, value: float) -> float:
         return value * self.zoom
@@ -929,12 +1088,19 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                 self._do_redraw_all_connections()
         else:
             # 拖拽节点：仅重绘被选中的节点及其关联连线
+            has_collapsed = False
             for node_id in self.selected_nodes:
                 if node_id in self.nodes:
                     self.nodes[node_id].set_zoom(self.zoom)
                     self.nodes[node_id].set_pan(self.pan_x, self.pan_y)
                     self.nodes[node_id].redraw()
-            self._redraw_connections_for_nodes(self.selected_nodes)
+                    node = self.nodes[node_id]
+                    if isinstance(node, GroupNodeItem) and node._collapsed:
+                        has_collapsed = True
+            if not has_collapsed:
+                self._redraw_connections_for_nodes(self.selected_nodes)
+            self.canvas.delete("group_proxy")
+            self._rebuild_proxy_connections()
     
     def _do_incremental_redraw(self):
         self._redraw_scheduled = False
@@ -969,6 +1135,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
     def _do_redraw_all_connections(self):
         self.canvas.delete("connection")
         self.canvas.delete("connection_order")
+        self.canvas.delete("group_proxy")
         self.connection_items.clear()
         self.connection_order_items.clear()
         # 重建反向索引
@@ -991,6 +1158,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             if self._virtualization_enabled:
                 if parent_id not in self._visible_node_ids or child_id not in self._visible_node_ids:
                     continue
+            # 跳过已被折叠的节点之间的连线
+            if parent_id in self._collapsed_descendants or child_id in self._collapsed_descendants:
+                continue
 
             order_num = conn_order_map.get((parent_id, child_id), 1)
 
@@ -1000,8 +1170,10 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self.canvas.tag_lower("connection_order")
         self.canvas.tag_lower("connection")
         self.canvas.tag_lower("grid")
+        self._rebuild_proxy_connections()
     
     def _redraw_affected_connections(self):
+        self.canvas.delete("group_proxy")
         for parent_id, child_id in self._dirty_connections:
             conn_key = (parent_id, child_id)
             if conn_key in self.connection_items:
@@ -1061,6 +1233,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self.canvas.tag_lower("connection_order")
         self.canvas.tag_lower("connection")
         self.canvas.tag_lower("grid")
+        self._rebuild_proxy_connections()
     
     def _draw_single_connection(self, parent_id: str, child_id: str, order_num: int):
         parent = self.nodes[parent_id]
@@ -1074,7 +1247,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         end_x = end_x * self.zoom + self.pan_x
         end_y = end_y * self.zoom + self.pan_y
         
-        mid_y = (start_y + end_y) / 2
+        mid_x = (start_x + end_x) / 2
         
         is_selected = ((parent_id, child_id) == self.selected_connection or 
                       (parent_id, child_id) in self.selected_connections)
@@ -1083,8 +1256,8 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         
         line_id = self.canvas.create_line(
             start_x, start_y,
-            start_x, mid_y,
-            end_x, mid_y,
+            mid_x, start_y,
+            mid_x, end_y,
             end_x, end_y,
             fill=line_color,
             width=line_width,
@@ -1104,7 +1277,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
 
         if order_num > 1 or len([c for c in self.connections if c[0] == parent_id]) > 1:
             text_id = self.canvas.create_text(
-                end_x + 15,
+                mid_x,
                 end_y - 15,
                 text=str(order_num),
                 fill=self._dark_colors['text_secondary'],
@@ -1156,6 +1329,11 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
 
         # 重绘受影响的连线
         for parent_id, child_id in affected_conns:
+            if self._virtualization_enabled:
+                if parent_id not in self._visible_node_ids or child_id not in self._visible_node_ids:
+                    continue
+            if parent_id in self._collapsed_descendants or child_id in self._collapsed_descendants:
+                continue
             if parent_id in self.nodes and child_id in self.nodes:
                 siblings = [c for c in self.connections if c[0] == parent_id]
                 order = siblings.index((parent_id, child_id)) + 1 if (parent_id, child_id) in siblings else 1
@@ -1233,6 +1411,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self._connect_start_node = None
         self._connect_start_pos = None
         self._connect_line = None
+        self._group_contents.clear()
+        self._collapsed_descendants.clear()
+        self._group_proxy_connections.clear()
         self._draw_grid()
     
     def reset_view(self):
@@ -1282,6 +1463,113 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         
         self.pan_x = canvas_width / 2 - center_x * self.zoom
         self.pan_y = canvas_height / 2 - center_y * self.zoom
+        
+        self._redraw_all()
+        self._draw_grid()
+    
+    def auto_arrange(self):
+        if not self.nodes:
+            return
+        
+        all_children = {c for _, c in self.connections}
+        roots = [nid for nid in self.nodes if nid not in all_children]
+        if not roots:
+            return
+        
+        for nid in roots:
+            if self.nodes[nid].node_type == "StartNode":
+                roots.remove(nid)
+                roots.insert(0, nid)
+                break
+        
+        h_gap = 180
+        v_gap = 24
+        
+        def get_children(node_id):
+            return [c for p, c in self.connections if p == node_id]
+        
+        def calc_subtree_height(node_id):
+            node = self.nodes.get(node_id)
+            if not node:
+                return 0
+            children = get_children(node_id)
+            if not children:
+                return node.height
+            total = sum(calc_subtree_height(c) for c in children)
+            total += v_gap * (len(children) - 1)
+            return max(node.height, total)
+        
+        positions = {}
+        
+        def layout_node(node_id, x, y):
+            positions[node_id] = (x, y)
+            node = self.nodes.get(node_id)
+            if not node:
+                return
+            children = get_children(node_id)
+            if children:
+                total_child_height = sum(calc_subtree_height(c) for c in children)
+                children_v_total = total_child_height + v_gap * (len(children) - 1)
+                current_y = y - children_v_total / 2
+                for child in children:
+                    child_node = self.nodes.get(child)
+                    if not child_node:
+                        continue
+                    child_h = calc_subtree_height(child)
+                    child_y = current_y + child_h / 2
+                    layout_node(child, x + h_gap, child_y)
+                    current_y += child_h + v_gap
+        
+        root = roots[0]
+        root_node = self.nodes.get(root)
+        if not root_node:
+            return
+        
+        old_positions = {nid: (n.x, n.y) for nid, n in self.nodes.items()}
+        
+        layout_node(root, 100, 300)
+        
+        for node_id, (nx, ny) in positions.items():
+            self.nodes[node_id].x = nx
+            self.nodes[node_id].y = ny
+        
+        min_x = min(p[0] for p in positions.values())
+        max_x = max(p[0] for p in positions.values())
+        min_y = min(p[1] for p in positions.values())
+        max_y = max(p[1] for p in positions.values())
+        
+        min_x -= max(node.width for node in self.nodes.values()) / 2
+        max_x += max(node.width for node in self.nodes.values()) / 2
+        min_y -= max(node.height for node in self.nodes.values()) / 2
+        max_y += max(node.height for node in self.nodes.values()) / 2
+        
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        if canvas_width <= 1:
+            canvas_width = 800
+        if canvas_height <= 1:
+            canvas_height = 600
+        
+        tree_width = max_x - min_x
+        tree_height = max_y - min_y
+        
+        padding = 60
+        zoom_x = (canvas_width - 2 * padding) / tree_width if tree_width > 0 else 1.0
+        zoom_y = (canvas_height - 2 * padding) / tree_height if tree_height > 0 else 1.0
+        zoom = min(zoom_x, zoom_y, 1.0)
+        zoom = max(0.5, zoom)
+        
+        center_x = (min_x + max_x) / 2
+        center_y = (min_y + max_y) / 2
+        
+        self.zoom = zoom
+        self.pan_x = canvas_width / 2 - center_x * zoom
+        self.pan_y = canvas_height / 2 - center_y * zoom
+        
+        editor = self._get_editor()
+        if editor:
+            new_positions = {nid: (n.x, n.y) for nid, n in self.nodes.items()}
+            editor._on_nodes_move(old_positions, new_positions)
         
         self._redraw_all()
         self._draw_grid()
@@ -1384,6 +1672,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                     new_visible.add(parent_id)
                     changed = True
 
+        # 折叠的节点强制不可见
+        new_visible -= self._collapsed_descendants
+
         # 离开可见集合的节点：删除Canvas图元
         removed = self._visible_node_ids - new_visible
         for node_id in removed:
@@ -1428,6 +1719,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         """
         self.canvas.delete("connection")
         self.canvas.delete("connection_order")
+        self.canvas.delete("group_proxy")
         self.connection_items.clear()
         self.connection_order_items.clear()
 
@@ -1458,6 +1750,7 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         self.canvas.tag_lower("connection_order")
         self.canvas.tag_lower("connection")
         self.canvas.tag_lower("grid")
+        self._rebuild_proxy_connections()
 
     def load_tree(self, tree_data: Dict[str, Any]):
         self.clear_canvas(force=True)
@@ -1518,8 +1811,27 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             if "child" in node_data:
                 self.add_connection(node_id, node_data["child"])
         
+        for conn in tree_data.get("connections", []):
+            if isinstance(conn, dict):
+                p, c = conn.get("parent_id"), conn.get("child_id")
+                if p and c and (p, c) not in self.connections:
+                    self.add_connection(p, c)
+        
         if root_id and root_id in self.nodes:
             self.root_node = root_id
+        
+        group_data = tree_data.get("group_contents", {})
+        if group_data:
+            self._group_contents = {gid: set(cids) for gid, cids in group_data.items()}
+        collapsed_data = tree_data.get("collapsed_descendants", [])
+        if collapsed_data:
+            self._collapsed_descendants = set(collapsed_data)
+        for group_id, child_ids in self._group_contents.items():
+            if child_ids and all(cid in self._collapsed_descendants for cid in child_ids):
+                if group_id in self.nodes:
+                    self.nodes[group_id]._collapsed = True
+                    if self.nodes[group_id].config is not None:
+                        self.nodes[group_id].config["collapsed"] = True
         
         self._redraw_all()
         
@@ -1547,6 +1859,11 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             return [c for c in result if c]
         
         def calc_subtree_width(node_id):
+            node_data = nodes_data.get(node_id, {})
+            if node_data.get("type") == "GroupNode":
+                config = node_data.get("config", {})
+                if config.get("collapsed"):
+                    return node_width
             children = get_children(node_id)
             if not children:
                 return node_width
@@ -1557,6 +1874,11 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
         
         def layout_node(node_id, x, y):
             positions[node_id] = (x, y)
+            node_data = nodes_data.get(node_id, {})
+            if node_data.get("type") == "GroupNode":
+                config = node_data.get("config", {})
+                if config.get("collapsed"):
+                    return
             children = get_children(node_id)
             if children:
                 total_width = sum(calc_subtree_width(c) for c in children)
@@ -1623,7 +1945,9 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
             },
             "root_node": root_id,
             "nodes": nodes_data,
-            "connections": [{"parent_id": p, "child_id": c} for p, c in self.connections]
+            "connections": [{"parent_id": p, "child_id": c} for p, c in self.connections],
+            "group_contents": {gid: list(cids) for gid, cids in self._group_contents.items()},
+            "collapsed_descendants": list(self._collapsed_descendants)
         }
     
     def _delete_selected_nodes(self):
@@ -1845,3 +2169,165 @@ class BehaviorTreeCanvas(ctk.CTkFrame):
                         break
         
         return selected
+
+    def _wrap_in_group(self):
+        if len(self.selected_nodes) < 2:
+            return
+
+        nodes_to_wrap = [nid for nid in self.selected_nodes
+                         if nid in self.nodes and not self.nodes[nid].is_protected()]
+        if len(nodes_to_wrap) < 2:
+            return
+
+        selected_set = set(nodes_to_wrap)
+
+        entry_nodes = []
+        for nid in nodes_to_wrap:
+            parents = [c[0] for c in self.connections if c[1] == nid]
+            if not parents or parents[0] not in selected_set:
+                entry_nodes.append(nid)
+
+        if not entry_nodes:
+            return
+
+        common_parent = None
+        for nid in entry_nodes:
+            parents = [c[0] for c in self.connections if c[1] == nid]
+            parent = parents[0] if parents else None
+            if parent is None:
+                continue
+            if common_parent is None:
+                common_parent = parent
+            elif parent != common_parent:
+                from tkinter import messagebox
+                messagebox.showwarning("无法打包", "选中的节点入口指向了不同的父节点，无法放入同一个组")
+                return
+
+        avg_x = sum(self.nodes[nid].x for nid in nodes_to_wrap) / len(nodes_to_wrap)
+        avg_y = sum(self.nodes[nid].y for nid in nodes_to_wrap) / len(nodes_to_wrap)
+
+        self._node_counter += 1
+        group_id = f"node_{self._node_counter}"
+        while group_id in self.nodes:
+            self._node_counter += 1
+            group_id = f"node_{self._node_counter}"
+
+        self.add_node(group_id, "GroupNode", avg_x, avg_y - 80, "组合组")
+
+        self._group_contents[group_id] = set(nodes_to_wrap)
+
+        original_positions = {}
+        for nid in nodes_to_wrap:
+            node = self.nodes[nid]
+            original_positions[nid] = (node.x, node.y)
+            node.move_to(node.x, node.y + 40)
+
+        old_connections = []
+        for nid in entry_nodes:
+            for c in list(self.connections):
+                if c[1] == nid:
+                    old_connections.append(c)
+                    self.connections.remove(c)
+
+        if common_parent:
+            self.add_connection(common_parent, group_id)
+        for nid in entry_nodes:
+            self.add_connection(group_id, nid)
+
+        self._redraw_connections()
+
+        editor = self._get_editor()
+        if editor and hasattr(editor, '_wrap_in_group_undo'):
+            editor._wrap_in_group_undo(
+                group_id=group_id,
+                to_wrap=nodes_to_wrap,
+                common_parent=common_parent or "",
+                old_connections=old_connections,
+                original_positions=original_positions
+            )
+
+    def _collapse_group(self, group_id: str):
+        if group_id not in self.nodes:
+            return
+        contents = self._group_contents.get(group_id, set())
+        if not contents:
+            return
+        for nid in contents:
+            if nid in self.nodes:
+                self.nodes[nid].hide()
+                self._visible_node_ids.discard(nid)
+            self._collapsed_descendants.add(nid)
+        for conn in list(self.connections):
+            if conn[0] in contents and conn[1] in contents:
+                if conn in self.connection_items:
+                    self.canvas.itemconfig(self.connection_items[conn], state='hidden')
+        self._redraw_connections()
+
+        proxy_lines = []
+        group_node = self.nodes[group_id]
+        gx = group_node._transform_x(group_node.x)
+        gy = group_node._transform_y(group_node.y)
+        gw = group_node._scale(group_node.width)
+        start_x = gx + gw / 2
+        start_y = gy
+
+        for conn in self.connections:
+            if conn[0] in contents and conn[1] not in contents:
+                child = self.nodes.get(conn[1])
+                if child:
+                    cx = child._transform_x(child.x)
+                    cy = child._transform_y(child.y)
+                    cw = child._scale(child.width)
+                    end_x = cx - cw / 2
+                    end_y = cy
+                    mid_y = (start_y + end_y) / 2
+                    line_id = self.canvas.create_line(
+                        start_x, start_y, start_x, mid_y,
+                        end_x, mid_y, end_x, end_y,
+                        fill="#8B5CF6", width=2, dash=(4, 3),
+                        smooth=True, tags=("group_proxy",)
+                    )
+                    proxy_lines.append(line_id)
+        self._group_proxy_connections[group_id] = proxy_lines
+
+    def _expand_group(self, group_id: str):
+        if group_id not in self.nodes:
+            return
+        proxy_lines = self._group_proxy_connections.pop(group_id, [])
+        for line_id in proxy_lines:
+            try:
+                self.canvas.delete(line_id)
+            except Exception:
+                pass
+        contents = self._group_contents.get(group_id, set())
+        if not contents:
+            return
+        for nid in contents:
+            if nid in self.nodes:
+                node = self.nodes[nid]
+                node.set_zoom(self.zoom)
+                node.set_pan(self.pan_x, self.pan_y)
+                node.redraw()
+                self._visible_node_ids.add(nid)
+            self._collapsed_descendants.discard(nid)
+        for conn in list(self.connections):
+            if conn[0] in contents and conn[1] in contents:
+                if conn in self.connection_items:
+                    self.canvas.itemconfig(self.connection_items[conn], state='normal')
+        self._redraw_connections()
+
+    def _get_all_descendants(self, node_id: str) -> set:
+        result = set()
+        queue = []
+        for conn in self.connections:
+            if conn[0] == node_id:
+                queue.append(conn[1])
+        while queue:
+            child_id = queue.pop(0)
+            if child_id in result:
+                continue
+            result.add(child_id)
+            for conn in self.connections:
+                if conn[0] == child_id and conn[1] not in result:
+                    queue.append(conn[1])
+        return result

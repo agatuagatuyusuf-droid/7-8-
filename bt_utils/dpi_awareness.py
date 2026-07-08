@@ -45,26 +45,31 @@ def initialize_dpi_awareness():
 
 
 def get_dpi_scale():
-    """获取当前主显示器的DPI缩放比例
-    
-    Returns:
-        float: DPI缩放比例 (1.0 = 100%, 1.25 = 125%, 1.5 = 150%)
-    """
     if sys.platform != 'win32':
         return 1.0
     
     try:
-        hdc = ctypes.windll.user32.GetDC(0)
-        if hdc:
-            dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)
-            ctypes.windll.user32.ReleaseDC(0, hdc)
-            return dpi / 96.0
+        h = ctypes.windll.user32.MonitorFromWindow(0, 1)
+        x = ctypes.c_uint()
+        y = ctypes.c_uint()
+        ctypes.windll.shcore.GetDpiForMonitor(h, 0, ctypes.byref(x), ctypes.byref(y))
+        if x.value > 0:
+            return x.value / 96.0
     except Exception:
         pass
     
     try:
         dpi = ctypes.windll.user32.GetDpiForSystem()
         if dpi > 0:
+            return dpi / 96.0
+    except Exception:
+        pass
+    
+    try:
+        hdc = ctypes.windll.user32.GetDC(0)
+        if hdc:
+            dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)
+            ctypes.windll.user32.ReleaseDC(0, hdc)
             return dpi / 96.0
     except Exception:
         pass
