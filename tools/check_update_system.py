@@ -134,6 +134,11 @@ def main():
     smoke = read("tools/check_release_pipeline_smoke.py")
     checks.append(("release pipeline smoke checks good and bad zip", "expected protected CoreService zip verification to pass" in smoke and "expected corrupted CoreService zip verification to fail" in smoke))
 
+    checks.append(("release drill check exists", file_exists("tools/check_release_drill.py")))
+    checks.append(("release drill runner exists", file_exists("tools/run_release_drill.py")))
+    drill_check = read("tools/check_release_drill.py")
+    checks.append(("release drill check validates blocked release", "BLOCKED" in drill_check and "Obfuscar not found" in drill_check))
+
     ok = True
     for name, result in checks:
         print(("PASS" if result else "FAIL") + ": " + name)

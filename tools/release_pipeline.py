@@ -8,6 +8,7 @@ Usage:
 """
 import argparse
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -24,7 +25,12 @@ PROJECT_ROOT = os.path.dirname(TOOLS_DIR)
 
 
 def log(msg: str):
-    print(f"[{datetime.now():%H:%M:%S}] {msg}")
+    line = f"[{datetime.now():%H:%M:%S}] {msg}"
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        print(line)
 
 
 def sha256_file(path: str) -> str:
@@ -109,7 +115,7 @@ def protect_csharp(input_dir: str, output_dir: str, obfuscator_path: str, mode: 
         return False
 
     cmd = [
-        "powershell", "-ExecutionPolicy", "Bypass", "-File", ps1_path,
+        "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1_path,
         "-InputDir", input_dir,
         "-OutputDir", output_dir,
         "-ObfuscatorPath", obfuscator_path,
@@ -232,16 +238,19 @@ def sign_manifest(manifest_path: str, private_key_path: str) -> bool:
     return result.returncode == 0
 
 
-def verify_manifest_sig(manifest_path: str, sig_path: str) -> bool:
+def verify_manifest_sig(manifest_path: str, sig_path: str, public_key_path: str = "") -> bool:
     script = os.path.join(TOOLS_DIR, "verify_manifest.py")
     if not os.path.exists(script):
         log(f"verify_manifest.py \u4e0d\u5b58\u5728")
         return False
-    result = subprocess.run([
+    cmd = [
         sys.executable, script,
         "--manifest", manifest_path,
         "--sig", sig_path,
-    ], cwd=PROJECT_ROOT)
+    ]
+    if public_key_path:
+        cmd.extend(["--public-key", public_key_path])
+    result = subprocess.run(cmd, cwd=PROJECT_ROOT)
     return result.returncode == 0
 
 
@@ -294,6 +303,13 @@ def generate_latest_json(update_dir: str, version: str, channel: str, platform: 
     return True
 
 
+def _derive_public_key_path(private_key_path: str) -> str:
+    base = os.path.dirname(private_key_path)
+    name = os.path.basename(private_key_path)
+    pub_name = name.replace("_private.", "_public.")
+    return os.path.join(base, pub_name)
+
+
 def main():
     parser = argparse.ArgumentParser(description="AutoDoor Pro Release Pipeline")
     parser.add_argument("--version", required=True, help="\u7248\u672c\u53f7")
@@ -309,15 +325,19 @@ def main():
     parser.add_argument("--release-dir", default="", help="release \u8f93\u51fa\u76ee\u5f55")
     parser.add_argument("--project-root", default=PROJECT_ROOT, help="\u9879\u76ee\u6839\u76ee\u5f55")
     parser.add_argument("--base-update-url", default="", help="\u66f4\u65b0\u670d\u52a1\u5668\u57fa\u7840 URL")
+    parser.add_argument("--skip-git-check", action="store_true", help="\u8df3\u8fc7 git \u5de5\u4f5c\u533a\u68c0\u67e5\uff08\u53d1\u5e03\u6f14\u7ec3\u7528\uff09")
+    parser.add_argument("--skip-build", action="store_true", help="\u8df3\u8fc7\u6784\u5efa\u6b65\u9aa4\uff08\u53d1\u5e03\u6f14\u7ec3\u7528\uff09")
     args = parser.parse_args()
 
     args.mandatory = args.mandatory.lower() in ("true", "1", "yes")
 
-    steps = [
-        ("\u68c0\u67e5 Git \u5de5\u4f5c\u533a", check_git_clean),
+    steps = []
+    if not args.skip_git_check:
+        steps.append(("\u68c0\u67e5 Git \u5de5\u4f5c\u533a", check_git_clean))
+    steps.extend([
         ("\u68c0\u67e5\u79c1\u94a5", lambda: check_private_key(args.private_key)),
         ("\u68c0\u67e5\u6df7\u6dc6\u5668", lambda: check_obfuscator(args.obfuscator_path, args.mode)),
-    ]
+    ])
 
     version = args.version
     platform = args.platform
@@ -337,7 +357,8 @@ def main():
             notes = json.load(f)
 
     # Parse steps
-    steps.append(("\u6784\u5efa\u5546\u4e1a\u5305", build_commercial))
+    if not args.skip_build:
+        steps.append(("\u6784\u5efa\u5546\u4e1a\u5305", build_commercial))
 
     steps.append(("\u51c6\u5907\u53d7\u4fdd\u62a4 dist", lambda: copy_full_dist_for_protection(
         dist_dir,
@@ -373,8 +394,9 @@ def main():
 
     manifest_path = os.path.join(update_dir, "manifest.json")
     sig_path = os.path.join(update_dir, "manifest.sig")
+    public_key_path = _derive_public_key_path(args.private_key)
 
-    steps.append(("\u6821\u9a8c Manifest \u7b7e\u540d", lambda: verify_manifest_sig(manifest_path, sig_path)))
+    steps.append(("\u6821\u9a8c Manifest \u7b7e\u540d", lambda: verify_manifest_sig(manifest_path, sig_path, public_key_path)))
     steps.append(("\u68c0\u67e5\u53d1\u5e03\u5305", lambda: check_release_package(release_dir)))
     base_url = args.base_update_url.rstrip("/")
     if not base_url and mode == "release":

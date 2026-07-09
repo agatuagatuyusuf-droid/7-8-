@@ -269,3 +269,13 @@ v1.6.0 release candidate ready
 - 已验证错误 CoreService DLL 的 zip 会被拒绝
 - 该测试不依赖真实 exe / zip / dist 提交
 
+## 阶段3：真实商业发布演练脚本
+
+- 已新增 tools/run_release_drill.py
+- 已新增 tools/check_release_drill.py
+- dev drill 必须真实运行 release_pipeline.py
+- release drill 没有 Obfuscar 时必须 BLOCKED
+- release drill 有 Obfuscar 时才允许 PASS
+- 演练产物写入系统临时目录
+- 不提交 dist/release/exe/zip/私钥
+

@@ -179,3 +179,27 @@ release_pipeline.py 会检查 git 工作区是否干净。
 3. update zip 来自 protected_dist_dir
 4. CoreService 目录包含 appsettings.json / runtimeconfig / deps.json
 ```
+
+## 阶段3：发布演练
+
+运行：
+
+```bash
+python tools/run_release_drill.py
+```
+
+该脚本会：
+
+* 在系统临时目录构造 fake dist
+* 生成临时测试私钥
+* 跑 dev release pipeline
+* 检查 Obfuscar
+* 有 Obfuscar 时跑 release pipeline
+* 没有 Obfuscar 时标记 release drill 为 BLOCKED
+
+注意：
+
+```text
+BLOCKED 不是失败。
+没有安装 Obfuscar 时，release 模式不能假写 PASS。
+```

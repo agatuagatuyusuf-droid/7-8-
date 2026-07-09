@@ -108,6 +108,9 @@ license/*.key
 # Release packages (local, not committed)
 release/
 
+# Release drill report (runtime generated)
+docs/RELEASE_DRILL_REPORT.md
+
 # Private keys and secrets (block all .pem/.key by default)
 *.pem
 *.key
