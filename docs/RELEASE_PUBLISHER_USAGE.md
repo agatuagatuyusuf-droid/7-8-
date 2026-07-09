@@ -152,6 +152,23 @@ tools/protect_csharp.ps1
 
 release 模式必须真实执行 Obfuscar，不能只复制文件。
 
+## release notes 临时文件
+
+发布中心填写的 release notes 不会写到项目根目录。
+
+临时文件位置：
+
+```text
+%TEMP%/AutoDoorProPublisher/_ui_release_notes.json
+```
+
+原因：
+
+```text
+release_pipeline.py 会检查 git 工作区是否干净。
+如果发布中心把 _ui_release_notes.json 写到项目根目录，会导致 git clean 检查失败。
+```
+
 ## 生产发布注意
 
 发布中心 release 模式必须确认：

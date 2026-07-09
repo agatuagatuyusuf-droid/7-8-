@@ -117,6 +117,11 @@ def main():
     checks.append(("publisher filters unsupported pipeline args", "allowed_path_args" in publisher_ui and "server_publish_dir" in publisher_ui))
     checks.append(("publisher protect calls powershell ps1", "protect_csharp.ps1" in publisher_ui and "powershell" in publisher_ui))
     checks.append(("publisher has terminate helper", "_terminate_current_proc" in publisher_ui))
+    checks.append(("publisher release notes uses temp dir", "tempfile.gettempdir()" in publisher_ui and "_get_release_notes_path" in publisher_ui))
+    checks.append(("publisher cleans legacy root notes", "_cleanup_legacy_project_notes_file" in publisher_ui and "已清理历史临时 notes 文件" in publisher_ui))
+    checks.append(("publisher logs temp release notes path", "release notes 临时文件" in publisher_ui))
+    checks.append(("publisher gather args uses release notes helper", "notes_path = self._get_release_notes_path()" in publisher_ui))
+    checks.append(("publisher gather args no direct project notes write", "notes_path = os.path.join(PROJECT_ROOT, \"_ui_release_notes.json\")" not in publisher_ui))
     checks.append(("publisher saves base update url", '"base_update_url"' in publisher_ui and "_save_current_config" in publisher_ui))
     checks.append(("publisher uses output queue for nonblocking timeout", "queue.Queue" in publisher_ui and "_reader_thread" in publisher_ui))
     checks.append(("publisher main timeout loop avoids blocking readline", "get_nowait" in publisher_ui and "output_queue" in publisher_ui))
@@ -124,6 +129,10 @@ def main():
     checks.append(("core runtime slice check exists", file_exists("tools/check_core_runtime_slice.py")))
     checks.append(("install obfuscar script exists", file_exists("tools/install_obfuscar.ps1")))
     checks.append(("find obfuscar script exists", file_exists("tools/find_obfuscar.ps1")))
+
+    checks.append(("release pipeline smoke check exists", file_exists("tools/check_release_pipeline_smoke.py")))
+    smoke = read("tools/check_release_pipeline_smoke.py")
+    checks.append(("release pipeline smoke checks good and bad zip", "expected protected CoreService zip verification to pass" in smoke and "expected corrupted CoreService zip verification to fail" in smoke))
 
     ok = True
     for name, result in checks:

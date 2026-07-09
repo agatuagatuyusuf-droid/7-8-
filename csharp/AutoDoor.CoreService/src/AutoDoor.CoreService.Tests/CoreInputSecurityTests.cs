@@ -1,10 +1,4 @@
-using System;
-using System.Text.Json;
 using System.Threading.Tasks;
-using AutoDoor.CoreService.Common;
-using AutoDoor.CoreService.Ipc;
-using AutoDoor.CoreService.License;
-using AutoDoor.CoreService.Runtime;
 using AutoDoor.CoreService.Runtime.NativeInput;
 using AutoDoor.CoreService.Security;
 using Xunit;

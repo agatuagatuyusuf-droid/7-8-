@@ -62,6 +62,10 @@ def main() -> int:
     ui = read("tools/release_publisher_ui.py")
     checks.append(("publisher avoids false obfuscator missing log", "Obfuscar 已自动识别" in ui and "elif obfus_already_found" in ui))
 
+    checks.append(("release pipeline smoke check exists", exists("tools/check_release_pipeline_smoke.py")))
+    smoke = read("tools/check_release_pipeline_smoke.py")
+    checks.append(("release pipeline smoke verifies protected core zip", "verify_update_zip_contains_protected_core" in smoke and "corrupted CoreService zip verification" in smoke))
+
     gitignore = read(".gitignore")
     checks.append(("dotnet tools ignored", "tools/.dotnet-tools/" in gitignore))
     checks.append(("obfuscar temp ignored", "tools/.obfuscar-temp/" in gitignore))

@@ -5,6 +5,7 @@ import threading
 import json
 import queue
 import shutil
+import tempfile
 import signal
 import time
 from datetime import datetime
@@ -405,6 +406,20 @@ class ReleasePublisherUI(ctk.CTk):
         else:
             self._log("当前无运行中的任务。")
 
+    def _get_release_notes_path(self) -> str:
+        temp_root = os.path.join(tempfile.gettempdir(), "AutoDoorProPublisher")
+        os.makedirs(temp_root, exist_ok=True)
+        return os.path.join(temp_root, "_ui_release_notes.json")
+
+    def _cleanup_legacy_project_notes_file(self):
+        legacy_path = os.path.join(PROJECT_ROOT, "_ui_release_notes.json")
+        if os.path.exists(legacy_path):
+            try:
+                os.remove(legacy_path)
+                self._log(f"已清理历史临时 notes 文件: {legacy_path}")
+            except Exception as e:
+                self._log(f"清理历史临时 notes 文件失败: {e}")
+
     def _gather_args(self) -> list:
         args = [
             sys.executable, os.path.join(TOOLS_DIR, "release_pipeline.py"),
@@ -430,11 +445,14 @@ class ReleasePublisherUI(ctk.CTk):
             if val:
                 flag = "--" + key.replace("_", "-")
                 args.extend([flag, val])
+        self._cleanup_legacy_project_notes_file()
+
         notes = self.notes_text.get("1.0", tk.END).strip()
         if notes:
-            notes_path = os.path.join(PROJECT_ROOT, "_ui_release_notes.json")
+            notes_path = self._get_release_notes_path()
             with open(notes_path, "w", encoding="utf-8") as f:
                 json.dump([notes], f, ensure_ascii=False)
+            self._log(f"release notes 临时文件: {notes_path}")
             args.extend(["--notes-file", notes_path])
         return args
 

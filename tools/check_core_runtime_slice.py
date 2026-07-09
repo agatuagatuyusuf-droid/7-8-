@@ -66,6 +66,7 @@ def main() -> int:
     tests = read("csharp/AutoDoor.CoreService/src/AutoDoor.CoreService.Tests/CoreInputSecurityTests.cs")
     checks.append(("tests reject empty login token", "LoginSessionServiceRejectsEmptyToken" in tests and "Validate(\"\")" in tests))
     checks.append(("tests reject long text without sending input", "NativeInputExecutorRejectsLongText" in tests and "TEXT_TOO_LONG" in tests and "2001" in tests))
+    checks.append(("core input tests avoid unused broad service usings", "AutoDoor.CoreService.Ipc" not in tests and "AutoDoor.CoreService.License" not in tests and "AutoDoor.CoreService.Common" not in tests))
 
     ok = True
     for name, result in checks:

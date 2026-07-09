@@ -254,3 +254,18 @@ v1.6.0 release candidate ready
 - release_pipeline 已校验 update zip 内 CoreService DLL 来自 protected_dist_dir
 - update zip 必须包含 runtimeconfig / deps / appsettings
 - 已新增不会触发真实输入的 CoreInputSecurityTests
+
+## 发布中心 release notes 临时文件修复
+
+- 发布中心不再把 _ui_release_notes.json 写到项目根目录
+- release notes 临时文件改为写入系统临时目录
+- 启动发布前会清理历史遗留的项目根目录 _ui_release_notes.json
+- 避免发布中心自己生成临时文件导致 release_pipeline git clean 检查失败
+
+## release_pipeline 烟雾测试
+
+- 已新增 tools/check_release_pipeline_smoke.py
+- 已验证 protected CoreService zip 可以通过校验
+- 已验证错误 CoreService DLL 的 zip 会被拒绝
+- 该测试不依赖真实 exe / zip / dist 提交
+
