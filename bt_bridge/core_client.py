@@ -103,6 +103,27 @@ class CoreClient:
             "login_session": login_session
         })
 
+    def core_input_key_press(self, login_session: str, key: str):
+        return self.send_request("core.input.key_press", {
+            "login_session": login_session,
+            "key": key
+        })
+
+    def core_input_text_input(self, login_session: str, text: str):
+        return self.send_request("core.input.text_input", {
+            "login_session": login_session,
+            "text": text
+        })
+
+    def core_input_mouse_click(self, login_session: str, x: int, y: int, button: str = "left", count: int = 1):
+        return self.send_request("core.input.mouse_click", {
+            "login_session": login_session,
+            "x": int(x),
+            "y": int(y),
+            "button": button,
+            "count": int(count)
+        })
+
     def shutdown(self):
         self.send_request("core.shutdown")
         self.disconnect()

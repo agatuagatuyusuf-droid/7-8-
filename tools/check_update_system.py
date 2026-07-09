@@ -107,6 +107,10 @@ def main():
     checks.append(("publisher saves base update url", '"base_update_url"' in publisher_ui and "_save_current_config" in publisher_ui))
     checks.append(("publisher uses output queue for nonblocking timeout", "queue.Queue" in publisher_ui and "_reader_thread" in publisher_ui))
     checks.append(("publisher main timeout loop avoids blocking readline", "get_nowait" in publisher_ui and "output_queue" in publisher_ui))
+    checks.append(("obfuscar integration check exists", file_exists("tools/check_obfuscar_integration.py")))
+    checks.append(("core runtime slice check exists", file_exists("tools/check_core_runtime_slice.py")))
+    checks.append(("install obfuscar script exists", file_exists("tools/install_obfuscar.ps1")))
+    checks.append(("find obfuscar script exists", file_exists("tools/find_obfuscar.ps1")))
 
     ok = True
     for name, result in checks:

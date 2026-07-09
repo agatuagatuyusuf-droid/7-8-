@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 from tkinter import messagebox, Text, filedialog
 import tkinter as tk
+import glob as glob_mod
 
 import customtkinter as ctk
 
@@ -142,6 +143,7 @@ class ReleasePublisherUI(ctk.CTk):
             ("自动搜索路径", self._auto_detect_paths),
             ("填充测试配置", self._fill_test_config),
             ("生成测试私钥", self._generate_test_key),
+            ("安装 Obfuscar", self._install_obfuscar),
             ("停止任务", self._stop_current_task),
         ]
         for i, (text, cmd) in enumerate(extra_actions):
@@ -219,7 +221,6 @@ class ReleasePublisherUI(ctk.CTk):
             os.path.join(PROJECT_ROOT, "dist", "AutoDoorPro"),
             os.path.join(PROJECT_ROOT, "dist"),
         ]
-        import glob as glob_mod
         release_dists = glob_mod.glob(os.path.join(PROJECT_ROOT, "release", "*", "dist"))
         dist_candidates.extend(sorted(release_dists))
 
@@ -263,7 +264,14 @@ class ReleasePublisherUI(ctk.CTk):
         else:
             self._log("警告: 未找到 resources/security/release_public.pem")
 
+        if self._auto_detect_obfuscator():
+            obfus_already_found = True
+        else:
+            obfus_already_found = False
+
         obfus_candidates = [
+            os.path.join(PROJECT_ROOT, "tools", ".dotnet-tools", "obfuscar.exe"),
+            os.path.join(os.environ.get("USERPROFILE", ""), ".dotnet", "tools", "obfuscar.exe"),
             os.path.join("D:\\Tools\\Obfuscator\\obfuscator.exe"),
             os.path.join("D:\\Tools\\ConfuserEx\\Confuser.CLI.exe"),
             os.path.join("D:\\Tools\\ConfuserEx\\ConfuserEx.exe"),
@@ -276,7 +284,7 @@ class ReleasePublisherUI(ctk.CTk):
             if os.path.isfile(o):
                 found_obfus = o
                 break
-        if found_obfus:
+        if found_obfus and not obfus_already_found:
             self.path_vars["obfuscator_path"].set(found_obfus)
             self._log(f"混淆器路径: {found_obfus}")
         else:
@@ -309,6 +317,50 @@ class ReleasePublisherUI(ctk.CTk):
         self.notes_text.insert("1.0", "发布演练测试版本，不作为正式销售版本")
         self._auto_detect_paths()
         self._log("测试配置已填充。")
+
+    def _install_obfuscar(self):
+        script = os.path.join(TOOLS_DIR, "install_obfuscar.ps1")
+        if not os.path.exists(script):
+            self._log("未找到 tools/install_obfuscar.ps1")
+            return
+
+        args = [
+            "powershell",
+            "-ExecutionPolicy", "Bypass",
+            "-File", script,
+        ]
+
+        def run():
+            self._run_pipeline_with_timeout(args, 600)
+            self._auto_detect_obfuscator()
+
+        self._run_in_thread(run)
+
+    def _auto_detect_obfuscator(self):
+        find_script = os.path.join(TOOLS_DIR, "find_obfuscar.ps1")
+        if os.path.exists(find_script):
+            try:
+                result = subprocess.run(
+                    [
+                        "powershell",
+                        "-ExecutionPolicy", "Bypass",
+                        "-File", find_script,
+                        "-ProjectRoot", PROJECT_ROOT,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    path = result.stdout.strip().splitlines()[-1].strip()
+                    if os.path.exists(path):
+                        self.path_vars["obfuscator_path"].set(path)
+                        self._log(f"Obfuscar 路径: {path}")
+                        return True
+            except Exception as e:
+                self._log(f"自动查找 Obfuscar 失败: {e}")
+
+        return False
 
     def _generate_test_key(self):
         appdata = os.environ.get("APPDATA", os.path.expanduser("~"))

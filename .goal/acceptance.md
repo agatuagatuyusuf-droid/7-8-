@@ -201,3 +201,27 @@ v1.6.0 release candidate ready
 - 主超时循环不会被无输出子进程卡死
 - 停止任务按钮仍可终止当前进程
 - 长任务超时保护可正常触发
+
+## 阶段1：免费 Obfuscar 混淆器接入
+
+- 已新增 tools/install_obfuscar.ps1
+- 已新增 tools/find_obfuscar.ps1
+- 已新增 tools/check_obfuscar_available.py
+- 已改造 tools/protect_csharp.ps1
+- release 模式必须真实执行 Obfuscar
+- dev 模式允许明确 copy fallback
+- 发布中心已支持安装 Obfuscar
+- 发布中心已支持自动查找 Obfuscar
+- 未提交 tools/.dotnet-tools/
+- 未提交 release/dist/exe/zip
+
+## 阶段2：C# Core Runtime 核心执行切片
+
+- 已新增 NativeInputExecutor
+- 已新增 CoreActionExecutor
+- 已新增 core.input.key_press
+- 已新增 core.input.text_input
+- 已新增 core.input.mouse_click
+- 三个 action 都要求 login_session
+- Python CoreClient 已新增调用方法
+- 未绕过 C# CoreService 执行核心输入动作

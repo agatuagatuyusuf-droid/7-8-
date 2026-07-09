@@ -85,6 +85,11 @@ legal/*.key
 .goal/*.log
 !.goal/state.json
 
+# AutoDoor Pro local tools
+tools/.dotnet-tools/
+tools/.obfuscar-temp/
+*.obfuscar.tmp.xml
+
 # License cache (local)
 license/cache.dat
 license/*.key

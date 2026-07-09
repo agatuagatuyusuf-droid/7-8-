@@ -131,3 +131,23 @@ https://example.com/updates/internal/win-x64/1.6.1-test
 ```text
 tools/protect_csharp.ps1
 ```
+
+## Obfuscar 免费混淆器
+
+发布中心支持免费 Obfuscar。
+
+按钮：
+
+```text
+安装 Obfuscar
+```
+
+安装后点击：
+
+```text
+自动搜索路径
+```
+
+会自动填入混淆器路径。
+
+release 模式必须真实执行 Obfuscar，不能只复制文件。

@@ -6,6 +6,7 @@ using AutoDoor.CoreService.Common;
 using AutoDoor.CoreService.Ipc;
 using AutoDoor.CoreService.License;
 using AutoDoor.CoreService.Runtime;
+using AutoDoor.CoreService.Runtime.NativeInput;
 using AutoDoor.CoreService.Security;
 
 namespace AutoDoor.CoreService;
@@ -67,6 +68,8 @@ public class Program
         services.AddSingleton(appSettings.Logging);
         services.AddSingleton<CoreServiceLifetime>();
         services.AddSingleton<RuntimeHost>();
+        services.AddSingleton<NativeInputExecutor>();
+        services.AddSingleton<CoreActionExecutor>();
         services.AddSingleton<TcpIpcServer>();
         services.AddSingleton<LicenseClient>();
         services.AddSingleton<LicenseGuard>();

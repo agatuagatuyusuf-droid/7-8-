@@ -24,6 +24,7 @@ public class TcpIpcServer
     private readonly CoreServiceLifetime _lifetime;
     private readonly IpcSettings _settings;
     private readonly LoginSessionService _loginSessionService;
+    private readonly CoreActionExecutor _coreActionExecutor;
     private TcpListener? _listener;
     private bool _running;
     private readonly SemaphoreSlim _concurrencySemaphore;
@@ -34,6 +35,7 @@ public class TcpIpcServer
         MachineCodeProvider machineCodeProvider,
         FeatureGate featureGate,
         RuntimeHost runtimeHost,
+        CoreActionExecutor coreActionExecutor,
         CoreServiceLifetime lifetime,
         AppSettings appSettings,
         LoginSessionService loginSessionService)
@@ -43,6 +45,7 @@ public class TcpIpcServer
         _machineCodeProvider = machineCodeProvider;
         _featureGate = featureGate;
         _runtimeHost = runtimeHost;
+        _coreActionExecutor = coreActionExecutor;
         _lifetime = lifetime;
         _settings = appSettings.Ipc;
         _loginSessionService = loginSessionService;
@@ -187,6 +190,9 @@ public class TcpIpcServer
             "tree.status" => HandleTreeStatus(),
             "runtime.logs" => HandleRuntimeLogs(),
             "runtime.stats" => HandleRuntimeStats(),
+            "core.input.key_press" => await HandleCoreInputKeyPressAsync(payload),
+            "core.input.text_input" => await HandleCoreInputTextInputAsync(payload),
+            "core.input.mouse_click" => await HandleCoreInputMouseClickAsync(payload),
             _ => (false, "UNKNOWN_ACTION", $"Unknown action: {action}", null)
         };
     }
@@ -358,6 +364,62 @@ public class TcpIpcServer
     private (bool, string?, string, object?) HandleRuntimeStats()
     {
         return (true, null, "OK", _runtimeHost.Stats());
+    }
+
+    private async Task<(bool, string?, string, object?)> HandleCoreInputKeyPressAsync(JsonElement payload)
+    {
+        var loginError = RequireLogin(payload);
+        if (loginError != null)
+        {
+            return loginError.Value;
+        }
+
+        if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty("key", out var keyProp))
+            return (false, "MISSING_KEY", "key is required", null);
+
+        var key = keyProp.GetString() ?? "";
+        var result = await _coreActionExecutor.KeyPressAsync(key, CancellationToken.None);
+        return (result.success, result.error, result.message, null);
+    }
+
+    private async Task<(bool, string?, string, object?)> HandleCoreInputTextInputAsync(JsonElement payload)
+    {
+        var loginError = RequireLogin(payload);
+        if (loginError != null)
+        {
+            return loginError.Value;
+        }
+
+        if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty("text", out var textProp))
+            return (false, "MISSING_TEXT", "text is required", null);
+
+        var text = textProp.GetString() ?? "";
+        var result = await _coreActionExecutor.TextInputAsync(text, CancellationToken.None);
+        return (result.success, result.error, result.message, null);
+    }
+
+    private async Task<(bool, string?, string, object?)> HandleCoreInputMouseClickAsync(JsonElement payload)
+    {
+        var loginError = RequireLogin(payload);
+        if (loginError != null)
+        {
+            return loginError.Value;
+        }
+
+        if (payload.ValueKind != JsonValueKind.Object)
+            return (false, "INVALID_PAYLOAD", "payload must be object", null);
+
+        if (!payload.TryGetProperty("x", out var xProp) || !xProp.TryGetInt32(out var x))
+            return (false, "MISSING_X", "x is required", null);
+
+        if (!payload.TryGetProperty("y", out var yProp) || !yProp.TryGetInt32(out var y))
+            return (false, "MISSING_Y", "y is required", null);
+
+        var button = payload.TryGetProperty("button", out var buttonProp) ? buttonProp.GetString() ?? "left" : "left";
+        var count = payload.TryGetProperty("count", out var countProp) && countProp.TryGetInt32(out var c) ? c : 1;
+
+        var result = await _coreActionExecutor.MouseClickAsync(x, y, button, count, CancellationToken.None);
+        return (result.success, result.error, result.message, null);
     }
 
     private (bool, string?, string, object?)? RequireLogin(JsonElement payload)
