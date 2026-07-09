@@ -125,32 +125,38 @@ def main():
         [sys.executable, os.path.join(PROJECT_ROOT, "tools", "check_license_cache_security.py")]
     ))
 
-    # 12. build_commercial
+    # 12. check_ocr_worker
+    checks.append(run_check(
+        "check_ocr_worker",
+        [sys.executable, os.path.join(PROJECT_ROOT, "tools", "check_ocr_worker.py")]
+    ))
+
+    # 13. build_commercial
     checks.append(run_check(
         "build_commercial",
         ["cmd", "/c", "build_commercial.bat"],
         timeout=900
     ))
 
-    # 13. check_dist_no_source
+    # 14. check_dist_no_source
     checks.append(run_check(
         "check_dist_no_source",
         [sys.executable, os.path.join(PROJECT_ROOT, "tools", "check_dist_no_source.py"), "dist"]
     ))
 
-    # 14. check_commercial_package
+    # 15. check_commercial_package
     checks.append(run_check(
         "check_commercial_package",
         [sys.executable, os.path.join(PROJECT_ROOT, "tools", "check_commercial_package.py"), "dist"]
     ))
 
-    # 15. check_built_app_smoke
+    # 16. check_built_app_smoke
     checks.append(run_check(
         "check_built_app_smoke",
         [sys.executable, os.path.join(PROJECT_ROOT, "tools", "check_built_app_smoke.py"), "dist"]
     ))
 
-    # 14. Security scan
+    # 17. Security scan
     print(f"\n{'='*60}")
     print("[Security scan]")
     print(f"{'='*60}")

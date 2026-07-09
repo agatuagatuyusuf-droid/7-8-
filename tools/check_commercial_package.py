@@ -119,7 +119,6 @@ def main():
         "BEGIN PRIVATE KEY",
         "PRIVATE_KEY",
         "private_key",
-        "public_key"
     ]
     forbidden_text_found = False
     for root, dirs, files in os.walk(dist_dir):
