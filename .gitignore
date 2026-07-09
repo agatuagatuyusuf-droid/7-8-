@@ -103,9 +103,11 @@ license/*.key
 # Release packages (local, not committed)
 release/
 
-# Private keys and secrets
+# Private keys and secrets (block all .pem/.key by default)
 *.pem
 *.key
+# Exception: public key for update verification
+!resources/security/release_public.pem
 server/**/private*.pem
 server/**/private*.key
 server/**/keys/

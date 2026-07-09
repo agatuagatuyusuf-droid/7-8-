@@ -99,3 +99,41 @@ v1.6.0 release candidate ready
 - 源码模式仍允许 Python runtime fallback
 - 设置页无 runtime.use_csharp_core 开关（不存在泄漏）
 - 已新增 tools/check_license_ui_gate.py
+
+## 在线更新系统
+
+- 用户端支持检测新版本（VersionChecker v2）
+- 用户端支持弹窗提示更新（UpdateDialog）
+- 用户端支持下载更新包（UpdateDownloader）
+- 用户端支持 manifest 签名校验（UpdateVerifier）
+- 用户端支持 update zip sha256 校验
+- 用户端支持 update_agent 替换文件
+- 更新失败支持回滚
+- 强制更新时不能跳过
+- 下载过程有进度条（UpdateProgressDialog）
+- 只允许 HTTPS 下载
+
+## 发布流水线
+
+- 已新增 release_publisher_ui.py（CustomTkinter GUI）
+- 已新增 release_pipeline.py（CLI 一键发布）
+- 已新增 build_release.bat
+- 已新增 protect_csharp.ps1（混淆器接入占位）
+- 已新增 generate_manifest.py / sign_manifest.py / verify_manifest.py
+- 已新增 build_update_package.py（zip 打包）
+- 已新增 check_release_package.py（源码/私钥泄露检查）
+- 私钥不进入 git（.gitignore 已配置）
+- 用户端只带 public key（resources/security/release_public.pem）
+
+## 加密 / 混淆处理
+
+- 发布 UI 有"加密/混淆处理"入口
+- release 模式未配置混淆器会失败
+- dev 模式允许跳过混淆但必须 WARNING
+- 发布包会检查源码和私钥泄露
+
+## 检查工具
+
+- 已新增 check_update_system.py（21 项检查）
+- 已通过 check_core_login_gate.py（27/27 PASS）
+- 已通过 check_update_system.py（21/21 PASS）

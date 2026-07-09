@@ -404,6 +404,44 @@ class BehaviorTreeApp(ctk.CTk):
         else:
             from tkinter import messagebox
             messagebox.showinfo("检查更新", "版本检查器未初始化")
+
+    def _check_for_updates_v2(self, manifest_url: str):
+        """使用自定义更新服务器检查更新"""
+        if hasattr(self, '_version_checker'):
+            self._version_checker.check_for_updates_v2(
+                manifest_url=manifest_url,
+                manual=True,
+                callback=self._on_update_check_result
+            )
+        else:
+            from tkinter import messagebox
+            messagebox.showinfo("检查更新", "版本检查器未初始化")
+
+    def _on_update_check_result(self, data, latest_version: str, mandatory: bool, notes: list):
+        """更新检查结果回调"""
+        if data is None:
+            from tkinter import messagebox
+            messagebox.showinfo("检查更新", "当前已是最新版本！")
+            return
+
+        from bt_gui.dialogs.update_dialog import UpdateDialog
+
+        current_version = self._version_checker.current_version if hasattr(self, '_version_checker') else "未知"
+
+        def on_update():
+            download_url = data.get("download_url", "")
+            if download_url:
+                import webbrowser
+                webbrowser.open(download_url)
+
+        dialog = UpdateDialog(
+            parent=self,
+            latest_version=latest_version,
+            current_version=current_version,
+            release_notes=notes,
+            mandatory=mandatory,
+            on_update=on_update
+        )
     
     def _get_current_tab(self) -> str:
         """获取当前Tab ID"""

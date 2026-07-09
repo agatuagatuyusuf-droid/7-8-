@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import webbrowser
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 from bt_utils.log_manager import LogManager
 
 
@@ -668,4 +668,37 @@ class VersionChecker:
             self.check_for_updates(manual=False)
         
         thread = threading.Thread(target=check_delayed, daemon=True)
+        thread.start()
+
+    def check_for_updates_v2(self, manifest_url: str, manual: bool = False, callback: Optional[Callable] = None):
+        """检查更新（支持自定义更新服务器）"""
+        def check_async():
+            try:
+                import requests
+                response = requests.get(manifest_url, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+
+                latest_version = data.get("latest_version", "")
+                mandatory = data.get("mandatory", False)
+                notes = data.get("notes", [])
+
+                if not latest_version:
+                    return
+
+                if self._is_newer_version(latest_version):
+                    if callback:
+                        root = self._get_root_window()
+                        if root:
+                            root.after(0, lambda: callback(data, latest_version, mandatory, notes))
+                else:
+                    if manual and callback:
+                        root = self._get_root_window()
+                        if root:
+                            root.after(0, lambda: callback(None, "", False, []))
+
+            except Exception:
+                pass
+
+        thread = threading.Thread(target=check_async, daemon=True)
         thread.start()
