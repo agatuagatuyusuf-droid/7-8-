@@ -6,6 +6,9 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
+import tempfile
+import zipfile
 
 
 def sha256_file(path: str) -> str:
@@ -24,10 +27,18 @@ def get_files_recursive(root_dir: str, base_dir: str) -> list:
     root_dir = os.path.normpath(root_dir)
     base_dir = os.path.normpath(base_dir)
 
+    forbidden_names = {"manifest.json", "manifest.sig", "latest.json", "release_notes.json"}
+    forbidden_ext = {".zip", ".tmp", ".log", ".pyc", ".pyo"}
+
     for dirpath, dirnames, filenames in os.walk(root_dir):
         dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "__pycache__"]
 
         for fname in sorted(filenames):
+            if fname in forbidden_names:
+                continue
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in forbidden_ext:
+                continue
             if fname.endswith((".tmp", ".log", ".pyc", ".pyo")):
                 continue
             full_path = os.path.join(dirpath, fname)
@@ -65,11 +76,14 @@ def main():
     zip_sha = sha256_file(zip_path)
     zip_size = os.path.getsize(zip_path)
 
-    extract_dir = update_dir
-    if os.path.exists(os.path.join(update_dir, "dist")):
-        extract_dir = os.path.join(update_dir, "dist")
-    elif os.path.exists(os.path.join(update_dir, "AutoDoorPro")):
-        extract_dir = os.path.join(update_dir, "AutoDoorPro")
+    stage_dir = tempfile.mkdtemp(prefix="autodoor_manifest_")
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(stage_dir)
+
+        files = get_files_recursive(stage_dir, stage_dir)
+    finally:
+        shutil.rmtree(stage_dir, ignore_errors=True)
 
     notes = []
     if args.notes_file and os.path.exists(args.notes_file):
@@ -78,8 +92,6 @@ def main():
                 notes = json.load(f)
             except Exception:
                 pass
-
-    files = get_files_recursive(update_dir, update_dir)
 
     manifest = {
         "app": "AutoDoor Pro",

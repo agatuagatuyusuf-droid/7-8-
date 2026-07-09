@@ -2,7 +2,8 @@ param(
   [string]$InputDir,
   [string]$OutputDir,
   [string]$ObfuscatorPath,
-  [string]$Mode = "release"
+  [string]$Mode = "release",
+  [bool]$AllowCopyFallback = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,7 @@ Write-Host "  InputDir: $InputDir"
 Write-Host "  OutputDir: $OutputDir"
 Write-Host "  ObfuscatorPath: $ObfuscatorPath"
 Write-Host "  Mode: $Mode"
+Write-Host "  AllowCopyFallback: $AllowCopyFallback"
 
 # Check input exists
 $csExe = Join-Path $InputDir "AutoDoor.CoreService.exe"
@@ -35,12 +37,13 @@ if ($Mode -eq "release") {
     # Example with ConfuserEx:
     # & $ObfuscatorPath -i $InputDir -o $OutputDir
 
-    Write-Host "Obfuscator configured at: $ObfuscatorPath"
-    Write-Host "TODO: Execute obfuscator command here"
+    if (-not $AllowCopyFallback) {
+        Write-Host "ERROR: release mode requires real obfuscator command. Copy fallback disabled."
+        exit 1
+    }
 
-    # Fallback: copy files as-is (placeholder)
+    Write-Host "WARNING: AllowCopyFallback enabled, copying unprotected files"
     Copy-Item "$InputDir\*" $OutputDir -Recurse -Force
-    Write-Host "WARNING: Obfuscator command not yet implemented, files copied as-is"
 } else {
     Write-Host "WARNING: dev mode, skipping obfuscation"
     Copy-Item "$InputDir\*" $OutputDir -Recurse -Force

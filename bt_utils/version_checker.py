@@ -672,12 +672,24 @@ class VersionChecker:
 
     def check_for_updates_v2(self, manifest_url: str, manual: bool = False, callback: Optional[Callable] = None):
         """检查更新（支持自定义更新服务器）"""
+        required = ["latest_version", "manifest_url", "signature_url", "package_url"]
+
         def check_async():
             try:
                 import requests
                 response = requests.get(manifest_url, timeout=10)
                 response.raise_for_status()
                 data = response.json()
+
+                for key in required:
+                    if not data.get(key):
+                        raise ValueError(f"latest.json 缺少字段: {key}")
+
+                https_keys = ["manifest_url", "signature_url", "package_url"]
+                for key in https_keys:
+                    val = data.get(key, "")
+                    if not val.startswith("https://"):
+                        raise ValueError(f"{key} 必须使用 HTTPS: {val}")
 
                 latest_version = data.get("latest_version", "")
                 mandatory = data.get("mandatory", False)

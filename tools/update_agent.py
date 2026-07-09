@@ -7,11 +7,14 @@ AutoDoor Pro Update Agent
 启动参数：
   --app-dir      安装目录
   --package-dir  更新包解压目录
+  --manifest     manifest.json 路径（用于替换后校验）
   --main-exe     主程序 exe 文件名
   --pid          主程序进程 ID
 """
 
 import argparse
+import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -33,6 +36,17 @@ def log(msg: str):
     print(f"[update_agent] {msg}")
 
 
+def sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def wait_for_process_exit(pid: int, timeout: int = 60):
     """等待主进程退出"""
     try:
@@ -49,7 +63,6 @@ def wait_for_process_exit(pid: int, timeout: int = 60):
     except Exception:
         pass
 
-    # Fallback: simple polling
     for _ in range(timeout * 2):
         try:
             if os.name == "nt":
@@ -113,6 +126,28 @@ def verify_files(app_dir: str, main_exe: str) -> bool:
     return True
 
 
+def verify_files_by_manifest(app_dir: str, manifest_path: str) -> bool:
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    for item in manifest.get("files", []):
+        rel = item.get("path", "")
+        expected = item.get("sha256", "")
+        full = os.path.join(app_dir, rel)
+
+        if not os.path.exists(full):
+            log(f"验证失败，缺少文件: {rel}")
+            return False
+
+        actual = sha256_file(full)
+        if actual.lower() != expected.lower():
+            log(f"验证失败，hash 不匹配: {rel}")
+            return False
+
+    log("所有文件 hash 校验通过")
+    return True
+
+
 def restore_backup(app_dir: str, backup_path: str):
     log(f"回滚: {backup_path} -> {app_dir}")
     if os.path.exists(app_dir):
@@ -133,6 +168,7 @@ def main():
     parser = argparse.ArgumentParser(description="AutoDoor Pro Update Agent")
     parser.add_argument("--app-dir", required=True, help="安装目录")
     parser.add_argument("--package-dir", required=True, help="更新包目录")
+    parser.add_argument("--manifest", default="", help="manifest.json 路径（用于替换后校验）")
     parser.add_argument("--main-exe", default="AutoDoorPro.exe", help="主程序 exe")
     parser.add_argument("--pid", type=int, default=0, help="主程序进程 ID")
     args = parser.parse_args()
@@ -140,6 +176,7 @@ def main():
     log("=== UpdateAgent 启动 ===")
     log(f"app-dir: {args.app_dir}")
     log(f"package-dir: {args.package_dir}")
+    log(f"manifest: {args.manifest}")
     log(f"main-exe: {args.main_exe}")
     log(f"pid: {args.pid}")
 
@@ -167,7 +204,12 @@ def main():
         backup_path = backup_current(args.app_dir, backup_dir)
         replace_files(args.app_dir, args.package_dir)
 
-        if not verify_files(args.app_dir, args.main_exe):
+        if args.manifest:
+            ok = verify_files_by_manifest(args.app_dir, args.manifest)
+        else:
+            ok = verify_files(args.app_dir, args.main_exe)
+
+        if not ok:
             if backup_path:
                 restore_backup(args.app_dir, backup_path)
             log("更新失败，已回滚")

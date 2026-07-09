@@ -60,6 +60,30 @@ def main():
     pub_path = os.path.join(PROJECT_ROOT, "dist", "release_publisher_ui.py")
     checks.append(("publisher ui not copied to dist", not os.path.exists(pub_path)))
 
+    app_py = read("bt_gui/app.py")
+    checks.append(("main update button uses v2 signed update", "_check_for_updates_v2" in app_py and "check_for_updates(manual=True)" not in app_py))
+    checks.append(("app update callback uses UpdateService", "UpdateService" in app_py and "download_and_prepare" in app_py))
+    checks.append(("app update does not open browser for update", "webbrowser.open(download_url)" not in app_py))
+
+    manifest_py = read("tools/generate_manifest.py")
+    checks.append(("manifest generated from extracted zip stage", "ZipFile" in manifest_py and "mkdtemp" in manifest_py))
+    checks.append(("manifest excludes zip file", "forbidden_ext" in manifest_py and ".zip" in manifest_py))
+
+    verifier_py = read("bt_utils/update_verifier.py")
+    checks.append(("safe zip extraction exists", "safe_extract_zip" in verifier_py and "startswith" in verifier_py))
+
+    agent_py = read("tools/update_agent.py")
+    checks.append(("update agent verifies manifest after replace", "verify_files_by_manifest" in agent_py and "--manifest" in agent_py))
+
+    launcher_py = read("bt_utils/update_agent_launcher.py")
+    checks.append(("update agent launcher has no duplicate exe arg", "args = [agent_path]" in launcher_py or 'args = [sys.executable, agent_path]' in launcher_py))
+
+    protect_ps1 = read("tools/protect_csharp.ps1")
+    checks.append(("release mode cannot fake obfuscation", "AllowCopyFallback" in protect_ps1 and "Copy fallback disabled" in protect_ps1))
+
+    pipeline_py = read("tools/release_pipeline.py")
+    checks.append(("release latest url not empty", "base-update-url" in pipeline_py and "base_url" in pipeline_py))
+
     ok = True
     for name, result in checks:
         print(("PASS" if result else "FAIL") + ": " + name)

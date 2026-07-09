@@ -221,6 +221,7 @@ def main():
     parser.add_argument("--dist-dir", default="", help="dist \u76ee\u5f55")
     parser.add_argument("--release-dir", default="", help="release \u8f93\u51fa\u76ee\u5f55")
     parser.add_argument("--project-root", default=PROJECT_ROOT, help="\u9879\u76ee\u6839\u76ee\u5f55")
+    parser.add_argument("--base-update-url", default="", help="\u66f4\u65b0\u670d\u52a1\u5668\u57fa\u7840 URL")
     args = parser.parse_args()
 
     args.mandatory = args.mandatory.lower() in ("true", "1", "yes")
@@ -270,9 +271,23 @@ def main():
 
     steps.append(("\u6821\u9a8c Manifest \u7b7e\u540d", lambda: verify_manifest_sig(manifest_path, sig_path)))
     steps.append(("\u68c0\u67e5\u53d1\u5e03\u5305", lambda: check_release_package(release_dir)))
+    base_url = args.base_update_url.rstrip("/")
+    if not base_url and mode == "release":
+        log("release \u6a21\u5f0f\u5fc5\u987b\u63d0\u4f9b --base-update-url")
+        sys.exit(1)
+
+    manifest_url = ""
+    sig_url = ""
+    package_url = ""
+    if base_url:
+        zip_file_name = f"AutoDoorPro-{version}-{platform}.zip"
+        manifest_url = f"{base_url}/manifest.json"
+        sig_url = f"{base_url}/manifest.sig"
+        package_url = f"{base_url}/{zip_file_name}"
+
     steps.append(("\u751f\u6210 latest.json", lambda: generate_latest_json(
         update_dir, version, channel, platform,
-        args.mandatory, notes, "", "", ""
+        args.mandatory, notes, manifest_url, sig_url, package_url,
     )))
 
     for name, fn in steps:

@@ -137,3 +137,23 @@ v1.6.0 release candidate ready
 - 已新增 check_update_system.py（21 项检查）
 - 已通过 check_core_login_gate.py（27/27 PASS）
 - 已通过 check_update_system.py（21/21 PASS）
+
+## 在线更新真实闭环修复完成
+
+- 主界面"检查更新"已改为签名更新系统
+- 不再默认打开 GitHub Release / 浏览器下载
+- UpdateDialog 的"立即更新"会调用 UpdateService
+- 更新流程会下载 manifest.json / manifest.sig / update zip
+- manifest 签名失败会拒绝更新
+- zip sha256 失败会拒绝更新
+- 解压后文件 hash 失败会拒绝更新
+- UpdateAgent 替换后会按 manifest 再次校验
+- 更新失败会回滚
+- generate_manifest.py 不再把 zip / manifest / latest 写入 files
+- update_verifier.py 已使用 safe_extract_zip 防 Zip-slip
+- build_release.bat 已改为 version / private-key / obfuscator-path 三参数必填
+- release_pipeline.py 已支持 --base-update-url
+- release 模式下 protect_csharp.ps1 默认不能假混淆
+- check_update_system.py 已通过 31/31 PASS
+- check_core_login_gate.py 已通过 27/27 PASS
+- dotnet build -c Release 已通过，0 errors, 0 warnings

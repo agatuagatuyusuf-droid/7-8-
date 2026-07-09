@@ -6,19 +6,26 @@ from typing import Optional
 
 def launch_update_agent(app_dir: str, package_dir: str,
                         main_exe: str = "AutoDoorPro.exe",
-                        pid: int = 0) -> bool:
+                        pid: int = 0,
+                        manifest: str = "") -> bool:
     agent_path = _find_agent()
     if not agent_path:
         return False
 
-    args = [
-        sys.executable if agent_path.endswith(".py") else agent_path,
-        agent_path,
+    if agent_path.endswith(".py"):
+        args = [sys.executable, agent_path]
+    else:
+        args = [agent_path]
+
+    args.extend([
         "--app-dir", app_dir,
         "--package-dir", package_dir,
         "--main-exe", main_exe,
         "--pid", str(pid),
-    ]
+    ])
+    if manifest:
+        args.extend(["--manifest", manifest])
+
     try:
         creationflags = 0
         if os.name == "nt":

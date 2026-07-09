@@ -398,12 +398,18 @@ class BehaviorTreeApp(ctk.CTk):
             self.license_status_label.configure(text=f"授权错误")
 
     def _check_for_updates(self):
-        """检查更新"""
-        if hasattr(self, '_version_checker'):
-            self._version_checker.check_for_updates(manual=True)
-        else:
-            from tkinter import messagebox
-            messagebox.showinfo("检查更新", "版本检查器未初始化")
+        """检查更新（优先使用签名更新系统）"""
+        latest_url = self._settings.get("update.latest_url", "")
+
+        if latest_url:
+            self._check_for_updates_v2(latest_url)
+            return
+
+        from tkinter import messagebox
+        messagebox.showwarning(
+            "检查更新",
+            "未配置更新服务器 latest.json 地址。\n请在设置或发布配置中填写 update.latest_url。"
+        )
 
     def _check_for_updates_v2(self, manifest_url: str):
         """使用自定义更新服务器检查更新"""
@@ -418,21 +424,50 @@ class BehaviorTreeApp(ctk.CTk):
             messagebox.showinfo("检查更新", "版本检查器未初始化")
 
     def _on_update_check_result(self, data, latest_version: str, mandatory: bool, notes: list):
-        """更新检查结果回调"""
+        """更新检查结果回调（调用 UpdateService 下载校验）"""
         if data is None:
             from tkinter import messagebox
             messagebox.showinfo("检查更新", "当前已是最新版本！")
             return
 
-        from bt_gui.dialogs.update_dialog import UpdateDialog
+        from bt_gui.dialogs.update_dialog import UpdateDialog, UpdateProgressDialog
+        from bt_utils.update_service import UpdateService
 
         current_version = self._version_checker.current_version if hasattr(self, '_version_checker') else "未知"
 
         def on_update():
-            download_url = data.get("download_url", "")
-            if download_url:
-                import webbrowser
-                webbrowser.open(download_url)
+            progress = UpdateProgressDialog(self)
+            service = UpdateService()
+
+            def progress_cb(percent, status):
+                self.after(0, lambda: progress.set_progress(percent, status))
+
+            def worker():
+                try:
+                    prepared = service.download_and_prepare(data, progress_cb)
+
+                    app_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.getcwd()
+                    main_exe = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "AutoDoorPro.exe"
+                    pid = os.getpid()
+
+                    ok = service.launch_update_agent(
+                        prepared=prepared,
+                        app_dir=app_dir,
+                        main_exe=main_exe,
+                        pid=pid
+                    )
+
+                    if not ok:
+                        raise RuntimeError("启动 update_agent 失败")
+
+                    self.after(0, self.destroy)
+
+                except Exception as e:
+                    self.after(0, lambda: messagebox.showerror("更新失败", str(e)))
+                    self.after(0, progress.destroy)
+
+            import threading
+            threading.Thread(target=worker, daemon=True).start()
 
         dialog = UpdateDialog(
             parent=self,

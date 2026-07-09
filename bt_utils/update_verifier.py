@@ -75,12 +75,21 @@ def verify_extracted_files(root_dir: str, manifest: dict) -> List[str]:
     return errors
 
 
-def extract_and_verify(zip_path: str, extract_dir: str, manifest: dict) -> List[str]:
+def safe_extract_zip(zip_path: str, extract_dir: str):
     import zipfile
-
-    os.makedirs(extract_dir, exist_ok=True)
+    base = os.path.abspath(extract_dir)
 
     with zipfile.ZipFile(zip_path, "r") as zf:
-        zf.extractall(extract_dir)
+        for member in zf.infolist():
+            target = os.path.abspath(os.path.join(extract_dir, member.filename))
+            if not target.startswith(base + os.sep):
+                raise ValueError(f"非法路径: {member.filename}")
+            zf.extract(member, extract_dir)
+
+
+def extract_and_verify(zip_path: str, extract_dir: str, manifest: dict) -> List[str]:
+    os.makedirs(extract_dir, exist_ok=True)
+
+    safe_extract_zip(zip_path, extract_dir)
 
     return verify_extracted_files(extract_dir, manifest)

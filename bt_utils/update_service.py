@@ -93,6 +93,7 @@ class UpdateService:
                 "version": version,
                 "prepared_dir": extract_dir,
                 "main_exe": self._find_main_exe(extract_dir),
+                "manifest_path": manifest_path,
             }
 
         except Exception as e:
@@ -118,13 +119,21 @@ class UpdateService:
         if not agent_path:
             return False
 
-        args = [
-            agent_path,
+        manifest_path = prepared.get("manifest_path", "")
+
+        if agent_path.endswith(".py"):
+            args = [sys.executable, agent_path]
+        else:
+            args = [agent_path]
+
+        args.extend([
             "--app-dir", app_dir,
             "--package-dir", prepared.get("prepared_dir", ""),
             "--main-exe", main_exe,
             "--pid", str(pid),
-        ]
+        ])
+        if manifest_path:
+            args.extend(["--manifest", manifest_path])
         try:
             subprocess.Popen(args, creationflags=subprocess.CREATE_NO_WINDOW)
             return True
