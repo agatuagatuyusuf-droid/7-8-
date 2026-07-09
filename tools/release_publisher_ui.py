@@ -285,12 +285,13 @@ class ReleasePublisherUI(ctk.CTk):
         self._log("自动搜索路径完成。")
 
     def _auto_fill_update_url(self):
-        version = self.version_var.get()
-        channel = self.channel_var.get()
-        platform = self.platform_var.get()
-        mode = self.mode_var.get()
+        version = self.version_var.get().strip()
+        channel = self.channel_var.get().strip()
+        platform = self.platform_var.get().strip()
+        mode = self.mode_var.get().strip()
         if mode == "dev":
-            url = f"https://example.com/updates/internal/{platform}/{version}-test"
+            dev_version = version if version.endswith("-test") else f"{version}-test"
+            url = f"https://example.com/updates/internal/{platform}/{dev_version}"
         else:
             url = f"https://your-domain.com/updates/{channel}/{platform}/{version}"
         self.path_vars["base_update_url"].set(url)
@@ -331,10 +332,8 @@ class ReleasePublisherUI(ctk.CTk):
         except Exception as e:
             self._log(f"密钥生成失败: {e}")
 
-    def _stop_current_task(self):
+    def _terminate_current_proc(self):
         if self._current_proc and self._current_proc.poll() is None:
-            self._log("正在停止当前任务...")
-            self._task_cancelled = True
             try:
                 self._current_proc.terminate()
                 time.sleep(1)
@@ -342,6 +341,12 @@ class ReleasePublisherUI(ctk.CTk):
                     self._current_proc.kill()
             except Exception:
                 pass
+
+    def _stop_current_task(self):
+        if self._current_proc and self._current_proc.poll() is None:
+            self._log("正在停止当前任务...")
+            self._task_cancelled = True
+            self._terminate_current_proc()
             self._log("任务已停止。")
         else:
             self._log("当前无运行中的任务。")
@@ -356,7 +361,17 @@ class ReleasePublisherUI(ctk.CTk):
             "--mandatory", str(self.mandatory_var.get()).lower(),
             "--min-supported-version", self.min_version_var.get(),
         ]
+        allowed_path_args = {
+            "project_root",
+            "dist_dir",
+            "release_dir",
+            "private_key_path",
+            "obfuscator_path",
+            "base_update_url",
+        }
         for key, var in self.path_vars.items():
+            if key not in allowed_path_args:
+                continue
             val = var.get().strip()
             if val:
                 flag = "--" + key.replace("_", "-")
@@ -407,32 +422,49 @@ class ReleasePublisherUI(ctk.CTk):
     def _run_pipeline_with_timeout(self, args: list, timeout: int):
         self._log_pipeline(args)
         self._task_cancelled = False
+
         try:
             self._current_proc = subprocess.Popen(
-                args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
             )
+
             start_time = time.time()
-            for line in iter(self._current_proc.stdout.readline, ""):
+
+            while True:
                 if self._task_cancelled:
-                    break
-                self.log_text.insert(tk.END, line)
-                self.log_text.see(tk.END)
-                elapsed = time.time() - start_time
-                if elapsed > timeout:
-                    self._log(f"任务超时（{timeout}秒），已终止")
-                    self._current_proc.terminate()
-                    time.sleep(1)
-                    if self._current_proc.poll() is None:
-                        self._current_proc.kill()
+                    self._terminate_current_proc()
+                    self._log("任务已停止")
                     break
 
-            self._current_proc.wait(timeout=5)
-            rc = self._current_proc.returncode
-            self._log(f"\n>>> 进程返回码: {rc}")
-            if rc == 0:
-                self._log(">>> 任务完成")
-            else:
-                self._log(">>> 任务失败")
+                if time.time() - start_time > timeout:
+                    self._log(f"任务超时（{timeout}秒），已终止")
+                    self._terminate_current_proc()
+                    break
+
+                line = self._current_proc.stdout.readline() if self._current_proc.stdout else ""
+                if line:
+                    self.log_text.insert(tk.END, line)
+                    self.log_text.see(tk.END)
+
+                rc = self._current_proc.poll()
+                if rc is not None:
+                    rest = self._current_proc.stdout.read() if self._current_proc.stdout else ""
+                    if rest:
+                        self.log_text.insert(tk.END, rest)
+                        self.log_text.see(tk.END)
+                    self._log(f"\n>>> 进程返回码: {rc}")
+                    if rc == 0:
+                        self._log(">>> 任务完成")
+                    else:
+                        self._log(">>> 任务失败")
+                    break
+
+                time.sleep(0.1)
+
         except Exception as e:
             self._log(f"执行异常: {e}")
         finally:
@@ -470,20 +502,28 @@ class ReleasePublisherUI(ctk.CTk):
         self._log("当前按钮暂未单独实现，请使用一键发布")
 
     def _step_protect(self):
+        mode = self.mode_var.get().strip()
+        dist_dir = self.path_vars["dist_dir"].get().strip()
+        release_dir = self.path_vars["release_dir"].get().strip()
         obfus = self.path_vars["obfuscator_path"].get().strip()
-        if not obfus:
-            if self.mode_var.get() == "release":
-                self._log("release 模式必须配置混淆器路径")
-                return
-            self._log("dev 模式跳过混淆")
+
+        input_dir = os.path.join(dist_dir, "CoreService")
+        version = self.version_var.get().strip()
+        output_dir = os.path.join(release_dir, f"AutoDoorPro-{version}", "dist", "CoreService")
+
+        if mode == "release" and not obfus:
+            self._log("release 模式必须配置混淆器路径")
             return
+
+        ps1_path = os.path.join(TOOLS_DIR, "protect_csharp.ps1")
         args = [
-            sys.executable, os.path.join(TOOLS_DIR, "release_pipeline.py"),
-            "--version", self.version_var.get(),
-            "--mode", self.mode_var.get(),
-            "--obfuscator-path", obfus,
-            "--dist-dir", self.path_vars["dist_dir"].get(),
-            "--release-dir", self.path_vars["release_dir"].get(),
+            "powershell",
+            "-ExecutionPolicy", "Bypass",
+            "-File", ps1_path,
+            "-InputDir", input_dir,
+            "-OutputDir", output_dir,
+            "-ObfuscatorPath", obfus,
+            "-Mode", mode,
         ]
         self._run_in_thread(lambda: self._run_pipeline_with_timeout(args, TASK_TIMEOUTS["protect"]))
 
@@ -510,6 +550,7 @@ class ReleasePublisherUI(ctk.CTk):
             "private_key_path": self.path_vars["private_key_path"].get(),
             "obfuscator_path": self.path_vars["obfuscator_path"].get(),
             "server_publish_dir": self.path_vars["server_publish_dir"].get(),
+            "base_update_url": self.path_vars["base_update_url"].get(),
             "channel": self.channel_var.get(),
             "platform": self.platform_var.get(),
             "mandatory": self.mandatory_var.get(),

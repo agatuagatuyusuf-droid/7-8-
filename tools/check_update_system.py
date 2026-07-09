@@ -100,6 +100,11 @@ def main():
     checks.append(("publisher supports private key file chooser", "askopenfilename" in publisher_ui and "*.pem" in publisher_ui))
     checks.append(("publisher supports obfuscator file chooser", "askopenfilename" in publisher_ui and "*.exe" in publisher_ui))
     checks.append(("publisher can generate test key", "generate_key_pair" in publisher_ui))
+    checks.append(("publisher dev url avoids duplicate test suffix", "endswith(\"-test\")" in publisher_ui or "endswith('-test')" in publisher_ui))
+    checks.append(("publisher filters unsupported pipeline args", "allowed_path_args" in publisher_ui and "server_publish_dir" in publisher_ui))
+    checks.append(("publisher protect calls powershell ps1", "protect_csharp.ps1" in publisher_ui and "powershell" in publisher_ui))
+    checks.append(("publisher has terminate helper", "_terminate_current_proc" in publisher_ui))
+    checks.append(("publisher saves base update url", '"base_update_url"' in publisher_ui and "_save_current_config" in publisher_ui))
 
     ok = True
     for name, result in checks:

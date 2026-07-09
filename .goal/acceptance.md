@@ -184,3 +184,12 @@ v1.6.0 release candidate ready
 - 混淆器选择已改为 exe 文件选择
 - dev 模式允许跳过混淆
 - release 模式必须配置真实混淆器
+
+## 发布中心最终打磨
+
+- dev URL 不会重复 -test 后缀（1.6.1-test-test 已修复）
+- _gather_args 已过滤，server_publish_dir 不会传给 release_pipeline
+- 单步加密/混淆直接调用 protect_csharp.ps1，而非 release_pipeline.py
+- 超时改为轮询模式，无输出时也不会卡死
+- 新增 _terminate_current_proc 统一终止逻辑
+- _save_current_config 已保存 base_update_url

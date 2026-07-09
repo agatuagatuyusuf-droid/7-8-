@@ -109,3 +109,25 @@ resources/security/release_public.pem
 ```
 
 公钥可以提交。
+
+## 10. 常见问题
+
+### 1. 测试 URL 不能写成 1.6.1-test-test
+
+填充测试配置后应为：
+
+```text
+https://example.com/updates/internal/win-x64/1.6.1-test
+```
+
+### 2. 服务器发布目录不会传给 release_pipeline
+
+服务器发布目录只是给人工上传/复制使用，不传给 release_pipeline.py。
+
+### 3. 单步加密/混淆按钮
+
+单步加密/混淆会直接调用：
+
+```text
+tools/protect_csharp.ps1
+```
