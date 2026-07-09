@@ -275,10 +275,16 @@ def check_license_before_app():
     from bt_utils.log_manager import LogManager
 
     settings = SettingsManager.get_instance()
+    commercial = is_commercial_bundle()
     use_csharp = settings.get("runtime.use_csharp_core", False)
 
+    # 商业包强制启用 C# CoreService 授权，不允许跳过
+    if commercial:
+        use_csharp = True
+        write_log("商业包模式：强制启用 C# CoreService 授权")
+
     if not use_csharp:
-        write_log("C# runtime disabled (use_csharp_core=false), skipping CoreService check")
+        write_log("源码开发模式：runtime.use_csharp_core=false，跳过 CoreService 授权检查")
         return True
 
     session = LicenseSession()

@@ -1835,12 +1835,38 @@ class BehaviorTreeEditor(ctk.CTkFrame):
     def _start_running(self):
         if self._is_running:
             return
-        
+
+        if not self.ensure_can_run_by_license():
+            return
+
         active_tab = self.tab_manager.get_active_tab()
         if active_tab and not active_tab.is_running:
             self._handle_tab_run(active_tab.tab_id)
             self._is_running = True
             self.toolbar.set_running(True)
+
+    def ensure_can_run_by_license(self) -> bool:
+        from bt_bridge.core_process import is_commercial_bundle
+        from bt_bridge.license_session import LicenseSession
+        from bt_utils.log_manager import LogManager
+
+        commercial = is_commercial_bundle()
+        if not commercial:
+            return True
+
+        session = LicenseSession()
+        if not session.ensure_ready():
+            LogManager.instance().log_warning("系统", "授权", "授权服务不可用：" + session.last_error)
+            self.app._open_license_center()
+            return False
+
+        state = session.get_license_state()
+        if not state.can_run:
+            LogManager.instance().log_warning("系统", "授权", "未授权或授权已过期，不能运行行为树")
+            self.app._open_license_center()
+            return False
+
+        return True
 
     # === 前台热键 ↓
     def _is_foreground(self):

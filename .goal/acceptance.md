@@ -60,3 +60,13 @@ v1.6.0 release candidate ready
 - CoreService 缺失时不会阻塞 GUI
 - 商业包模式仍强制要求 CoreService
 - 错误信息包含完整搜索路径和解决办法
+
+## 商业授权 UI Gate
+
+- 主界面已增加"授权中心"按钮
+- 主界面已显示授权状态标签
+- 商业包启动强制 C# CoreService 授权
+- 商业包未授权不能运行行为树（开始按钮拦截）
+- 源码模式仍允许 Python runtime fallback
+- 设置页无 runtime.use_csharp_core 开关（不存在泄漏）
+- 已新增 tools/check_license_ui_gate.py

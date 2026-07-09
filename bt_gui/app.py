@@ -53,6 +53,8 @@ class BehaviorTreeApp(ctk.CTk):
         
         self._restore_last_file()
         
+        self.after(200, self.refresh_license_status)
+        
         self.protocol("WM_DELETE_WINDOW", self._on_close)
     
     def _restore_last_file(self):
@@ -246,6 +248,31 @@ class BehaviorTreeApp(ctk.CTk):
         
         from bt_utils.version_checker import open_tool_intro
         
+        self.license_status_label = ctk.CTkLabel(
+            right_section,
+            text='未激活',
+            font=Theme.get_font('xs'),
+            text_color=self._dark_colors['warning'],
+            fg_color=self._dark_colors['info_light'],
+            corner_radius=4,
+            padx=6,
+            pady=2
+        )
+        self.license_status_label.pack(side='left', padx=Theme.DIMENSIONS['spacing_xs'])
+        
+        self.license_center_btn = ctk.CTkButton(
+            right_section,
+            text='授权中心',
+            width=80,
+            height=35,
+            font=Theme.get_font('sm'),
+            fg_color=self._dark_colors['primary'],
+            hover_color=self._dark_colors['primary_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+            command=self._open_license_center
+        )
+        self.license_center_btn.pack(side='left', padx=Theme.DIMENSIONS['spacing_xs'])
+        
         self.check_update_btn = ctk.CTkButton(
             right_section,
             text='检查更新',
@@ -331,6 +358,45 @@ class BehaviorTreeApp(ctk.CTk):
         
         bt_frame.pack(fill='both', expand=True)
     
+    def _open_license_center(self):
+        from bt_bridge.license_session import LicenseSession
+        from bt_gui.dialogs.activation_dialog import ActivationDialog
+        from bt_utils.log_manager import LogManager
+
+        session = LicenseSession()
+        if not session.ensure_ready():
+            LogManager.debug_print(f"[WARN] 授权服务未启动: {session.last_error}")
+            self.license_status_label.configure(text="授权服务未启动")
+            return
+
+        dialog = ActivationDialog(session)
+        dialog.wait_window()
+        self.refresh_license_status()
+
+    def refresh_license_status(self):
+        from bt_bridge.core_process import is_commercial_bundle
+        from bt_bridge.license_session import LicenseSession
+
+        try:
+            session = LicenseSession()
+            if not session.ensure_ready():
+                if is_commercial_bundle():
+                    self.license_status_label.configure(text="授权服务不可用")
+                else:
+                    self.license_status_label.configure(text="源码模式")
+                return
+
+            state = session.get_license_state()
+            self.license_status_label.configure(text=state.display_text)
+            if state.valid:
+                self.license_status_label.configure(text_color=self._dark_colors.get('success', '#00aa00'))
+            elif state.activated:
+                self.license_status_label.configure(text_color=self._dark_colors.get('warning', '#ffaa00'))
+            else:
+                self.license_status_label.configure(text_color=self._dark_colors.get('error', '#ff4444'))
+        except Exception as e:
+            self.license_status_label.configure(text=f"授权错误")
+
     def _check_for_updates(self):
         """检查更新"""
         if hasattr(self, '_version_checker'):

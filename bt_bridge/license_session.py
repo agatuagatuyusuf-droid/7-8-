@@ -104,6 +104,31 @@ class LicenseSession:
             return data.get("valid", False)
         return False
 
+    def get_license_state(self):
+        from bt_bridge.license_state import LicenseState
+        try:
+            result = self.status()
+            if not result.get("success"):
+                return LicenseState(
+                    activated=False,
+                    valid=False,
+                    error=result.get("message") or result.get("error") or "授权状态获取失败"
+                )
+            payload = result.get("data")
+            if not isinstance(payload, dict):
+                payload = result
+            return LicenseState(
+                activated=bool(payload.get("activated")),
+                valid=bool(payload.get("valid")),
+                edition=str(payload.get("edition") or ""),
+                expire_at=str(payload.get("expire_at") or ""),
+                machine_code=str(payload.get("machine_code") or ""),
+                features=list(payload.get("features") or []),
+                error=str(payload.get("error") or "")
+            )
+        except Exception as e:
+            return LicenseState(valid=False, error=str(e))
+
     def shutdown(self):
         try:
             self.client.shutdown()
