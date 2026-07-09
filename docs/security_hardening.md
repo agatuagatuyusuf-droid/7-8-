@@ -25,6 +25,46 @@
 | 商业证书签名 | ⏳ 预留 | 需要 Authenticode 证书 |
 | 高级反调试 | ⏳ 预留 | IsDebuggerPresent 等检测 |
 
+## C# CoreService 强制登录 Gate
+
+已实现：
+
+- Python 登录窗口不是唯一防线
+- C# CoreService 新增 auth.login / auth.status / auth.logout
+- 登录成功后 C# 返回内存态 login_session
+- RuntimeBridge 调用 C# tree.start 时携带 login_session
+- C# tree.start 强制 RequireLogin
+- 未登录直接调用 C# tree.start 会返回 LOGIN_REQUIRED
+- 商业包模式必须通过 C# auth.login
+- 源码模式允许本地登录 fallback，但仅用于开发
+
+## 安全反调试边界
+
+已实现：
+
+- CoreService 启动检测 Debugger.IsAttached
+- CoreService 调用 Windows IsDebuggerPresent
+- 检测到调试器时清空 login_session
+- 检测到调试器时写 security.log
+- 检测到调试器时只退出 CoreService 自身
+
+明确不做：
+
+- 不关机
+- 不蓝屏
+- 不删除用户文件
+- 不破坏系统
+- 不执行任何攻击性行为
+
+后续增强：
+
+- C# 混淆
+- 代码签名
+- Authenticode 校验
+- 完整 hash manifest
+- 服务器 security-event 上报
+- 多次风险事件自动封禁机器码
+
 ## 安全建议
 
 1. 生产环境禁用 `/api/client/public-key` 接口

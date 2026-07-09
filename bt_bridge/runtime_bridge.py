@@ -1,5 +1,6 @@
 from typing import Optional
 from .core_client import CoreClient
+from .login_context import LoginContext
 
 
 class RuntimeBridge:
@@ -11,17 +12,24 @@ class RuntimeBridge:
     def start_tree(self, tree_json: dict, project_root: str = "") -> dict:
         return self._client.send_request("tree.start", {
             "tree": tree_json,
-            "project_root": project_root
+            "project_root": project_root,
+            "login_session": LoginContext.get_session()
         })
 
     def stop_tree(self) -> dict:
-        return self._client.send_request("tree.stop")
+        return self._client.send_request("tree.stop", {
+            "login_session": LoginContext.get_session()
+        })
 
     def pause_tree(self) -> dict:
-        return self._client.send_request("tree.pause")
+        return self._client.send_request("tree.pause", {
+            "login_session": LoginContext.get_session()
+        })
 
     def resume_tree(self) -> dict:
-        return self._client.send_request("tree.resume")
+        return self._client.send_request("tree.resume", {
+            "login_session": LoginContext.get_session()
+        })
 
     def get_status(self) -> dict:
         return self._client.send_request("tree.status")

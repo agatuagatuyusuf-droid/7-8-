@@ -348,6 +348,9 @@ def login_gate() -> bool:
         write_log("Login cancelled, exiting")
         return False
 
+    from bt_bridge.login_context import LoginContext
+    LoginContext.set_session(getattr(dialog, "login_session", ""))
+
     write_log("Login successful")
     return True
 

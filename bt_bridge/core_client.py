@@ -86,6 +86,22 @@ class CoreClient:
         result = self.send_request("core.hello")
         return result.get("success", False)
 
+    def auth_login(self, username: str, password: str):
+        return self.send_request("auth.login", {
+            "username": username,
+            "password": password
+        })
+
+    def auth_logout(self, login_session: str):
+        return self.send_request("auth.logout", {
+            "login_session": login_session
+        })
+
+    def auth_status(self, login_session: str):
+        return self.send_request("auth.status", {
+            "login_session": login_session
+        })
+
     def shutdown(self):
         self.send_request("core.shutdown")
         self.disconnect()

@@ -61,6 +61,27 @@ v1.6.0 release candidate ready
 - 商业包模式仍强制要求 CoreService
 - 错误信息包含完整搜索路径和解决办法
 
+## C# CoreService 强制登录 Gate
+
+- Python 登录窗口不再是唯一防线
+- C# CoreService 新增 auth.login / auth.status / auth.logout
+- 登录成功后返回 login_session
+- login_session 只保存在内存，不落盘
+- RuntimeBridge 调用 C# 时携带 login_session
+- tree.start 强制要求 login_session
+- 未登录直接调用 CoreService 会返回 LOGIN_REQUIRED
+- 商业包必须通过 C# auth.login
+- 源码模式保留开发 fallback
+
+## 安全反调试
+
+- CoreService 检测 Debugger.IsAttached
+- CoreService 检测 IsDebuggerPresent
+- 检测到调试器时清空 login_session
+- 检测到调试器时写 security.log
+- 检测到调试器时只退出 CoreService 自身
+- 不执行关机、删文件、破坏系统等行为
+
 ## 商业授权 UI Gate
 
 - 主界面已增加"授权中心"按钮

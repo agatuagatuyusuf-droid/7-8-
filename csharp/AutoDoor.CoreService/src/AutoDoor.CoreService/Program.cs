@@ -6,6 +6,7 @@ using AutoDoor.CoreService.Common;
 using AutoDoor.CoreService.Ipc;
 using AutoDoor.CoreService.License;
 using AutoDoor.CoreService.Runtime;
+using AutoDoor.CoreService.Security;
 
 namespace AutoDoor.CoreService;
 
@@ -23,6 +24,9 @@ public class Program
         ConfigureServices(services, appSettings);
 
         var serviceProvider = services.BuildServiceProvider();
+
+        var loginSessionService = serviceProvider.GetRequiredService<LoginSessionService>();
+        SecurityGuard.ExitIfDebugging(loginSessionService);
 
         var lifetime = serviceProvider.GetRequiredService<CoreServiceLifetime>();
         var ipcServer = serviceProvider.GetRequiredService<TcpIpcServer>();
@@ -70,5 +74,6 @@ public class Program
         services.AddSingleton<LicenseCache>();
         services.AddSingleton<SignatureVerifier>();
         services.AddSingleton<FeatureGate>();
+        services.AddSingleton<LoginSessionService>();
     }
 }

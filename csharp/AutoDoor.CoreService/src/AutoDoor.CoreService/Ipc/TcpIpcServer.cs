@@ -10,6 +10,7 @@ using AutoDoor.CoreService.Common;
 using AutoDoor.CoreService.License;
 using AutoDoor.CoreService.Runtime;
 using AutoDoor.CoreService.BehaviorTree;
+using AutoDoor.CoreService.Security;
 
 namespace AutoDoor.CoreService.Ipc;
 
@@ -22,6 +23,7 @@ public class TcpIpcServer
     private readonly RuntimeHost _runtimeHost;
     private readonly CoreServiceLifetime _lifetime;
     private readonly IpcSettings _settings;
+    private readonly LoginSessionService _loginSessionService;
     private TcpListener? _listener;
     private bool _running;
     private readonly SemaphoreSlim _concurrencySemaphore;
@@ -33,7 +35,8 @@ public class TcpIpcServer
         FeatureGate featureGate,
         RuntimeHost runtimeHost,
         CoreServiceLifetime lifetime,
-        AppSettings appSettings)
+        AppSettings appSettings,
+        LoginSessionService loginSessionService)
     {
         _licenseGuard = licenseGuard;
         _licenseClient = licenseClient;
@@ -42,6 +45,7 @@ public class TcpIpcServer
         _runtimeHost = runtimeHost;
         _lifetime = lifetime;
         _settings = appSettings.Ipc;
+        _loginSessionService = loginSessionService;
         _concurrencySemaphore = new SemaphoreSlim(_settings.MaxConcurrentRequests);
     }
 
@@ -165,6 +169,9 @@ public class TcpIpcServer
         {
             "core.hello" => (true, null, "OK", new { status = "running" }),
             "core.shutdown" => await HandleShutdownAsync(),
+            "auth.login" => await HandleAuthLoginAsync(payload),
+            "auth.status" => await HandleAuthStatusAsync(payload),
+            "auth.logout" => await HandleAuthLogoutAsync(payload),
             "license.machine_code" => HandleMachineCode(),
             "license.status" => HandleLicenseStatus(),
             "license.activate" => await HandleLicenseActivateAsync(payload),
@@ -235,6 +242,12 @@ public class TcpIpcServer
 
     private (bool, string?, string, object?) HandleFeatureCheck(JsonElement payload)
     {
+        var loginError = RequireLogin(payload);
+        if (loginError != null)
+        {
+            return loginError.Value;
+        }
+
         if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty("feature", out var featureProp))
             return (false, "MISSING_FEATURE", "Feature name is required", null);
 
@@ -273,6 +286,12 @@ public class TcpIpcServer
     {
         try
         {
+            var loginError = RequireLogin(payload);
+            if (loginError != null)
+            {
+                return Task.FromResult(loginError.Value);
+            }
+
             if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty("tree", out var treeElement))
                 return Task.FromResult<(bool, string?, string, object?)>((false, "MISSING_TREE", "Tree data is required", null));
 
@@ -292,18 +311,36 @@ public class TcpIpcServer
 
     private (bool, string?, string, object?) HandleTreePause()
     {
+        var loginError = RequireLogin(default);
+        if (loginError != null)
+        {
+            return loginError.Value;
+        }
+
         var result = _runtimeHost.Pause();
         return (result.success, result.error, result.message, null);
     }
 
     private (bool, string?, string, object?) HandleTreeResume()
     {
+        var loginError = RequireLogin(default);
+        if (loginError != null)
+        {
+            return loginError.Value;
+        }
+
         var result = _runtimeHost.Resume();
         return (result.success, result.error, result.message, null);
     }
 
     private (bool, string?, string, object?) HandleTreeStop()
     {
+        var loginError = RequireLogin(default);
+        if (loginError != null)
+        {
+            return loginError.Value;
+        }
+
         var result = _runtimeHost.Stop();
         return (result.success, result.error, result.message, null);
     }
@@ -321,6 +358,58 @@ public class TcpIpcServer
     private (bool, string?, string, object?) HandleRuntimeStats()
     {
         return (true, null, "OK", _runtimeHost.Stats());
+    }
+
+    private (bool, string?, string, object?)? RequireLogin(JsonElement payload)
+    {
+        var loginSession = payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("login_session", out var ls)
+            ? ls.GetString() ?? ""
+            : "";
+
+        if (!_loginSessionService.Validate(loginSession))
+        {
+            return (false, "LOGIN_REQUIRED", "请先登录", null);
+        }
+
+        return null;
+    }
+
+    private Task<(bool, string?, string, object?)> HandleAuthLoginAsync(JsonElement payload)
+    {
+        var username = payload.TryGetProperty("username", out var u) ? u.GetString() ?? "" : "";
+        var password = payload.TryGetProperty("password", out var p) ? p.GetString() ?? "" : "";
+
+        var result = _loginSessionService.Login(username, password);
+
+        if (!result.Success)
+        {
+            return Task.FromResult((false, (string?)"LOGIN_FAILED", result.Error, (object?)null));
+        }
+
+        return Task.FromResult((true, (string?)null, "OK", (object?)new
+        {
+            login_session = result.Token,
+            expires_at = result.ExpiresAtUtc?.ToString("o")
+        }));
+    }
+
+    private Task<(bool, string?, string, object?)> HandleAuthStatusAsync(JsonElement payload)
+    {
+        var token = payload.TryGetProperty("login_session", out var t) ? t.GetString() ?? "" : "";
+        var valid = _loginSessionService.Validate(token);
+
+        return Task.FromResult((true, (string?)null, "OK", (object?)new
+        {
+            authenticated = valid
+        }));
+    }
+
+    private Task<(bool, string?, string, object?)> HandleAuthLogoutAsync(JsonElement payload)
+    {
+        var token = payload.TryGetProperty("login_session", out var t) ? t.GetString() ?? "" : "";
+        _loginSessionService.Logout(token);
+
+        return Task.FromResult((true, (string?)null, "OK", (object?)null));
     }
 
     private static int CountNodes(NodeBase node)
