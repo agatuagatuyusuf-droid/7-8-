@@ -100,6 +100,9 @@ license/*.key
 # Spec backups
 *.spec.bak
 
+# Release packages (local, not committed)
+release/
+
 # Private keys and secrets
 *.pem
 *.key

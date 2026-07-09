@@ -7,7 +7,10 @@
 可以正式销售
 
 ## 分支
-commercial-sellable-production-realbuild
+commercial-release-v1.6.0
+
+## 封版状态
+v1.6.0 release candidate ready
 
 ## 检查表
 
