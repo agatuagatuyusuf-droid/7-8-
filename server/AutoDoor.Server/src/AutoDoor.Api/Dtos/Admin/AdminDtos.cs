@@ -135,3 +135,27 @@ public class VersionReleaseDto
     public bool ForceUpdate { get; set; }
     public string MinSupportedVersion { get; set; } = "";
 }
+
+public class MachineDto
+{
+    public Guid Id { get; set; }
+    public string MachineCode { get; set; } = "";
+    public string MachineName { get; set; } = "";
+    public bool Banned { get; set; }
+    public string BanReason { get; set; } = "";
+    public DateTime RegisteredAt { get; set; }
+    public DateTime LastHeartbeat { get; set; }
+}
+
+public class AuditLogDto
+{
+    public Guid Id { get; set; }
+    public string AdminId { get; set; } = "";
+    public string Action { get; set; } = "";
+    public string TargetType { get; set; } = "";
+    public string TargetId { get; set; } = "";
+    public string Ip { get; set; } = "";
+    public string UserAgent { get; set; } = "";
+    public string DetailsJson { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+}

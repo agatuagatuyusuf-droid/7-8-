@@ -97,11 +97,34 @@ builder.Services.AddAuthorization();
 builder.Services.AddSingleton<TicketSigner>();
 builder.Services.AddScoped<AdminAuditService>();
 
+var allowedOriginsRaw = Environment.GetEnvironmentVariable("AUTODOOR_ALLOWED_ORIGINS")
+    ?? builder.Configuration["Cors:AllowedOrigins"]
+    ?? "";
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        if (isProduction)
+        {
+            var origins = allowedOriginsRaw
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            if (origins.Length == 0)
+            {
+                throw new InvalidOperationException("Production requires AUTODOOR_ALLOWED_ORIGINS");
+            }
+
+            policy.WithOrigins(origins)
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
+        else
+        {
+            policy.AllowAnyOrigin()
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
     });
 });
 

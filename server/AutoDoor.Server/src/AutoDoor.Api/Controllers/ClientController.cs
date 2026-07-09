@@ -33,10 +33,10 @@ public class ClientController : ControllerBase
             return Ok(new { success = false, error_code = "INVALID_INPUT", message = "activation_code and machine_code must not be empty" });
 
         var activationCode = await _db.ActivationCodes
-            .FirstOrDefaultAsync(a => a.Code == request.ActivationCode && !a.Used);
+            .FirstOrDefaultAsync(a => a.Code == request.ActivationCode && !a.Used && !a.Disabled);
 
         if (activationCode == null)
-            return Ok(new { success = false, error_code = "INVALID_CODE", message = "Invalid or already used activation code" });
+            return Ok(new { success = false, error_code = "INVALID_CODE", message = "Invalid, disabled, or already used activation code" });
 
         var existingMachine = await _db.Machines.FirstOrDefaultAsync(m => m.MachineCode == request.MachineCode);
         if (existingMachine != null && existingMachine.Banned)
@@ -117,7 +117,7 @@ public class ClientController : ControllerBase
             ["features"] = productFeatures.Select(f => f.FeatureCode).ToList(),
             ["issued_at"] = license.IssuedAt.ToString("o"),
             ["expire_at"] = license.ExpireAt.ToString("o"),
-            ["offline_until"] = DateTime.UtcNow.AddHours(72).ToString("o"),
+            ["offline_until"] = DateTime.UtcNow.AddDays(license.OfflineDays).ToString("o"),
             ["force_update_min_version"] = latestRelease?.MinSupportedVersion ?? "1.6.0",
             ["license_type"] = license.LicenseType,
             ["major_version_limit"] = license.MajorVersionLimit,
@@ -159,6 +159,39 @@ public class ClientController : ControllerBase
             return Ok(new { success = false, error_code = "LICENSE_EXPIRED", message = "License has expired" });
 
         machine.LastHeartbeat = DateTime.UtcNow;
+
+        var latestRelease = await _db.VersionReleases
+            .OrderByDescending(v => v.ReleasedAt)
+            .FirstOrDefaultAsync();
+
+        var session = await _db.LicenseSessions
+            .Where(s => s.MachineCode == request.MachineCode && s.LicenseId == license.Id && s.Active)
+            .OrderByDescending(s => s.LastSeenAt)
+            .FirstOrDefaultAsync();
+
+        var sessionId = session?.SessionId ?? $"SES-{Guid.NewGuid().ToString("N")[..12].ToUpperInvariant()}";
+
+        if (session == null)
+        {
+            _db.LicenseSessions.Add(new LicenseSession
+            {
+                SessionId = sessionId,
+                LicenseId = license.Id,
+                MachineCode = request.MachineCode,
+                Ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "",
+                AppVersion = request.AppVersion,
+                CoreVersion = "",
+                Active = true,
+                StartedAt = DateTime.UtcNow,
+                LastSeenAt = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            session.LastSeenAt = DateTime.UtcNow;
+            session.AppVersion = request.AppVersion;
+        }
+
         await _db.SaveChangesAsync();
 
         var features = await _db.LicenseFeatures
@@ -175,11 +208,14 @@ public class ClientController : ControllerBase
             ["user_id"] = (await _db.Users.FindAsync(license.UserId))?.UserCode ?? "",
             ["machine_code"] = request.MachineCode,
             ["edition"] = license.Edition,
+            ["license_type"] = license.LicenseType,
             ["features"] = features,
             ["issued_at"] = license.IssuedAt.ToString("o"),
             ["expire_at"] = license.ExpireAt.ToString("o"),
-            ["offline_until"] = DateTime.UtcNow.AddHours(72).ToString("o"),
-            ["force_update_min_version"] = "1.6.0"
+            ["offline_until"] = DateTime.UtcNow.AddDays(license.OfflineDays).ToString("o"),
+            ["force_update_min_version"] = latestRelease?.MinSupportedVersion ?? "",
+            ["major_version_limit"] = license.MajorVersionLimit,
+            ["session_id"] = sessionId
         };
 
         var payloadJson = JsonSerializer.Serialize(ticketFields);
@@ -242,35 +278,55 @@ public class ClientController : ControllerBase
             .FirstOrDefaultAsync(m => m.MachineCode == request.MachineCode);
 
         if (machine == null)
-            return Ok(new { success = false, error_code = "NOT_ACTIVATED", message = "Not activated" });
+            return Ok(new
+            {
+                success = false,
+                active = false,
+                banned = false,
+                force_update = false,
+                error_code = "NOT_ACTIVATED",
+                message = "Not activated"
+            });
 
-        if (machine.Banned)
-            return Ok(new { success = false, error_code = "MACHINE_BANNED", message = "Machine has been banned", ban_reason = machine.BanReason });
-
-        if (machine.License != null && machine.License.Banned)
-            return Ok(new { success = false, error_code = "LICENSE_BANNED", message = "License has been banned", ban_reason = machine.License.BanReason });
+        var banned = machine.Banned || (machine.License?.Banned ?? false);
+        var banReason = machine.Banned ? machine.BanReason : (machine.License?.BanReason ?? "");
 
         machine.LastHeartbeat = DateTime.UtcNow;
+
+        if (!string.IsNullOrWhiteSpace(request.SessionId))
+        {
+            var session = await _db.LicenseSessions
+                .FirstOrDefaultAsync(s => s.SessionId == request.SessionId && s.MachineCode == request.MachineCode);
+
+            if (session != null)
+            {
+                session.LastSeenAt = DateTime.UtcNow;
+                session.AppVersion = request.AppVersion;
+                session.CoreVersion = request.CoreVersion;
+                session.Ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+            }
+        }
+
         await _db.SaveChangesAsync();
 
         var latestRelease = await _db.VersionReleases
             .OrderByDescending(v => v.ReleasedAt)
             .FirstOrDefaultAsync();
 
-        var response = new Dictionary<string, object?>
-        {
-            ["success"] = true
-        };
+        var forceUpdate = latestRelease?.ForceUpdate ?? false;
 
-        if (latestRelease != null && latestRelease.ForceUpdate)
+        return Ok(new
         {
-            response["force_update"] = true;
-            response["latest_version"] = latestRelease.Version;
-            response["download_url"] = latestRelease.DownloadUrl;
-            response["min_supported_version"] = latestRelease.MinSupportedVersion;
-        }
-
-        return Ok(response);
+            success = true,
+            active = machine.License?.Active ?? false,
+            banned,
+            ban_reason = banReason,
+            force_update = forceUpdate,
+            latest_version = latestRelease?.Version ?? "",
+            min_supported_version = latestRelease?.MinSupportedVersion ?? "",
+            download_url = latestRelease?.DownloadUrl ?? "",
+            message = banned ? banReason : ""
+        });
     }
 
     [HttpGet("public-key")]
@@ -362,4 +418,13 @@ public class HeartbeatRequest
 
     [System.Text.Json.Serialization.JsonPropertyName("machine_code")]
     public string MachineCode { get => _machineCode; set => _machineCode = value ?? ""; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("session_id")]
+    public string SessionId { get; set; } = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("app_version")]
+    public string AppVersion { get; set; } = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("core_version")]
+    public string CoreVersion { get; set; } = "";
 }

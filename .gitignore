@@ -71,6 +71,7 @@ server/**/obj/
 
 # Commercial build artifacts
 *.spec
+!tools/ocr_worker.spec
 dist/
 build/
 

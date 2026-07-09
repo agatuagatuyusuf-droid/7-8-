@@ -34,21 +34,26 @@ def main():
 
     # 2. Check cache file if exists
     app_data = os.environ.get("APPDATA", "")
-    cache_path = os.path.join(app_data, "AutoDoorPro", "license", "license.cache")
+    cache_paths = [
+        os.path.join(app_data, "AutoDoorPro", "license", "cache.dat"),
+        os.path.join(app_data, "AutoDoorPro", "license", "license.cache"),
+    ]
+
     cache_secure = True
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path, "rb") as f:
-                data = f.read()
-            decoded = data.decode("utf-8", errors="ignore")
-            forbidden = ["license_id", "machine_code", "signature", "expire_at"]
-            for keyword in forbidden:
-                if keyword in decoded:
-                    print(f"  WARN: Cache contains plaintext '{keyword}'")
-                    cache_secure = False
-        except (UnicodeDecodeError, Exception):
-            # Binary data means likely encrypted - good
-            pass
+    forbidden = ["license_id", "machine_code", "signature", "expire_at"]
+    for cache_path in cache_paths:
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, "rb") as f:
+                    data = f.read()
+                decoded = data.decode("utf-8", errors="ignore")
+                for keyword in forbidden:
+                    if keyword in decoded:
+                        print(f"  FAIL: Cache {cache_path} contains plaintext '{keyword}'")
+                        cache_secure = False
+            except (UnicodeDecodeError, Exception):
+                # Binary data means likely encrypted - good
+                pass
     checks.append(("Cache file secure (encrypted if exists)", cache_secure))
 
     # 3. Check no plaintext .json cache file

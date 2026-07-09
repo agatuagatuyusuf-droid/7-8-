@@ -125,16 +125,29 @@ def main():
         [sys.executable, os.path.join(PROJECT_ROOT, "tools", "check_license_cache_security.py")]
     ))
 
-    # 12. check_dist_no_source
+    # 12. build_commercial
+    checks.append(run_check(
+        "build_commercial",
+        ["cmd", "/c", "build_commercial.bat"],
+        timeout=900
+    ))
+
+    # 13. check_dist_no_source
     checks.append(run_check(
         "check_dist_no_source",
         [sys.executable, os.path.join(PROJECT_ROOT, "tools", "check_dist_no_source.py"), "dist"]
     ))
 
-    # 13. check_commercial_package
+    # 14. check_commercial_package
     checks.append(run_check(
         "check_commercial_package",
         [sys.executable, os.path.join(PROJECT_ROOT, "tools", "check_commercial_package.py"), "dist"]
+    ))
+
+    # 15. check_built_app_smoke
+    checks.append(run_check(
+        "check_built_app_smoke",
+        [sys.executable, os.path.join(PROJECT_ROOT, "tools", "check_built_app_smoke.py"), "dist"]
     ))
 
     # 14. Security scan
@@ -200,7 +213,15 @@ def main():
 
     # Determine overall result
     fails = [c for c in checks if c["status"] == "fail"]
-    result = "fail" if fails else "pass"
+    blocking_skips = [
+        c for c in checks
+        if c["status"] == "skip" and c["name"] not in ("check_server_postgres",)
+    ]
+
+    if fails or blocking_skips:
+        result = "fail"
+    else:
+        result = "pass"
 
     output = {
         "result": result,

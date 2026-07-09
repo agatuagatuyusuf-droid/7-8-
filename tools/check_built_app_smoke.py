@@ -68,6 +68,13 @@ def main():
 
     print(f"CoreService exe: {cs_exe}")
 
+    # Check OCRWorker exists
+    ocr_exe = os.path.join(dist_dir, "OCRWorker", "OCRWorker.exe")
+    if not os.path.exists(ocr_exe):
+        print(f"FAIL: OCRWorker/OCRWorker.exe not found")
+        sys.exit(1)
+    print(f"OCRWorker exe: {ocr_exe}")
+
     proc = subprocess.Popen(
         [cs_exe],
         stdout=subprocess.DEVNULL,

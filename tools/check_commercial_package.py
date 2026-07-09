@@ -89,13 +89,17 @@ def main():
             break
     checks.append(("no old author info", not found_author))
 
+    # 8b. OCRWorker exe exists
+    ocr_exe = os.path.join(dist_dir, "OCRWorker", "OCRWorker.exe")
+    checks.append(("OCRWorker exe exists", os.path.isfile(ocr_exe)))
+
     # 10. No contracts / authorization / private keys / .env
-    forbidden = [".env", ".pem", ".key"]
+    forbidden_exts = [".env", ".pem", ".key", ".cs", ".csproj", ".sln"]
     allowed_rel = {"_internal/certifi/cacert.pem"}
     found_forbidden = False
     for root, dirs, files in os.walk(dist_dir):
         for f in files:
-            for ext in forbidden:
+            for ext in forbidden_exts:
                 if not f.endswith(ext):
                     continue
                 rel = os.path.relpath(os.path.join(root, f), dist_dir).replace("\\", "/")
@@ -104,7 +108,36 @@ def main():
                     break
         if found_forbidden:
             break
-    checks.append(("no contracts/keys/env", not found_forbidden))
+    checks.append(("no contracts/keys/env/source", not found_forbidden))
+
+    # 10b. No test/default credentials in text files
+    forbidden_text_patterns = [
+        "TEST-ACTIVATE-123456",
+        "CHANGE_ME_DEV_SECRET",
+        "admin123",
+        "BEGIN RSA PRIVATE KEY",
+        "BEGIN PRIVATE KEY",
+        "PRIVATE_KEY",
+        "private_key",
+        "public_key"
+    ]
+    forbidden_text_found = False
+    for root, dirs, files in os.walk(dist_dir):
+        if forbidden_text_found:
+            break
+        for f in files:
+            if f.lower().endswith((".txt", ".md", ".json", ".bat", ".cfg", ".config", ".xml")):
+                path = os.path.join(root, f)
+                try:
+                    with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                        content = fh.read()
+                    if any(p in content for p in forbidden_text_patterns):
+                        print(f"  Forbidden text found in {path}")
+                        forbidden_text_found = True
+                        break
+                except Exception:
+                    pass
+    checks.append(("no test secrets/default credentials", not forbidden_text_found))
 
     # 11. No .git directory
     git_dir = os.path.join(dist_dir, ".git")

@@ -368,9 +368,19 @@ public class AdminController : ControllerBase
         var items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(m => new MachineDto
+            {
+                Id = m.Id,
+                MachineCode = m.MachineCode,
+                MachineName = m.MachineName,
+                Banned = m.Banned,
+                BanReason = m.BanReason,
+                RegisteredAt = m.RegisteredAt,
+                LastHeartbeat = m.LastHeartbeat
+            })
             .ToListAsync();
 
-        return Ok(new { success = true, data = new PagedResult<Machine> { Page = page, PageSize = pageSize, Total = total, Items = items } });
+        return Ok(new { success = true, data = new PagedResult<MachineDto> { Page = page, PageSize = pageSize, Total = total, Items = items } });
     }
 
     [HttpPost("machines/{id}/ban")]
@@ -546,7 +556,22 @@ public class AdminController : ControllerBase
     {
         var query = _db.AuditLogs.OrderByDescending(a => a.CreatedAt);
         var total = await query.CountAsync();
-        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
-        return Ok(new { success = true, data = new PagedResult<AuditLog> { Page = page, PageSize = pageSize, Total = total, Items = items } });
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(a => new AuditLogDto
+            {
+                Id = a.Id,
+                AdminId = a.AdminId,
+                Action = a.Action,
+                TargetType = a.TargetType,
+                TargetId = a.TargetId,
+                Ip = a.Ip,
+                UserAgent = a.UserAgent,
+                DetailsJson = a.DetailsJson,
+                CreatedAt = a.CreatedAt
+            })
+            .ToListAsync();
+        return Ok(new { success = true, data = new PagedResult<AuditLogDto> { Page = page, PageSize = pageSize, Total = total, Items = items } });
     }
 }

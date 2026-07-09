@@ -69,16 +69,24 @@ def main():
             print(f"ERROR: Required file missing: {req}")
             sys.exit(1)
 
-    # Check OCRWorker exists
+    # Copy OCRWorker from PyInstaller output
+    ocr_src = os.path.join(project_root, "build", "ocr_worker", "OCRWorker.exe")
+    if not os.path.exists(ocr_src):
+        print(f"ERROR: OCRWorker.exe not found after PyInstaller build: {ocr_src}")
+        print("Run: pyinstaller tools/ocr_worker.spec --clean --distpath build\\ocr_worker --workpath build\\ocr_worker_build")
+        sys.exit(1)
+
     ocr_dir = os.path.join(dist_dir, "OCRWorker")
-    ocr_exe = os.path.join(ocr_dir, "OCRWorker.exe")
-    if not os.path.exists(ocr_exe):
-        print(f"ERROR: OCRWorker.exe not found at {ocr_exe}")
-        print("Run 'pyinstaller tools/ocr_worker.spec' first")
+    os.makedirs(ocr_dir, exist_ok=True)
+    ocr_dst = os.path.join(ocr_dir, "OCRWorker.exe")
+    shutil.copy2(ocr_src, ocr_dst)
+
+    if not os.path.exists(ocr_dst):
+        print(f"ERROR: OCRWorker.exe copy failed: {ocr_dst}")
         sys.exit(1)
 
     print(f"CoreService copied to {core_service_dir}")
-    print(f"OCRWorker found at {ocr_exe}")
+    print(f"OCRWorker copied to {ocr_dst}")
 
 
 if __name__ == "__main__":
