@@ -105,6 +105,8 @@ def main():
     checks.append(("publisher protect calls powershell ps1", "protect_csharp.ps1" in publisher_ui and "powershell" in publisher_ui))
     checks.append(("publisher has terminate helper", "_terminate_current_proc" in publisher_ui))
     checks.append(("publisher saves base update url", '"base_update_url"' in publisher_ui and "_save_current_config" in publisher_ui))
+    checks.append(("publisher uses output queue for nonblocking timeout", "queue.Queue" in publisher_ui and "_reader_thread" in publisher_ui))
+    checks.append(("publisher main timeout loop avoids blocking readline", "get_nowait" in publisher_ui and "output_queue" in publisher_ui))
 
     ok = True
     for name, result in checks:

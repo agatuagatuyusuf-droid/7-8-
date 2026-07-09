@@ -193,3 +193,11 @@ v1.6.0 release candidate ready
 - 超时改为轮询模式，无输出时也不会卡死
 - 新增 _terminate_current_proc 统一终止逻辑
 - _save_current_config 已保存 base_update_url
+
+## 发布中心非阻塞超时修复
+
+- 发布中心已使用 output queue 读取子进程日志
+- 阻塞式 stdout.readline 已移到独立 reader thread
+- 主超时循环不会被无输出子进程卡死
+- 停止任务按钮仍可终止当前进程
+- 长任务超时保护可正常触发

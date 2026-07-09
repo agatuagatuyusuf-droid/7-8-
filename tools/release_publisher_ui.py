@@ -3,6 +3,7 @@ import subprocess
 import sys
 import threading
 import json
+import queue
 import shutil
 import signal
 import time
@@ -419,9 +420,23 @@ class ReleasePublisherUI(ctk.CTk):
         self._log(f"执行命令: {' '.join(args)}")
         self._log(f"{'='*60}\n")
 
+    def _reader_thread(self, pipe, output_queue):
+        try:
+            for line in iter(pipe.readline, ""):
+                output_queue.put(line)
+        except Exception as e:
+            output_queue.put(f"[读取输出异常] {e}\n")
+        finally:
+            try:
+                pipe.close()
+            except Exception:
+                pass
+
     def _run_pipeline_with_timeout(self, args: list, timeout: int):
         self._log_pipeline(args)
         self._task_cancelled = False
+
+        output_queue = queue.Queue()
 
         try:
             self._current_proc = subprocess.Popen(
@@ -432,9 +447,25 @@ class ReleasePublisherUI(ctk.CTk):
                 bufsize=1
             )
 
+            reader = threading.Thread(
+                target=self._reader_thread,
+                args=(self._current_proc.stdout, output_queue),
+                daemon=True
+            )
+            reader.start()
+
             start_time = time.time()
 
             while True:
+                while True:
+                    try:
+                        line = output_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    if line:
+                        self.log_text.insert(tk.END, line)
+                        self.log_text.see(tk.END)
+
                 if self._task_cancelled:
                     self._terminate_current_proc()
                     self._log("任务已停止")
@@ -445,17 +476,17 @@ class ReleasePublisherUI(ctk.CTk):
                     self._terminate_current_proc()
                     break
 
-                line = self._current_proc.stdout.readline() if self._current_proc.stdout else ""
-                if line:
-                    self.log_text.insert(tk.END, line)
-                    self.log_text.see(tk.END)
-
                 rc = self._current_proc.poll()
                 if rc is not None:
-                    rest = self._current_proc.stdout.read() if self._current_proc.stdout else ""
-                    if rest:
-                        self.log_text.insert(tk.END, rest)
-                        self.log_text.see(tk.END)
+                    while True:
+                        try:
+                            line = output_queue.get_nowait()
+                        except queue.Empty:
+                            break
+                        if line:
+                            self.log_text.insert(tk.END, line)
+                            self.log_text.see(tk.END)
+
                     self._log(f"\n>>> 进程返回码: {rc}")
                     if rc == 0:
                         self._log(">>> 任务完成")
