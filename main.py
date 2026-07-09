@@ -331,7 +331,31 @@ def check_license_before_app():
     return False
 
 
+def login_gate() -> bool:
+    write_log("Showing login dialog...")
+    try:
+        import tkinter as tk
+        root = tk.Tk()
+        root.withdraw()
+    except Exception:
+        pass
+
+    from bt_gui.dialogs.login_dialog import LoginDialog
+    dialog = LoginDialog()
+    dialog.wait_window()
+
+    if not dialog.logged_in:
+        write_log("Login cancelled, exiting")
+        return False
+
+    write_log("Login successful")
+    return True
+
+
 def main():
+    if not login_gate():
+        sys.exit(1)
+
     if not should_skip_license_check():
         if not check_license_before_app():
             sys.exit(1)
