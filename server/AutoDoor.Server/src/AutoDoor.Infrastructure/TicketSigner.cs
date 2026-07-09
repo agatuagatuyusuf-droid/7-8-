@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 
 namespace AutoDoor.Server.Infrastructure;
 
@@ -16,16 +17,15 @@ public class TicketSigner
 
     public bool HasPrivateKey => _hasPrivateKey;
 
-    public TicketSigner()
+    public TicketSigner(IConfiguration? configuration = null)
     {
         _rsa = RSA.Create(2048);
         _isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
-        _hasPrivateKey = LoadOrGenerateKey();
+        _hasPrivateKey = LoadOrGenerateKey(configuration);
     }
 
-    private bool LoadOrGenerateKey()
+    private bool LoadOrGenerateKey(IConfiguration? configuration = null)
     {
-        // Production: must read from env var or file
         var envKey = Environment.GetEnvironmentVariable("AUTODOOR_SERVER_PRIVATE_KEY_PEM");
         if (!string.IsNullOrEmpty(envKey))
         {
@@ -40,21 +40,23 @@ public class TicketSigner
             catch { }
         }
 
-        var settingsPath = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development"
-            ? ""
-            : "";
-        
-        // Check appsettings Signing:PrivateKeyPath (handled by configuration, not direct file)
-        // For now, rely on env vars for production
+        if (configuration != null)
+        {
+            var configPath = configuration["Signing:PrivateKeyPath"];
+            if (!string.IsNullOrEmpty(configPath) && File.Exists(configPath))
+            {
+                try { _rsa.ImportFromPem(File.ReadAllText(configPath)); return true; }
+                catch { }
+            }
+        }
 
         if (_isProduction)
         {
-            Console.Error.WriteLine("FATAL: Production environment requires a private key via AUTODOOR_SERVER_PRIVATE_KEY_PEM or AUTODOOR_SERVER_PRIVATE_KEY_PATH");
+            Console.Error.WriteLine("FATAL: Production requires private key via AUTODOOR_SERVER_PRIVATE_KEY_PEM, AUTODOOR_SERVER_PRIVATE_KEY_PATH, or Signing:PrivateKeyPath");
             Environment.Exit(1);
             return false;
         }
 
-        // Development: generate ephemeral key
         Console.WriteLine("DEV ONLY: ephemeral signing key generated. Not suitable for production.");
         var defaultDir = Path.Combine(AppContext.BaseDirectory, "keys");
         Directory.CreateDirectory(defaultDir);

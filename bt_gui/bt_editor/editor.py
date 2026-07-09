@@ -30,6 +30,9 @@ from bt_core.blackboard import Blackboard
 from bt_utils.auto_save import AutoSaveManager
 from bt_utils.crash_recovery import CrashRecoveryHandler
 from bt_utils.global_hotkey import GlobalHotkeyManager
+from config.settings_manager import SettingsManager
+from bt_bridge.core_client import CoreClient
+from bt_bridge.runtime_bridge import RuntimeBridge
 
 
 def _get_user_data_dir() -> Path:
@@ -166,7 +169,66 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         if instance.canvas:
             instance.canvas.show_all_status_indicators()
         
+        # Check if C# runtime should be used
+        settings = SettingsManager.get_instance()
+        use_csharp_core = settings.get("runtime.use_csharp_core", False)
+        
         tree_data = instance.canvas.get_tree_data() if instance.canvas else {}
+        
+        if use_csharp_core:
+            try:
+                client = CoreClient(timeout=5)
+                if not client.connect():
+                    LogManager.instance().log_warning("系统", "运行", "C# CoreService 未运行，请先启动 CoreService")
+                    messagebox.showwarning("C# 运行时", "CoreService 未运行，请在设置中切换为 Python 运行时")
+                    return False
+                
+                bridge = RuntimeBridge(client)
+                
+                # Check license status
+                status_result = client.send_request("license.status")
+                if status_result.get("success"):
+                    data = status_result.get("data") or {}
+                    if not data.get("valid", False):
+                        error = data.get("error", "未激活")
+                        LogManager.instance().log_warning("系统", "授权", f"C# 授权状态无效: {error}")
+                        messagebox.showwarning("授权失败", f"C# 核心运行时授权验证失败: {error}")
+                        client.disconnect()
+                        return False
+                else:
+                    LogManager.instance().log_warning("系统", "授权", "无法获取授权状态")
+                    client.disconnect()
+                    return False
+                
+                # Validate and start tree via C# runtime
+                validate_result = bridge.validate_tree(tree_data)
+                if not validate_result.get("success"):
+                    msg = validate_result.get("message", "树验证失败")
+                    LogManager.instance().log_warning("node", "验证", msg)
+                    messagebox.showwarning("树验证失败", f"C# 运行时树验证失败: {msg}\n请保存后重试或在设置中切换为 Python 运行时")
+                    client.disconnect()
+                    return False
+                
+                start_result = bridge.start_tree(tree_data, project_root=instance.project_root or "")
+                if not start_result.get("success"):
+                    msg = start_result.get("message", "启动失败")
+                    LogManager.instance().log_warning("node", "运行", msg)
+                    client.disconnect()
+                    return False
+                
+                instance.core_client = client
+                instance.runtime_bridge = bridge
+                
+                self.tab_manager.update_tab_status(tab_id, True)
+                if not skip_sound:
+                    self._play_start_sound()
+                return True
+            except Exception as e:
+                LogManager.instance().log_error("node", "运行", f"C# 运行时异常: {e}")
+                messagebox.showerror("C# 运行时错误", f"启动 C# 运行时失败: {str(e)}\n\n请在设置中切换为 Python 运行时")
+                return False
+        
+        # Python runtime (fallback)
         from bt_core.serializer import Serializer
         result = Serializer.deserialize(tree_data)
         if isinstance(result, tuple):
@@ -215,7 +277,17 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             tab_name=instance.name
         )
         
-        if instance.engine:
+        # Check if C# runtime is active
+        if hasattr(instance, 'runtime_bridge') and instance.runtime_bridge:
+            try:
+                instance.runtime_bridge.stop_tree()
+            except Exception as e:
+                LogManager.instance().log_warning("系统", "停止", f"C# 运行时停止异常: {e}")
+            if hasattr(instance, 'core_client') and instance.core_client:
+                instance.core_client.disconnect()
+                instance.core_client = None
+            instance.runtime_bridge = None
+        elif instance.engine:
             instance.engine.stop()
         
         self.tab_manager.update_tab_status(tab_id, False)

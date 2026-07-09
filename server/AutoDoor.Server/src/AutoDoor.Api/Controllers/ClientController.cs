@@ -38,6 +38,10 @@ public class ClientController : ControllerBase
         if (activationCode == null)
             return Ok(new { success = false, error_code = "INVALID_CODE", message = "Invalid or already used activation code" });
 
+        var existingMachine = await _db.Machines.FirstOrDefaultAsync(m => m.MachineCode == request.MachineCode);
+        if (existingMachine != null && existingMachine.Banned)
+            return Ok(new { success = false, error_code = "MACHINE_BANNED", message = "This machine has been banned" });
+
         var product = await _db.Products.FindAsync(activationCode.ProductId);
         if (product == null)
             return Ok(new { success = false, error_code = "PRODUCT_NOT_FOUND", message = "Product not found" });
@@ -82,7 +86,25 @@ public class ClientController : ControllerBase
             _db.LicenseFeatures.Add(new LicenseFeature { LicenseId = license.Id, FeatureId = f.Id });
         }
 
+        var sessionId = $"SES-{Guid.NewGuid().ToString("N")[..12].ToUpperInvariant()}";
+        var session = new LicenseSession
+        {
+            SessionId = sessionId,
+            LicenseId = license.Id,
+            MachineCode = request.MachineCode,
+            Ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "",
+            AppVersion = request.AppVersion,
+            CoreVersion = request.CoreVersion,
+            StartedAt = DateTime.UtcNow,
+            LastSeenAt = DateTime.UtcNow
+        };
+        _db.LicenseSessions.Add(session);
+
         await _db.SaveChangesAsync();
+
+        var latestRelease = await _db.VersionReleases
+            .OrderByDescending(v => v.ReleasedAt)
+            .FirstOrDefaultAsync();
 
         var ticketFields = new Dictionary<string, object?>
         {
@@ -96,7 +118,10 @@ public class ClientController : ControllerBase
             ["issued_at"] = license.IssuedAt.ToString("o"),
             ["expire_at"] = license.ExpireAt.ToString("o"),
             ["offline_until"] = DateTime.UtcNow.AddHours(72).ToString("o"),
-            ["force_update_min_version"] = "1.6.0"
+            ["force_update_min_version"] = latestRelease?.MinSupportedVersion ?? "1.6.0",
+            ["license_type"] = license.LicenseType,
+            ["major_version_limit"] = license.MajorVersionLimit,
+            ["session_id"] = sessionId
         };
 
         var payloadJson = JsonSerializer.Serialize(ticketFields);
@@ -213,15 +238,39 @@ public class ClientController : ControllerBase
     public async Task<IActionResult> Heartbeat([FromBody] HeartbeatRequest request)
     {
         var machine = await _db.Machines
+            .Include("License")
             .FirstOrDefaultAsync(m => m.MachineCode == request.MachineCode);
 
-        if (machine != null)
+        if (machine == null)
+            return Ok(new { success = false, error_code = "NOT_ACTIVATED", message = "Not activated" });
+
+        if (machine.Banned)
+            return Ok(new { success = false, error_code = "MACHINE_BANNED", message = "Machine has been banned", ban_reason = machine.BanReason });
+
+        if (machine.License != null && machine.License.Banned)
+            return Ok(new { success = false, error_code = "LICENSE_BANNED", message = "License has been banned", ban_reason = machine.License.BanReason });
+
+        machine.LastHeartbeat = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var latestRelease = await _db.VersionReleases
+            .OrderByDescending(v => v.ReleasedAt)
+            .FirstOrDefaultAsync();
+
+        var response = new Dictionary<string, object?>
         {
-            machine.LastHeartbeat = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+            ["success"] = true
+        };
+
+        if (latestRelease != null && latestRelease.ForceUpdate)
+        {
+            response["force_update"] = true;
+            response["latest_version"] = latestRelease.Version;
+            response["download_url"] = latestRelease.DownloadUrl;
+            response["min_supported_version"] = latestRelease.MinSupportedVersion;
         }
 
-        return Ok(new { success = true });
+        return Ok(response);
     }
 
     [HttpGet("public-key")]
@@ -271,8 +320,15 @@ public class ActivateRequest
     [System.Text.Json.Serialization.JsonPropertyName("product_id")]
     public string ProductId { get; set; } = "autodoor_pro";
 
+    [System.Text.Json.Serialization.JsonPropertyName("app_version")]
+    public string AppVersion { get; set; } = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("core_version")]
+    public string CoreVersion { get; set; } = "";
+
     public bool IsValid() => !string.IsNullOrWhiteSpace(ActivationCode) && !string.IsNullOrWhiteSpace(MachineCode);
 }
+
 public class RefreshRequest
 {
     private string _machineCode = "";
@@ -282,6 +338,9 @@ public class RefreshRequest
 
     [System.Text.Json.Serialization.JsonPropertyName("product_id")]
     public string ProductId { get; set; } = "autodoor_pro";
+
+    [System.Text.Json.Serialization.JsonPropertyName("app_version")]
+    public string AppVersion { get; set; } = "";
 }
 public class StatusRequest
 {

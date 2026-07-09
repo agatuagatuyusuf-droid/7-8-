@@ -16,18 +16,24 @@ public class OcrResult
 public class OcrService
 {
     private readonly string _workerPath;
+    private readonly bool _isCommercialBuild;
 
     public OcrService()
     {
         var baseDir = AppContext.BaseDirectory;
         var possiblePaths = new[]
         {
+            Path.Combine(baseDir, "OCRWorker", "OCRWorker.exe"),
+            Path.Combine(baseDir, "..", "OCRWorker", "OCRWorker.exe"),
             Path.Combine(baseDir, "tools", "ocr_worker.py"),
             Path.Combine(baseDir, "..", "..", "..", "..", "..", "tools", "ocr_worker.py"),
             Path.Combine(baseDir, "..", "..", "..", "..", "..", "..", "tools", "ocr_worker.py"),
         };
 
         _workerPath = "";
+        _isCommercialBuild = Environment.GetEnvironmentVariable("AUTODOOR_COMMERCIAL_BUILD") == "1"
+            || Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
+
         foreach (var p in possiblePaths)
         {
             var full = Path.GetFullPath(p);
@@ -55,23 +61,47 @@ public class OcrService
     {
         if (string.IsNullOrEmpty(_workerPath))
         {
-            return new OcrResult { Success = false, Text = "OCR worker script not found" };
+            return new OcrResult { Success = false, Text = "OCR worker not found in commercial package" };
         }
 
         try
         {
             var inputJson = JsonSerializer.Serialize(input);
 
-            var psi = new ProcessStartInfo
+            var isExe = _workerPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+            ProcessStartInfo psi;
+
+            if (isExe)
             {
-                FileName = "python",
-                Arguments = $"\"{_workerPath}\"",
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+                psi = new ProcessStartInfo
+                {
+                    FileName = _workerPath,
+                    Arguments = "",
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+            }
+            else
+            {
+                if (_isCommercialBuild)
+                {
+                    return new OcrResult { Success = false, Text = "OCRWorker.exe not found in commercial package" };
+                }
+
+                psi = new ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = $"\"{_workerPath}\"",
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+            }
 
             using var process = new Process { StartInfo = psi };
             process.Start();

@@ -3,35 +3,51 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16
+    container_name: autodoor-postgres
     environment:
       POSTGRES_DB: autodoor
       POSTGRES_USER: autodoor
-      POSTGRES_PASSWORD: autodoor_dev_password
+      POSTGRES_PASSWORD: ${AUTODOOR_DB_PASSWORD:-autodoor_dev_password}
     ports:
       - "5432:5432"
     volumes:
-      - autodoor_postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U autodoor"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
-  server:
+  api:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "5000:5000"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - AUTODOOR_DB_PROVIDER=PostgreSQL
-      - AUTODOOR_DB_CONNECTION_STRING=Host=postgres;Port=5432;Database=autodoor;Username=autodoor;Password=autodoor_dev_password
+    container_name: autodoor-api
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_healthy
+    ports:
+      - "5000"
+    volumes:
+      - autodoor_keys:/app/keys
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: autodoor-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
     restart: unless-stopped
 
 volumes:
-  autodoor_postgres_data:
+  postgres_data:
+  autodoor_keys:

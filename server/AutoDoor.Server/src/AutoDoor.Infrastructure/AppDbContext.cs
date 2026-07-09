@@ -33,5 +33,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Product>()
             .HasIndex(a => a.ProductId)
             .IsUnique();
+
+        modelBuilder.Entity<Order>().HasIndex(x => x.OrderNo).IsUnique();
+        modelBuilder.Entity<LicenseSession>().HasIndex(x => x.SessionId).IsUnique();
+        modelBuilder.Entity<Machine>().HasIndex(x => x.MachineCode);
     }
 }

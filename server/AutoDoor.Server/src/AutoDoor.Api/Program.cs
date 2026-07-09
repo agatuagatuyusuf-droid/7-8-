@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using AutoDoor.Server.Infrastructure;
+using AutoDoor.Server.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,9 +16,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Database: PostgreSQL or InMemory based on configuration
+var isProduction = builder.Environment.IsProduction();
 var dbProvider = Environment.GetEnvironmentVariable("AUTODOOR_DB_PROVIDER") 
     ?? builder.Configuration["Database:Provider"] 
-    ?? "InMemory";
+    ?? "";
 
 var connectionString = Environment.GetEnvironmentVariable("AUTODOOR_DB_CONNECTION_STRING")
     ?? builder.Configuration["Database:ConnectionString"]
@@ -25,14 +27,30 @@ var connectionString = Environment.GetEnvironmentVariable("AUTODOOR_DB_CONNECTIO
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    if (dbProvider.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(connectionString))
+    if (isProduction)
+    {
+        if (!dbProvider.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Production requires AUTODOOR_DB_PROVIDER=PostgreSQL");
+        }
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException("Production requires AUTODOOR_DB_CONNECTION_STRING");
+        }
+        options.UseNpgsql(connectionString);
+        Console.WriteLine("Database provider: PostgreSQL");
+        return;
+    }
+    if (dbProvider.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrWhiteSpace(connectionString))
     {
         options.UseNpgsql(connectionString);
+        Console.WriteLine("Database provider: PostgreSQL");
     }
     else
     {
         options.UseInMemoryDatabase("AutoDoorServer");
-        Console.WriteLine("Using InMemory database (data will be lost on restart)");
+        Console.WriteLine("Database provider: InMemory DEV ONLY");
     }
 });
 
@@ -49,14 +67,11 @@ var jwtAudience = Environment.GetEnvironmentVariable("AUTODOOR_JWT_AUDIENCE")
     ?? builder.Configuration["Jwt:Audience"]
     ?? "AutoDoor.Admin";
 
-var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
-var isExplicitProduction = string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase);
-
 if (jwtSecret == "CHANGE_ME_DEV_SECRET_MIN_32_CHARS")
 {
-    if (isExplicitProduction)
+    if (isProduction)
     {
-        Console.Error.WriteLine("FATAL: Explicit Production environment requires a secure JWT secret via AUTODOOR_JWT_SECRET");
+        Console.Error.WriteLine("FATAL: Production requires a secure JWT secret via AUTODOOR_JWT_SECRET");
         Environment.Exit(1);
     }
     Console.WriteLine("WARNING: Using default JWT secret. Set AUTODOOR_JWT_SECRET for production.");
@@ -80,6 +95,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 builder.Services.AddSingleton<TicketSigner>();
+builder.Services.AddScoped<AdminAuditService>();
 
 builder.Services.AddCors(options =>
 {

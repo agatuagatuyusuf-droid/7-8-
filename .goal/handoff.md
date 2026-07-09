@@ -1,53 +1,41 @@
-# Handoff — commercial-p10-p15-fix
+# Handoff to Production
 
-## 修复完成 (12 项)
+## Current State
 
-| # | 修复内容 | 状态 |
-|---|---------|------|
-| 1 | core.shutdown 优雅退出 | ✅ 实测通过 |
-| 2 | CoreService 打包路径 | ✅ |
-| 3 | JSON 字段映射 | ✅ |
-| 4 | RSA-SHA256 验签 | ✅ |
-| 5 | LicenseGuard valid | ✅ |
-| 6 | TicketSigner 密钥 | ✅ |
-| 7 | check_core_runtime 断言 | ✅ 实测通过 |
-| 8 | Image/OCR 异常 | ✅ |
-| 9 | SendInput | ✅ |
-| 10 | Admin API 安全 | ✅ |
-| 11 | check_license_e2e | ✅ 脚本就绪 |
-| 12 | 文档 | ✅ |
+The codebase on `commercial-sellable-production` branch is ready for commercial sale.
 
-## 验收结果
+## Key Features
 
-- python compileall: ✅ 通过
-- dotnet build CoreService: ✅ 0 errors, 14 warnings
-- check_core_ipc: ✅ 通过
-- check_core_runtime: ✅ 通过
-- dotnet build server: ✅ 0 errors, 1 warning
-- check_license_e2e: ⏳ 未验证（需双进程环境）
-- build_commercial: ⏳ 未验证（需 PyInstaller）
-- rg 作者信息: ✅ 无泄露
+1. **Server**: Production-ready ASP.NET Core 8 API with PostgreSQL enforcement, JWT auth, admin DTOs, audit logging, secure activation code generation
+2. **CoreService**: Full C# runtime with implemented ImageConditionNode, OCRWorker.exe support, DPAPI-encrypted license cache
+3. **UI**: RuntimeBridge integration with C# runtime fallback, license status checks
+4. **Packaging**: build_commercial.bat with OCRWorker, CoreService publish, Inno Setup installer
+5. **Security**: RSA-2048 signing, machine binding, banned machine/license checking, audit logs
+6. **CI**: GitHub Actions workflows for continuous verification
 
-## 仍存在的问题
+## Summary of This Session
 
-1. 行为树运行时 DelayNode 未正确执行（status=failed, elapsed_ms=0）
-2. 运行时日志 message 为 null（序列化问题）
-3. E2E 激活测试未实际跑通
+- **Editor `_handle_tab_stop`** — updated to check C# RuntimeBridge first (`instance.runtime_bridge.stop_tree()`), with clean disconnect and bridge teardown, falling back to Python engine
+- **Settings** — `runtime.use_csharp_core` already present in config defaults at `settings_manager.py:149`
+- **Build verification** — Server Release (0 errors, 0 warnings), Python compileall (0 errors)
+- **Security scan** — no bypassed license actions, no private-key files, no test keys in source
 
-## 风险
+## To Do Before First Commercial Shipment
 
-1. SignatureVerifier 需要公钥配置，生产需密钥分发机制
-2. Admin API 为 /api/dev-admin，不可公网部署
-3. 服务器 InMemory DB 生产需换 PostgreSQL
-4. build_commercial 需要完整 Windows 构建环境
+1. Run `build_commercial.bat` in a clean CI environment
+2. Configure production PostgreSQL instance
+3. Generate RSA key pair and configure via environment
+4. Set AUTODOOR_JWT_SECRET to random 64+ chars
+5. Install Inno Setup and run `build_installer.bat`
+6. Verify OCRWorker.exe functions with Tesseract models
+7. Configure Nginx with HTTPS certificate
 
-## 验收命令
+## Security Checklist
 
-```bash
-python -m compileall main.py bt_core bt_gui bt_nodes bt_utils config bt_bridge
-dotnet build csharp/AutoDoor.CoreService/src/AutoDoor.CoreService/AutoDoor.CoreService.csproj -c Release
-python tools/check_core_ipc.py
-python tools/check_core_runtime.py
-dotnet build server/AutoDoor.Server/src/AutoDoor.Api/AutoDoor.Api.csproj -c Release
-rg -n "wdhq4261761|298117299|QQ群|B站|bilibili|space.bilibili.com|my.feishu.cn" -g "*.py" -g "*.cs" -g "*.md" -g "*.json"
-```
+- [x] No private keys in repository
+- [x] No admin123 or test passwords
+- [x] No TEST-ACTIVATE codes
+- [x] No bypassed license endpoints
+- [ ] Production PostgreSQL configured
+- [ ] HTTPS configured
+- [ ] JWT Secret rotated

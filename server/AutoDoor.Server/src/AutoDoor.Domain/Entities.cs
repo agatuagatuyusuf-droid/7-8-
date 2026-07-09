@@ -48,6 +48,11 @@ public class License
     public DateTime ExpireAt { get; set; }
     public int MachineLimit { get; set; } = 1;
     public bool Active { get; set; } = true;
+    public string LicenseType { get; set; } = "yearly";
+    public bool Banned { get; set; } = false;
+    public string BanReason { get; set; } = "";
+    public int OfflineDays { get; set; } = 3;
+    public string MajorVersionLimit { get; set; } = "";
 }
 
 public class LicenseFeature
@@ -66,6 +71,8 @@ public class Machine
     public License? License { get; set; }
     public string MachineCode { get; set; } = "";
     public string MachineName { get; set; } = "";
+    public bool Banned { get; set; }
+    public string BanReason { get; set; } = "";
     public DateTime RegisteredAt { get; set; } = DateTime.UtcNow;
     public DateTime LastHeartbeat { get; set; }
 }
@@ -82,26 +89,8 @@ public class ActivationCode
     public bool Used { get; set; }
     public Guid? UsedByUserId { get; set; }
     public DateTime? UsedAt { get; set; }
+    public bool Disabled { get; set; } = false;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-}
-
-public class Order
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public string OrderId { get; set; } = "";
-    public Guid UserId { get; set; }
-    public Guid ProductId { get; set; }
-    public string Status { get; set; } = "pending";
-}
-
-public class LicenseSession
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid LicenseId { get; set; }
-    public string SessionToken { get; set; } = "";
-    public string MachineCode { get; set; } = "";
-    public DateTime StartedAt { get; set; } = DateTime.UtcNow;
-    public DateTime? EndedAt { get; set; }
 }
 
 public class VersionRelease
@@ -112,6 +101,7 @@ public class VersionRelease
     public string Changelog { get; set; } = "";
     public string DownloadUrl { get; set; } = "";
     public bool ForceUpdate { get; set; }
+    public string MinSupportedVersion { get; set; } = "";
     public DateTime ReleasedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -120,6 +110,10 @@ public class AuditLog
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Action { get; set; } = "";
     public string AdminId { get; set; } = "";
-    public string Details { get; set; } = "";
+    public string TargetType { get; set; } = "";
+    public string TargetId { get; set; } = "";
+    public string Ip { get; set; } = "";
+    public string UserAgent { get; set; } = "";
+    public string DetailsJson { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

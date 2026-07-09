@@ -45,7 +45,15 @@ def main():
     core_service_dir = os.path.join(dist_dir, "CoreService")
     os.makedirs(core_service_dir, exist_ok=True)
 
+    debug_mode = os.environ.get("AUTODOOR_DEBUG_BUILD", "").lower() in ("1", "true", "yes")
+
     for item in os.listdir(publish_dir):
+        # Skip .pdb files unless Debug mode
+        if item.endswith(".pdb") and not debug_mode:
+            continue
+        # Skip .xml documentation files
+        if item.endswith(".xml"):
+            continue
         src_path = os.path.join(publish_dir, item)
         dst_path = os.path.join(core_service_dir, item)
         if os.path.isfile(src_path):
@@ -61,7 +69,16 @@ def main():
             print(f"ERROR: Required file missing: {req}")
             sys.exit(1)
 
+    # Check OCRWorker exists
+    ocr_dir = os.path.join(dist_dir, "OCRWorker")
+    ocr_exe = os.path.join(ocr_dir, "OCRWorker.exe")
+    if not os.path.exists(ocr_exe):
+        print(f"ERROR: OCRWorker.exe not found at {ocr_exe}")
+        print("Run 'pyinstaller tools/ocr_worker.spec' first")
+        sys.exit(1)
+
     print(f"CoreService copied to {core_service_dir}")
+    print(f"OCRWorker found at {ocr_exe}")
 
 
 if __name__ == "__main__":
