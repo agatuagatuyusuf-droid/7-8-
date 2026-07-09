@@ -54,8 +54,9 @@ class CoreClient:
 
     def send_request(self, action: str, payload: Optional[dict] = None) -> dict:
         if not self._connected:
-            return {"success": False, "error_code": "NOT_CONNECTED",
-                    "message": "Not connected to CoreService"}
+            if not self.connect():
+                return {"success": False, "error_code": "NOT_CONNECTED",
+                        "message": "Not connected to CoreService"}
 
         with self._lock:
             try:

@@ -86,8 +86,21 @@ class LoginDialog(ctk.CTkToplevel):
                 }
 
             client = CoreClient()
-            result = client.auth_login(username, password)
-            return result
+            if not client.connect():
+                return {
+                    "success": False,
+                    "error_code": "NOT_CONNECTED",
+                    "message": "无法连接 CoreService"
+                }
+
+            try:
+                result = client.auth_login(username, password)
+                return result
+            finally:
+                try:
+                    client.disconnect()
+                except Exception:
+                    pass
 
         except Exception as e:
             return {

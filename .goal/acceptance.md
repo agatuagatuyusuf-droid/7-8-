@@ -82,6 +82,14 @@ v1.6.0 release candidate ready
 - 检测到调试器时只退出 CoreService 自身
 - 不执行关机、删文件、破坏系统等行为
 
+## 登录 Gate 连接修复
+
+- 登录窗口调用 C# auth.login 前会连接 CoreService
+- 登录失败只提示错误，不关闭窗口
+- 已移除错误次数限制
+- pause/resume/stop 会把 payload 传给 RequireLogin
+- 不再使用 RequireLogin(default)
+
 ## 商业授权 UI Gate
 
 - 主界面已增加"授权中心"按钮

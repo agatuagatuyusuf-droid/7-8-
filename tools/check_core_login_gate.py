@@ -20,6 +20,10 @@ def main():
     checks.append(("LOGIN_REQUIRED exists", "LOGIN_REQUIRED" in tcp))
     checks.append(("RequireLogin exists", "RequireLogin" in tcp))
     checks.append(("tree.start protected", "tree.start" in tcp and "RequireLogin" in tcp))
+    checks.append(("tree pause passes payload", '"tree.pause" => HandleTreePause(payload)' in tcp))
+    checks.append(("tree resume passes payload", '"tree.resume" => HandleTreeResume(payload)' in tcp))
+    checks.append(("tree stop passes payload", '"tree.stop" => HandleTreeStop(payload)' in tcp))
+    checks.append(("no RequireLogin default", "RequireLogin(default)" not in tcp))
 
     login_service = read("csharp/AutoDoor.CoreService/src/AutoDoor.CoreService/Security/LoginSessionService.cs")
     checks.append(("LoginSessionService exists", "class LoginSessionService" in login_service))
@@ -38,6 +42,8 @@ def main():
     checks.append(("LoginDialog has login_session", "self.login_session" in login_dialog))
     checks.append(("LoginDialog calls core login", "auth_login" in login_dialog))
     checks.append(("commercial bundle uses core login", "is_commercial_bundle" in login_dialog))
+    checks.append(("login dialog connects CoreClient", ".connect()" in login_dialog and "auth_login" in login_dialog))
+    checks.append(("login dialog has no max attempts", "MAX_ATTEMPTS" not in login_dialog and "attempts >=" not in login_dialog and "错误次数过多" not in login_dialog))
 
     main_py = read("main.py")
     checks.append(("main stores LoginContext", "LoginContext.set_session" in main_py))

@@ -181,9 +181,9 @@ public class TcpIpcServer
             "feature.list" => HandleFeatureList(),
             "tree.validate" => HandleTreeValidate(payload),
             "tree.start" => await HandleTreeStartAsync(payload),
-            "tree.pause" => HandleTreePause(),
-            "tree.resume" => HandleTreeResume(),
-            "tree.stop" => HandleTreeStop(),
+            "tree.pause" => HandleTreePause(payload),
+            "tree.resume" => HandleTreeResume(payload),
+            "tree.stop" => HandleTreeStop(payload),
             "tree.status" => HandleTreeStatus(),
             "runtime.logs" => HandleRuntimeLogs(),
             "runtime.stats" => HandleRuntimeStats(),
@@ -309,9 +309,9 @@ public class TcpIpcServer
         }
     }
 
-    private (bool, string?, string, object?) HandleTreePause()
+    private (bool, string?, string, object?) HandleTreePause(JsonElement payload)
     {
-        var loginError = RequireLogin(default);
+        var loginError = RequireLogin(payload);
         if (loginError != null)
         {
             return loginError.Value;
@@ -321,9 +321,9 @@ public class TcpIpcServer
         return (result.success, result.error, result.message, null);
     }
 
-    private (bool, string?, string, object?) HandleTreeResume()
+    private (bool, string?, string, object?) HandleTreeResume(JsonElement payload)
     {
-        var loginError = RequireLogin(default);
+        var loginError = RequireLogin(payload);
         if (loginError != null)
         {
             return loginError.Value;
@@ -333,9 +333,9 @@ public class TcpIpcServer
         return (result.success, result.error, result.message, null);
     }
 
-    private (bool, string?, string, object?) HandleTreeStop()
+    private (bool, string?, string, object?) HandleTreeStop(JsonElement payload)
     {
-        var loginError = RequireLogin(default);
+        var loginError = RequireLogin(payload);
         if (loginError != null)
         {
             return loginError.Value;
