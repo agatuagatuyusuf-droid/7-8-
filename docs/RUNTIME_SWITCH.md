@@ -107,6 +107,29 @@ When C# runtime is enabled:
 
 Logs can be viewed in the UI's Log Panel regardless of which runtime is active.
 
+## 源码开发模式启动
+
+源码开发模式下默认不强制启动 C# CoreService。
+
+如果需要测试 C# CoreService：
+
+```bash
+dotnet build csharp/AutoDoor.CoreService/AutoDoor.CoreService.sln -c Release
+python main.py
+```
+
+如果只测试 Python UI：
+
+```json
+"runtime.use_csharp_core": false
+```
+
+正式商业包必须包含：
+
+```text
+CoreService/AutoDoor.CoreService.exe
+```
+
 ## Troubleshooting
 
 ### CoreService won't start

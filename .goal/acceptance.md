@@ -53,3 +53,10 @@ v1.6.0 release candidate ready
 9. ✅ check_commercial_package.py dist — 13/13 PASS
 10. ✅ check_built_app_smoke.py dist — CoreService 启动正常
 11. ✅ acceptance.md — 已按真实结果更新为"可以正式销售"
+
+## 源码开发模式启动修复
+
+- 源码模式默认不强制 CoreService
+- CoreService 缺失时不会阻塞 GUI
+- 商业包模式仍强制要求 CoreService
+- 错误信息包含完整搜索路径和解决办法

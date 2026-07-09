@@ -268,24 +268,41 @@ def should_skip_license_check():
 
 
 def check_license_before_app():
+    from config.settings_manager import SettingsManager
+    from bt_bridge.core_process import is_commercial_bundle
     from bt_bridge.license_session import LicenseSession
     from bt_gui.dialogs.activation_dialog import ActivationDialog
+    from bt_utils.log_manager import LogManager
+
+    settings = SettingsManager.get_instance()
+    use_csharp = settings.get("runtime.use_csharp_core", False)
+
+    if not use_csharp:
+        write_log("C# runtime disabled (use_csharp_core=false), skipping CoreService check")
+        return True
 
     session = LicenseSession()
 
     write_log("Starting CoreService for license check...")
     if not session.ensure_ready():
         write_log(f"CoreService not ready: {session.last_error}")
-        import tkinter as tk
-        from tkinter import messagebox
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showerror(
-            "授权服务错误",
-            session.last_error
-        )
-        root.destroy()
-        return False
+        if is_commercial_bundle():
+            import tkinter as tk
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror(
+                "授权服务错误",
+                session.last_error
+            )
+            root.destroy()
+            return False
+        else:
+            write_log("源码模式：CoreService 不可用，已切回 Python 运行时")
+            LogManager.debug_print("[WARN] 未找到 CoreService，已切回 Python 运行时")
+            # 自动 fallback: 把本次运行改为 False，不持久化
+            settings.set("runtime.use_csharp_core", False, auto_save=False)
+            return True
 
     write_log("Checking license status...")
     result = session.status()
@@ -347,3 +364,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+elif os.environ.get("AUTODOOR_TEST_IMPORT_ONLY") == "1":
+    pass

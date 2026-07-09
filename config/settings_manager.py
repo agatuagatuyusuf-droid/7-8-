@@ -146,7 +146,7 @@ class SettingsManager:
             "ib_target_pid": 0,
         },
         "runtime": {
-            "use_csharp_core": false
+            "use_csharp_core": False
         },
         "node_shortcuts": {},
         "update": {
