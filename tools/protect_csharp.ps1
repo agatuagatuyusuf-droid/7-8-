@@ -23,6 +23,15 @@ function Copy-DirectoryClean([string]$Source, [string]$Destination) {
     Copy-Item -Path (Join-Path $Source "*") -Destination $Destination -Recurse -Force
 }
 
+function Get-FileSha256([string]$Path) {
+    if (-not (Test-Path $Path)) {
+        throw "Hash file not found: $Path"
+    }
+
+    $hash = Get-FileHash -Algorithm SHA256 -Path $Path
+    return $hash.Hash.ToLowerInvariant()
+}
+
 function Resolve-Obfuscar([string]$ExplicitPath) {
     if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
         if (Test-Path $ExplicitPath) {
@@ -51,17 +60,19 @@ function Write-ObfuscarConfig([string]$ConfigPath, [string]$InputDirectory, [str
 
     New-Item -ItemType Directory -Force -Path $outputFull | Out-Null
 
-    $mainExe = Join-Path $inputFull "AutoDoor.CoreService.exe"
     $mainDll = Join-Path $inputFull "AutoDoor.CoreService.dll"
+    $mainExe = Join-Path $inputFull "AutoDoor.CoreService.exe"
 
     $moduleFile = ""
-    if (Test-Path $mainExe) {
-        $moduleFile = $mainExe
-    } elseif (Test-Path $mainDll) {
+    if (Test-Path $mainDll) {
         $moduleFile = $mainDll
+    } elseif (Test-Path $mainExe) {
+        throw "AutoDoor.CoreService.dll not found. Refusing to obfuscate only apphost exe: $mainExe"
     } else {
-        throw "AutoDoor.CoreService.exe/dll not found in input dir: $InputDirectory"
+        throw "AutoDoor.CoreService.dll not found in input dir: $InputDirectory"
     }
+
+    Write-Step "Obfuscar module target: $moduleFile"
 
     $xml = @"
 <?xml version="1.0" encoding="utf-8"?>
@@ -126,6 +137,36 @@ function Verify-Output([string]$OutputDirectory) {
     Write-Step "Output verified: $OutputDirectory"
 }
 
+function Verify-ObfuscatedDllChanged([string]$InputDirectory, [string]$OutputDirectory, [string]$Mode) {
+    if ($Mode -ne "release") {
+        Write-Step "dev mode: skip DLL hash difference verification"
+        return
+    }
+
+    $inputDll = Join-Path $InputDirectory "AutoDoor.CoreService.dll"
+    $outputDll = Join-Path $OutputDirectory "AutoDoor.CoreService.dll"
+
+    if (-not (Test-Path $inputDll)) {
+        throw "Input AutoDoor.CoreService.dll missing: $inputDll"
+    }
+
+    if (-not (Test-Path $outputDll)) {
+        throw "Output AutoDoor.CoreService.dll missing: $outputDll"
+    }
+
+    $inputHash = Get-FileSha256 $inputDll
+    $outputHash = Get-FileSha256 $outputDll
+
+    Write-Step "Input DLL SHA256: $inputHash"
+    Write-Step "Output DLL SHA256: $outputHash"
+
+    if ($inputHash -eq $outputHash) {
+        throw "Obfuscation verification failed: output AutoDoor.CoreService.dll hash equals input DLL hash"
+    }
+
+    Write-Step "OBFUSCATED_DLL_HASH_CHANGED"
+}
+
 if ([string]::IsNullOrWhiteSpace($InputDir)) {
     throw "InputDir is required"
 }
@@ -181,6 +222,7 @@ $configPath = Join-Path $tempRoot "AutoDoor.CoreService.$stamp.obfuscar.tmp.xml"
 Write-ObfuscarConfig -ConfigPath $configPath -InputDirectory $InputDir -OutputDirectory $OutputDir
 Invoke-Obfuscar -ObfuscarExe $obfuscar -ConfigPath $configPath
 Verify-Output $OutputDir
+Verify-ObfuscatedDllChanged -InputDirectory $InputDir -OutputDirectory $OutputDir -Mode $Mode
 
 Write-Step "REAL_OBFUSCAR_COMPLETED"
 exit 0

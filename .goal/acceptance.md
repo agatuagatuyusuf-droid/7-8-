@@ -245,3 +245,12 @@ v1.6.0 release candidate ready
 ## 发布中心 Obfuscar 误报修复
 
 - 自动识别 Obfuscar 后不再误报"未找到混淆器"
+
+## Obfuscar DLL 目标与发布校验
+
+- protect_csharp.ps1 已强制优先混淆 AutoDoor.CoreService.dll
+- 如果只有 exe 没有 dll，拒绝混淆 apphost 壳
+- release 模式已验证混淆前后 DLL hash 必须不同
+- release_pipeline 已校验 update zip 内 CoreService DLL 来自 protected_dist_dir
+- update zip 必须包含 runtimeconfig / deps / appsettings
+- 已新增不会触发真实输入的 CoreInputSecurityTests

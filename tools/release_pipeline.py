@@ -7,12 +7,14 @@ Usage:
   python tools/release_pipeline.py --version 1.6.1 --mode dev
 """
 import argparse
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
 import time
+import zipfile
 from datetime import datetime
 from typing import List
 
@@ -23,6 +25,17 @@ PROJECT_ROOT = os.path.dirname(TOOLS_DIR)
 
 def log(msg: str):
     print(f"[{datetime.now():%H:%M:%S}] {msg}")
+
+
+def sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(1024 * 1024)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def run_step(name: str, fn, *args, **kwargs) -> bool:
@@ -119,6 +132,67 @@ def generate_update_package(dist_dir: str, output_dir: str, version: str, platfo
         "--platform", platform,
     ], cwd=PROJECT_ROOT)
     return result.returncode == 0
+
+
+def verify_update_zip_contains_protected_core(update_dir: str, version: str, platform: str, protected_dist_dir: str) -> bool:
+    zip_name = f"AutoDoorPro-{version}-{platform}.zip"
+    zip_path = os.path.join(update_dir, zip_name)
+
+    if not os.path.exists(zip_path):
+        log(f"update zip 不存在: {zip_path}")
+        return False
+
+    protected_core_dir = os.path.join(protected_dist_dir, "CoreService")
+    protected_dll = os.path.join(protected_core_dir, "AutoDoor.CoreService.dll")
+    protected_runtimeconfig = os.path.join(protected_core_dir, "AutoDoor.CoreService.runtimeconfig.json")
+    protected_deps = os.path.join(protected_core_dir, "AutoDoor.CoreService.deps.json")
+    protected_appsettings = os.path.join(protected_core_dir, "appsettings.json")
+
+    required_files = [
+        protected_dll,
+        protected_runtimeconfig,
+        protected_deps,
+        protected_appsettings,
+    ]
+
+    for required in required_files:
+        if not os.path.exists(required):
+            log(f"protected CoreService 缺少文件: {required}")
+            return False
+
+    required_zip_entries = [
+        "CoreService/AutoDoor.CoreService.dll",
+        "CoreService/AutoDoor.CoreService.runtimeconfig.json",
+        "CoreService/AutoDoor.CoreService.deps.json",
+        "CoreService/appsettings.json",
+    ]
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = set(zf.namelist())
+
+            for entry in required_zip_entries:
+                if entry not in names:
+                    log(f"update zip 缺少 CoreService 文件: {entry}")
+                    return False
+
+            zip_dll_bytes = zf.read("CoreService/AutoDoor.CoreService.dll")
+            zip_dll_hash = hashlib.sha256(zip_dll_bytes).hexdigest()
+            protected_dll_hash = sha256_file(protected_dll)
+
+            log(f"Zip CoreService DLL SHA256: {zip_dll_hash}")
+            log(f"Protected CoreService DLL SHA256: {protected_dll_hash}")
+
+            if zip_dll_hash != protected_dll_hash:
+                log("update zip 内 CoreService DLL 与 protected_dist_dir 不一致")
+                return False
+
+    except Exception as exc:
+        log(f"校验 update zip 失败: {exc}")
+        return False
+
+    log("VERIFY_UPDATE_ZIP_CONTAINS_PROTECTED_CORE_OK")
+    return True
 
 
 def generate_manifest(update_dir: str, version: str, channel: str, platform: str,
@@ -282,6 +356,12 @@ def main():
         update_dir,
         version,
         platform
+    )))
+    steps.append(("\u6821\u9a8c\u66f4\u65b0\u5305 CoreService \u4ea7\u7269", lambda: verify_update_zip_contains_protected_core(
+        update_dir,
+        version,
+        platform,
+        protected_dist_dir
     )))
     steps.append(("\u751f\u6210 Manifest", lambda: generate_manifest(
         update_dir, version, channel, platform,

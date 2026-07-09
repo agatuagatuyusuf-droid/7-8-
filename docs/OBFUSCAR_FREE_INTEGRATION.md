@@ -85,3 +85,31 @@ Obfuscar 是免费基础混淆，不是绝对防破解。
 禁止用原始 dist 直接生成 update zip。
 
 否则会把未混淆 CoreService 打进发布包。
+
+## 8. DLL 混淆目标
+
+正式发布必须混淆：
+
+```text
+CoreService/AutoDoor.CoreService.dll
+```
+
+不能优先混淆：
+
+```text
+CoreService/AutoDoor.CoreService.exe
+```
+
+原因：
+
+.NET 8 Windows 发布目录中的 exe 可能只是 apphost，真正业务 IL 在 dll 中。
+
+release 模式必须验证：
+
+```text
+混淆前 AutoDoor.CoreService.dll hash
+!=
+混淆后 AutoDoor.CoreService.dll hash
+```
+
+如果 hash 一样，发布必须失败。

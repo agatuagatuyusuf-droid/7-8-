@@ -95,3 +95,20 @@ SendKeys.SendWait
 * SendKeys 在生产环境稳定性差
 * CoreService 后续可能运行在更严格的环境
 * SendInput 更接近底层 Windows 输入
+
+## 8. 测试边界
+
+Core Runtime 输入测试不能真实点击鼠标或发送键盘。
+
+允许测试：
+
+- 空 login token 被拒绝
+- 超长文本被拒绝
+- 参数校验
+- feature gate 静态检查
+
+禁止测试：
+
+- 真实鼠标点击
+- 真实键盘输入
+- 改变用户桌面状态

@@ -90,6 +90,8 @@ def main():
     checks.append(("release latest url not empty", "base-update-url" in pipeline_py and "base_url" in pipeline_py))
     checks.append(("pipeline uses protected dist for update package", "protected_dist_dir" in pipeline_py and "generate_update_package(\n        protected_dist_dir" in pipeline_py))
     checks.append(("pipeline has full dist copy before protect", "copy_full_dist_for_protection" in pipeline_py))
+    checks.append(("release pipeline verifies protected core in zip", "verify_update_zip_contains_protected_core" in pipeline_py and "VERIFY_UPDATE_ZIP_CONTAINS_PROTECTED_CORE_OK" in pipeline_py))
+    checks.append(("release pipeline checks core dll zip hash", "zip_dll_hash" in pipeline_py and "protected_dll_hash" in pipeline_py))
 
     core_check = read("tools/check_core_runtime_slice.py")
     checks.append(("core runtime check verifies feature gate", "FEATURE_NOT_AUTHORIZED" in core_check and "CoreRuntimeFeature" in core_check))

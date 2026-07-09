@@ -62,6 +62,11 @@ def main() -> int:
     checks.append(("python client uses core text action", "core.input.text_input" in client))
     checks.append(("python client uses core mouse action", "core.input.mouse_click" in client))
 
+    checks.append(("core input security tests exist", exists("csharp/AutoDoor.CoreService/src/AutoDoor.CoreService.Tests/CoreInputSecurityTests.cs")))
+    tests = read("csharp/AutoDoor.CoreService/src/AutoDoor.CoreService.Tests/CoreInputSecurityTests.cs")
+    checks.append(("tests reject empty login token", "LoginSessionServiceRejectsEmptyToken" in tests and "Validate(\"\")" in tests))
+    checks.append(("tests reject long text without sending input", "NativeInputExecutorRejectsLongText" in tests and "TEXT_TOO_LONG" in tests and "2001" in tests))
+
     ok = True
     for name, result in checks:
         print(("PASS" if result else "FAIL") + ": " + name)
