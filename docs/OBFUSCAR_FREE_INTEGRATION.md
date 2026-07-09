@@ -67,3 +67,21 @@ Obfuscar 是免费基础混淆，不是绝对防破解。
 * 授权服务器
 * 在线更新签名
 * 行为风控
+
+## 7. 生产版打包要求
+
+正式 release 流程必须满足：
+
+```text
+原始 dist
+  ↓
+复制到 release/AutoDoorPro-版本/dist
+  ↓
+混淆 release/AutoDoorPro-版本/dist/CoreService
+  ↓
+用 release/AutoDoorPro-版本/dist 生成 update zip
+```
+
+禁止用原始 dist 直接生成 update zip。
+
+否则会把未混淆 CoreService 打进发布包。

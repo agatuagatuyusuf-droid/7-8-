@@ -98,9 +98,24 @@ function Invoke-Obfuscar([string]$ObfuscarExe, [string]$ConfigPath) {
 function Verify-Output([string]$OutputDirectory) {
     $exe = Join-Path $OutputDirectory "AutoDoor.CoreService.exe"
     $dll = Join-Path $OutputDirectory "AutoDoor.CoreService.dll"
+    $runtimeConfig = Join-Path $OutputDirectory "AutoDoor.CoreService.runtimeconfig.json"
+    $deps = Join-Path $OutputDirectory "AutoDoor.CoreService.deps.json"
+    $appsettings = Join-Path $OutputDirectory "appsettings.json"
 
     if (-not (Test-Path $exe) -and -not (Test-Path $dll)) {
         throw "Obfuscated output missing AutoDoor.CoreService.exe/dll: $OutputDirectory"
+    }
+
+    if (-not (Test-Path $runtimeConfig)) {
+        throw "Obfuscated output missing AutoDoor.CoreService.runtimeconfig.json: $OutputDirectory"
+    }
+
+    if (-not (Test-Path $deps)) {
+        throw "Obfuscated output missing AutoDoor.CoreService.deps.json: $OutputDirectory"
+    }
+
+    if (-not (Test-Path $appsettings)) {
+        throw "Obfuscated output missing appsettings.json: $OutputDirectory"
     }
 
     $files = Get-ChildItem -Path $OutputDirectory -File -Recurse
@@ -153,6 +168,9 @@ if ([string]::IsNullOrWhiteSpace($obfuscar)) {
 
     throw "Obfuscar not found and copy fallback not allowed"
 }
+
+Write-Step "Preparing full CoreService output directory before Obfuscar..."
+Copy-DirectoryClean $InputDir $OutputDir
 
 $tempRoot = Join-Path $ProjectRoot "tools\.obfuscar-temp"
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null

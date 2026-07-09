@@ -264,10 +264,7 @@ class ReleasePublisherUI(ctk.CTk):
         else:
             self._log("警告: 未找到 resources/security/release_public.pem")
 
-        if self._auto_detect_obfuscator():
-            obfus_already_found = True
-        else:
-            obfus_already_found = False
+        obfus_already_found = self._auto_detect_obfuscator()
 
         obfus_candidates = [
             os.path.join(PROJECT_ROOT, "tools", ".dotnet-tools", "obfuscar.exe"),
@@ -279,14 +276,18 @@ class ReleasePublisherUI(ctk.CTk):
             os.path.join("C:\\Tools\\ConfuserEx\\Confuser.CLI.exe"),
             os.path.join("C:\\Program Files\\ConfuserEx\\Confuser.CLI.exe"),
         ]
+
         found_obfus = None
         for o in obfus_candidates:
             if os.path.isfile(o):
                 found_obfus = o
                 break
+
         if found_obfus and not obfus_already_found:
             self.path_vars["obfuscator_path"].set(found_obfus)
             self._log(f"混淆器路径: {found_obfus}")
+        elif obfus_already_found:
+            self._log("Obfuscar 已自动识别。")
         else:
             self._log("未找到混淆器。dev 模式可以跳过混淆；release 模式必须配置真实混淆器。")
 

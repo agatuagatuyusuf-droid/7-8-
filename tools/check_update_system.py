@@ -81,8 +81,19 @@ def main():
     protect_ps1 = read("tools/protect_csharp.ps1")
     checks.append(("release mode cannot fake obfuscation", "AllowCopyFallback" in protect_ps1 and "Copy fallback disabled" in protect_ps1))
 
+    obfuscar_check = read("tools/check_obfuscar_integration.py")
+    checks.append(("pipeline protected dist check exists", "copy_full_dist_for_protection" in obfuscar_check and "pipeline does not package raw dist after protect" in obfuscar_check))
+    checks.append(("protect copy before obfuscar check exists", "Preparing full CoreService output directory before Obfuscar" in obfuscar_check))
+    checks.append(("publisher false log check exists", "Obfuscar 已自动识别" in obfuscar_check))
+
     pipeline_py = read("tools/release_pipeline.py")
     checks.append(("release latest url not empty", "base-update-url" in pipeline_py and "base_url" in pipeline_py))
+    checks.append(("pipeline uses protected dist for update package", "protected_dist_dir" in pipeline_py and "generate_update_package(\n        protected_dist_dir" in pipeline_py))
+    checks.append(("pipeline has full dist copy before protect", "copy_full_dist_for_protection" in pipeline_py))
+
+    core_check = read("tools/check_core_runtime_slice.py")
+    checks.append(("core runtime check verifies feature gate", "FEATURE_NOT_AUTHORIZED" in core_check and "CoreRuntimeFeature" in core_check))
+    checks.append(("core runtime check blocks SendKeys fallback", "SendKeys.SendWait\" not in native" in core_check or "SendKeys.SendWait' not in native" in core_check))
 
     build_bat = read("build_release.bat")
     checks.append(("build_release requires base update url", "BASE_UPDATE_URL" in build_bat and "--base-update-url" in build_bat))

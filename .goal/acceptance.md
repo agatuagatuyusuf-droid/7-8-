@@ -225,3 +225,23 @@ v1.6.0 release candidate ready
 - 三个 action 都要求 login_session
 - Python CoreClient 已新增调用方法
 - 未绕过 C# CoreService 执行核心输入动作
+
+## Obfuscar 生产入包修复
+
+- release_pipeline 已复制原始 dist 到 protected_dist_dir
+- protect_csharp.ps1 已在混淆前准备完整 CoreService 输出目录
+- update zip 已改为从 protected_dist_dir 生成
+- release 模式不再可能把原始未混淆 dist 直接打包
+- protect_csharp.ps1 已验证 runtimeconfig / deps / appsettings
+
+## Core Runtime 生产门禁修复
+
+- core.input.* 已同时要求 login_session 和 core_runtime feature
+- 未登录返回 LOGIN_REQUIRED
+- 未授权返回 FEATURE_NOT_AUTHORIZED
+- NativeInputExecutor 已改用 SendInput
+- 检查脚本禁止退回 SendKeys.SendWait
+
+## 发布中心 Obfuscar 误报修复
+
+- 自动识别 Obfuscar 后不再误报"未找到混淆器"

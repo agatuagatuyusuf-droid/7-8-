@@ -57,3 +57,41 @@ core_input_mouse_click(...)
 * 行为树核心执行调度
 * 节点参数校验
 * 商业授权 feature gate
+
+## 6. 授权 feature gate
+
+C# Core Runtime 输入动作不只要求 login_session，还要求授权 feature：
+
+```text
+core_runtime
+```
+
+如果没有登录：
+
+```text
+LOGIN_REQUIRED
+```
+
+如果没有授权 feature：
+
+```text
+FEATURE_NOT_AUTHORIZED
+```
+
+这避免了只靠默认登录账号就能执行核心输入动作。
+
+## 7. SendInput 实现
+
+NativeInputExecutor 使用 user32 SendInput 执行键盘 / 文本 / 鼠标动作。
+
+禁止重新退回：
+
+```text
+SendKeys.SendWait
+```
+
+原因：
+
+* SendKeys 在生产环境稳定性差
+* CoreService 后续可能运行在更严格的环境
+* SendInput 更接近底层 Windows 输入

@@ -151,3 +151,14 @@ tools/protect_csharp.ps1
 会自动填入混淆器路径。
 
 release 模式必须真实执行 Obfuscar，不能只复制文件。
+
+## 生产发布注意
+
+发布中心 release 模式必须确认：
+
+```text
+1. Obfuscar 已识别
+2. release 模式不是 dev fallback
+3. update zip 来自 protected_dist_dir
+4. CoreService 目录包含 appsettings.json / runtimeconfig / deps.json
+```

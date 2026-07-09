@@ -76,6 +76,19 @@ def build_commercial() -> bool:
     return result.returncode == 0
 
 
+def copy_full_dist_for_protection(source_dist_dir: str, protected_dist_dir: str) -> bool:
+    if not os.path.exists(source_dist_dir):
+        log(f"dist 目录不存在: {source_dist_dir}")
+        return False
+
+    if os.path.exists(protected_dist_dir):
+        shutil.rmtree(protected_dist_dir)
+
+    shutil.copytree(source_dist_dir, protected_dist_dir)
+    log(f"protected dist prepared: {protected_dist_dir}")
+    return True
+
+
 def protect_csharp(input_dir: str, output_dir: str, obfuscator_path: str, mode: str) -> bool:
     ps1_path = os.path.join(TOOLS_DIR, "protect_csharp.ps1")
     if not os.path.exists(ps1_path):
@@ -242,6 +255,7 @@ def main():
     release_dir = os.path.join(release_base, f"AutoDoorPro-{version}")
     update_dir = os.path.join(release_dir, "update")
     os.makedirs(update_dir, exist_ok=True)
+    protected_dist_dir = os.path.join(release_dir, "dist")
 
     notes = []
     if args.notes_file and os.path.exists(args.notes_file):
@@ -250,13 +264,24 @@ def main():
 
     # Parse steps
     steps.append(("\u6784\u5efa\u5546\u4e1a\u5305", build_commercial))
+
+    steps.append(("\u51c6\u5907\u53d7\u4fdd\u62a4 dist", lambda: copy_full_dist_for_protection(
+        dist_dir,
+        protected_dist_dir
+    )))
+
     steps.append(("\u52a0\u5bc6/\u6df7\u6dc6\u5904\u7406", lambda: protect_csharp(
         os.path.join(dist_dir, "CoreService"),
-        os.path.join(release_dir, "dist", "CoreService"),
-        args.obfuscator_path, mode
+        os.path.join(protected_dist_dir, "CoreService"),
+        args.obfuscator_path,
+        mode
     )))
+
     steps.append(("\u751f\u6210\u66f4\u65b0\u5305", lambda: generate_update_package(
-        dist_dir, update_dir, version, platform
+        protected_dist_dir,
+        update_dir,
+        version,
+        platform
     )))
     steps.append(("\u751f\u6210 Manifest", lambda: generate_manifest(
         update_dir, version, channel, platform,

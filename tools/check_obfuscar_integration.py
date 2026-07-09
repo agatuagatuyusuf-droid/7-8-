@@ -40,6 +40,20 @@ def main() -> int:
     checks.append(("publisher references install script", "install_obfuscar.ps1" in ui))
     checks.append(("publisher references find script", "find_obfuscar.ps1" in ui))
 
+    pipeline = read("tools/release_pipeline.py")
+    checks.append(("pipeline prepares protected dist", "copy_full_dist_for_protection" in pipeline and "protected_dist_dir" in pipeline))
+    checks.append(("pipeline packages protected dist", "generate_update_package(" in pipeline and "protected_dist_dir" in pipeline))
+    checks.append(("pipeline does not package raw dist after protect", "generate_update_package(\n        protected_dist_dir" in pipeline or "generate_update_package(protected_dist_dir" in pipeline))
+
+    protect = read("tools/protect_csharp.ps1")
+    checks.append(("protect copies full CoreService before obfuscation", "Preparing full CoreService output directory before Obfuscar" in protect and "Copy-DirectoryClean $InputDir $OutputDir" in protect))
+    checks.append(("protect verifies runtimeconfig", "AutoDoor.CoreService.runtimeconfig.json" in protect))
+    checks.append(("protect verifies deps json", "AutoDoor.CoreService.deps.json" in protect))
+    checks.append(("protect verifies appsettings", "appsettings.json" in protect))
+
+    ui = read("tools/release_publisher_ui.py")
+    checks.append(("publisher avoids false obfuscator missing log", "Obfuscar 已自动识别" in ui and "elif obfus_already_found" in ui))
+
     gitignore = read(".gitignore")
     checks.append(("dotnet tools ignored", "tools/.dotnet-tools/" in gitignore))
     checks.append(("obfuscar temp ignored", "tools/.obfuscar-temp/" in gitignore))

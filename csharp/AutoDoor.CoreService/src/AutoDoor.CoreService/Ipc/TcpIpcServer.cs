@@ -25,6 +25,7 @@ public class TcpIpcServer
     private readonly IpcSettings _settings;
     private readonly LoginSessionService _loginSessionService;
     private readonly CoreActionExecutor _coreActionExecutor;
+    private const string CoreRuntimeFeature = "core_runtime";
     private TcpListener? _listener;
     private bool _running;
     private readonly SemaphoreSlim _concurrencySemaphore;
@@ -368,7 +369,7 @@ public class TcpIpcServer
 
     private async Task<(bool, string?, string, object?)> HandleCoreInputKeyPressAsync(JsonElement payload)
     {
-        var loginError = RequireLogin(payload);
+        var loginError = RequireLoginAndFeature(payload, CoreRuntimeFeature);
         if (loginError != null)
         {
             return loginError.Value;
@@ -384,7 +385,7 @@ public class TcpIpcServer
 
     private async Task<(bool, string?, string, object?)> HandleCoreInputTextInputAsync(JsonElement payload)
     {
-        var loginError = RequireLogin(payload);
+        var loginError = RequireLoginAndFeature(payload, CoreRuntimeFeature);
         if (loginError != null)
         {
             return loginError.Value;
@@ -400,7 +401,7 @@ public class TcpIpcServer
 
     private async Task<(bool, string?, string, object?)> HandleCoreInputMouseClickAsync(JsonElement payload)
     {
-        var loginError = RequireLogin(payload);
+        var loginError = RequireLoginAndFeature(payload, CoreRuntimeFeature);
         if (loginError != null)
         {
             return loginError.Value;
@@ -431,6 +432,22 @@ public class TcpIpcServer
         if (!_loginSessionService.Validate(loginSession))
         {
             return (false, "LOGIN_REQUIRED", "请先登录", null);
+        }
+
+        return null;
+    }
+
+    private (bool, string?, string, object?)? RequireLoginAndFeature(JsonElement payload, string feature)
+    {
+        var loginError = RequireLogin(payload);
+        if (loginError != null)
+        {
+            return loginError.Value;
+        }
+
+        if (!_featureGate.IsEnabled(feature))
+        {
+            return (false, "FEATURE_NOT_AUTHORIZED", $"Feature '{feature}' is not authorized", null);
         }
 
         return null;
