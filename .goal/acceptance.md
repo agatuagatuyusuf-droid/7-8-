@@ -157,3 +157,15 @@ v1.6.0 release candidate ready
 - check_update_system.py 已通过 31/31 PASS
 - check_core_login_gate.py 已通过 27/27 PASS
 - dotnet build -c Release 已通过，0 errors, 0 warnings
+
+## 在线更新最终收尾
+
+- build_release.bat 已支持 base_update_url 第 4 参数
+- build_release.bat 会把 --base-update-url 传给 release_pipeline.py
+- release_pipeline.py 在 release 模式下没有 base-update-url 会失败
+- start_auto_check 已改为优先使用签名更新系统
+- start_auto_check 不再默认调用旧 GitHub Release 检查
+- 未配置 update.latest_url 时自动检查静默跳过
+- 手动"检查更新"仍会提示未配置 update.latest_url
+- release_publisher_ui.py 已增加更新服务器 URL 输入框
+- release_publisher_ui.py 一键发布会传 --base-update-url

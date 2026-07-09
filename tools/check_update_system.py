@@ -84,6 +84,16 @@ def main():
     pipeline_py = read("tools/release_pipeline.py")
     checks.append(("release latest url not empty", "base-update-url" in pipeline_py and "base_url" in pipeline_py))
 
+    build_bat = read("build_release.bat")
+    checks.append(("build_release requires base update url", "BASE_UPDATE_URL" in build_bat and "--base-update-url" in build_bat))
+
+    version_checker = read("bt_utils/version_checker.py")
+    checks.append(("auto check uses signed update v2", "start_auto_check" in version_checker and "check_for_updates_v2" in version_checker))
+    checks.append(("auto check no old github default", "self.check_for_updates(manual=False)" not in version_checker))
+
+    publisher_ui = read("tools/release_publisher_ui.py")
+    checks.append(("publisher ui has base update url field", "base_update_url" in publisher_ui and "replace(\"_\", \"-\")" in publisher_ui))
+
     ok = True
     for name, result in checks:
         print(("PASS" if result else "FAIL") + ": " + name)

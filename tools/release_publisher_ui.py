@@ -102,6 +102,7 @@ class ReleasePublisherUI(ctk.CTk):
             ("\u79c1\u94a5\u8def\u5f84", "private_key_path", ""),
             ("\u6df7\u6dc6\u5668\u8def\u5f84", "obfuscator_path", ""),
             ("\u670d\u52a1\u5668\u53d1\u5e03\u76ee\u5f55", "server_publish_dir", ""),
+            ("\u66f4\u65b0\u670d\u52a1\u5668 URL", "base_update_url", ""),
         ]
         self.path_vars = {}
         for label, key, default in path_fields:

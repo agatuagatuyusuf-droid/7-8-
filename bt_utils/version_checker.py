@@ -662,13 +662,45 @@ class VersionChecker:
         ttk.Button(frame, text="确定", command=notification_window.destroy).pack()
     
     def start_auto_check(self, app):
-        """启动自动版本检查（异步，延迟2秒）"""
+        """启动自动版本检查（签名更新系统，延迟2秒）"""
         def check_delayed():
             time.sleep(2)
-            self.check_for_updates(manual=False)
-        
+
+            latest_url = ""
+            try:
+                from config.settings_manager import SettingsManager
+                settings = SettingsManager.get_instance()
+                latest_url = settings.get("update.latest_url", "")
+            except Exception:
+                latest_url = ""
+
+            if not latest_url:
+                LogManager.debug_print("未配置 update.latest_url，跳过自动更新检查")
+                return
+
+            self.check_for_updates_v2(
+                manifest_url=latest_url,
+                manual=False,
+                callback=self._default_v2_callback
+            )
+
         thread = threading.Thread(target=check_delayed, daemon=True)
         thread.start()
+
+    def _default_v2_callback(self, data, latest_version, mandatory, notes):
+        """v2 自动检查回调，将结果转发到主窗口"""
+        if data is None:
+            return
+
+        root = self._get_root_window()
+        if not root:
+            return
+
+        try:
+            if hasattr(root, "_on_update_check_result"):
+                root._on_update_check_result(data, latest_version, mandatory, notes)
+        except Exception as e:
+            LogManager.debug_print(f"自动更新弹窗失败: {e}")
 
     def check_for_updates_v2(self, manifest_url: str, manual: bool = False, callback: Optional[Callable] = None):
         """检查更新（支持自定义更新服务器）"""
