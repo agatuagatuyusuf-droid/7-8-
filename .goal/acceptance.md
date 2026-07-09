@@ -169,3 +169,18 @@ v1.6.0 release candidate ready
 - 手动"检查更新"仍会提示未配置 update.latest_url
 - release_publisher_ui.py 已增加更新服务器 URL 输入框
 - release_publisher_ui.py 一键发布会传 --base-update-url
+
+## 发布中心可用性修复
+
+- 发布中心已支持自动搜索项目路径
+- 发布中心已支持自动搜索 dist / release 目录
+- 发布中心已支持自动搜索 APPDATA 私钥
+- 发布中心已支持自动搜索常见混淆器路径
+- 发布中心已支持填充 v1.6.1-test 测试配置
+- 发布中心已支持生成测试私钥到 APPDATA
+- 发布中心已支持停止当前任务
+- 发布中心长任务已有超时保护
+- 私钥选择已改为文件选择
+- 混淆器选择已改为 exe 文件选择
+- dev 模式允许跳过混淆
+- release 模式必须配置真实混淆器

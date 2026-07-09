@@ -3,17 +3,33 @@ import subprocess
 import sys
 import threading
 import json
+import shutil
+import signal
+import time
 from datetime import datetime
-from tkinter import messagebox, Text, scrolledtext
+from tkinter import messagebox, Text, filedialog
 import tkinter as tk
 
 import customtkinter as ctk
 
 from tools.release_publisher_config import load_config, save_config
+from bt_utils.release_signature import generate_key_pair
 
 
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(TOOLS_DIR)
+
+
+TASK_TIMEOUTS = {
+    "check_env": 120,
+    "build": 1800,
+    "protect": 600,
+    "manifest": 120,
+    "sign": 120,
+    "update_pkg": 300,
+    "check_pkg": 120,
+    "onekey": 2400,
+}
 
 
 class LogHandler:
@@ -31,13 +47,15 @@ class LogHandler:
 class ReleasePublisherUI(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("AutoDoor Pro \u53d1\u5e03\u4e2d\u5fc3")
-        self.geometry("900x700")
+        self.title("AutoDoor Pro 发布中心")
+        self.geometry("900x750")
 
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("dark-blue")
 
         self.config = load_config()
+        self._current_proc = None
+        self._task_cancelled = False
 
         self._build_ui()
         self._load_config_to_ui()
@@ -48,61 +66,55 @@ class ReleasePublisherUI(ctk.CTk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
 
-        # === Header ===
-        header = ctk.CTkLabel(self, text="AutoDoor Pro \u53d1\u5e03\u4e2d\u5fc3",
+        header = ctk.CTkLabel(self, text="AutoDoor Pro 发布中心",
                               font=("Microsoft YaHei", 20, "bold"))
         header.grid(row=0, column=0, pady=(12, 4), sticky="n")
 
-        # === Main content: config + buttons + log ===
         main = ctk.CTkFrame(self)
         main.grid(row=1, column=0, padx=10, pady=(0, 6), sticky="nsew")
         main.grid_columnconfigure(1, weight=1)
 
         row = 0
 
-        # -- Version / Channel / Platform row --
-        ctk.CTkLabel(main, text="\u7248\u672c", width=80, anchor="w").grid(row=row, column=0, padx=(6, 2), pady=3, sticky="w")
+        ctk.CTkLabel(main, text="版本", width=80, anchor="w").grid(row=row, column=0, padx=(6, 2), pady=3, sticky="w")
         self.version_var = ctk.StringVar(value="1.6.1")
         ctk.CTkEntry(main, textvariable=self.version_var, width=120).grid(row=row, column=1, padx=(0, 10), pady=3, sticky="w")
 
-        ctk.CTkLabel(main, text="\u901a\u9053", width=50, anchor="w").grid(row=row, column=2, padx=(0, 2), pady=3, sticky="w")
+        ctk.CTkLabel(main, text="通道", width=50, anchor="w").grid(row=row, column=2, padx=(0, 2), pady=3, sticky="w")
         self.channel_var = ctk.StringVar(value="stable")
         channel_menu = ctk.CTkOptionMenu(main, variable=self.channel_var, values=["stable", "beta", "internal"], width=100)
         channel_menu.grid(row=row, column=3, padx=(0, 10), pady=3, sticky="w")
 
-        ctk.CTkLabel(main, text="\u5e73\u53f0", width=50, anchor="w").grid(row=row, column=4, padx=(0, 2), pady=3, sticky="w")
+        ctk.CTkLabel(main, text="平台", width=50, anchor="w").grid(row=row, column=4, padx=(0, 2), pady=3, sticky="w")
         self.platform_var = ctk.StringVar(value="win-x64")
         ctk.CTkOptionMenu(main, variable=self.platform_var, values=["win-x64"], width=100).grid(row=row, column=5, padx=(0, 0), pady=3, sticky="w")
         row += 1
 
-        # -- Mode / Mandatory / Min version --
-        ctk.CTkLabel(main, text="\u6a21\u5f0f", width=80, anchor="w").grid(row=row, column=0, padx=(6, 2), pady=3, sticky="w")
+        ctk.CTkLabel(main, text="模式", width=80, anchor="w").grid(row=row, column=0, padx=(6, 2), pady=3, sticky="w")
         self.mode_var = ctk.StringVar(value="release")
         ctk.CTkOptionMenu(main, variable=self.mode_var, values=["release", "dev"], width=120).grid(row=row, column=1, padx=(0, 10), pady=3, sticky="w")
 
         self.mandatory_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(main, text="\u5f3a\u5236\u66f4\u65b0", variable=self.mandatory_var).grid(row=row, column=2, columnspan=2, padx=(0, 10), pady=3, sticky="w")
+        ctk.CTkCheckBox(main, text="强制更新", variable=self.mandatory_var).grid(row=row, column=2, columnspan=2, padx=(0, 10), pady=3, sticky="w")
 
-        ctk.CTkLabel(main, text="\u6700\u4f4e\u652f\u6301\u7248\u672c", width=90, anchor="w").grid(row=row, column=4, padx=(0, 2), pady=3, sticky="w")
+        ctk.CTkLabel(main, text="最低支持版本", width=90, anchor="w").grid(row=row, column=4, padx=(0, 2), pady=3, sticky="w")
         self.min_version_var = ctk.StringVar(value="1.6.0")
         ctk.CTkEntry(main, textvariable=self.min_version_var, width=100).grid(row=row, column=5, padx=(0, 0), pady=3, sticky="w")
         row += 1
 
-        # -- Release Notes --
-        ctk.CTkLabel(main, text="\u66f4\u65b0\u8bf4\u660e", anchor="w").grid(row=row, column=0, padx=(6, 2), pady=3, sticky="nw")
+        ctk.CTkLabel(main, text="更新说明", anchor="w").grid(row=row, column=0, padx=(6, 2), pady=3, sticky="nw")
         self.notes_text = ctk.CTkTextbox(main, height=60, width=200)
         self.notes_text.grid(row=row, column=1, columnspan=5, padx=(0, 6), pady=3, sticky="ew")
         row += 1
 
-        # -- Config paths --
         path_fields = [
-            ("\u9879\u76ee\u8def\u5f84", "project_root", PROJECT_ROOT),
-            ("dist \u76ee\u5f55", "dist_dir", os.path.join(PROJECT_ROOT, "dist")),
-            ("release \u76ee\u5f55", "release_dir", os.path.join(PROJECT_ROOT, "release")),
-            ("\u79c1\u94a5\u8def\u5f84", "private_key_path", ""),
-            ("\u6df7\u6dc6\u5668\u8def\u5f84", "obfuscator_path", ""),
-            ("\u670d\u52a1\u5668\u53d1\u5e03\u76ee\u5f55", "server_publish_dir", ""),
-            ("\u66f4\u65b0\u670d\u52a1\u5668 URL", "base_update_url", ""),
+            ("项目路径", "project_root", PROJECT_ROOT),
+            ("dist 目录", "dist_dir", os.path.join(PROJECT_ROOT, "dist")),
+            ("release 目录", "release_dir", os.path.join(PROJECT_ROOT, "release")),
+            ("私钥路径", "private_key_path", ""),
+            ("混淆器路径", "obfuscator_path", ""),
+            ("服务器发布目录", "server_publish_dir", ""),
+            ("更新服务器 URL", "base_update_url", ""),
         ]
         self.path_vars = {}
         for label, key, default in path_fields:
@@ -115,26 +127,44 @@ class ReleasePublisherUI(ctk.CTk):
             btn.grid(row=row, column=4, padx=(0, 2), pady=2, sticky="w")
             row += 1
 
-        # -- Action buttons --
         btn_frame = ctk.CTkFrame(main)
         btn_frame.grid(row=row, column=0, columnspan=6, pady=(8, 4), sticky="ew")
         btn_frame.grid_columnconfigure(tuple(range(8)), weight=1)
 
-        actions = [
-            ("1.\u68c0\u67e5\u73af\u5883", self._step_check_env),
-            ("2.\u6784\u5efa\u5546\u4e1a\u5305", self._step_build),
-            ("3.\u52a0\u5bc6/\u6df7\u6dc6", self._step_protect),
-            ("4.\u751f\u6210Manifest", self._step_manifest),
-            ("5.\u7b7e\u540dManifest", self._step_sign),
-            ("6.\u751f\u6210\u66f4\u65b0\u5305", self._step_update_pkg),
-            ("7.\u68c0\u67e5\u53d1\u5e03\u5305", self._step_check_pkg),
-            ("8.\u4e00\u952e\u53d1\u5e03", self._step_onekey),
-        ]
-        for i, (text, cmd) in enumerate(actions):
-            ctk.CTkButton(btn_frame, text=text, command=cmd, width=90).grid(row=0, column=i, padx=2, pady=2, sticky="ew")
         row += 1
 
-        # === Live log ===
+        extra_btn_frame = ctk.CTkFrame(main)
+        extra_btn_frame.grid(row=row, column=0, columnspan=6, pady=(0, 4), sticky="ew")
+        extra_btn_frame.grid_columnconfigure(tuple(range(6)), weight=1)
+
+        extra_actions = [
+            ("自动搜索路径", self._auto_detect_paths),
+            ("填充测试配置", self._fill_test_config),
+            ("生成测试私钥", self._generate_test_key),
+            ("停止任务", self._stop_current_task),
+        ]
+        for i, (text, cmd) in enumerate(extra_actions):
+            ctk.CTkButton(extra_btn_frame, text=text, command=cmd, width=100).grid(row=0, column=i, padx=2, pady=2, sticky="ew")
+        row += 1
+
+        actions = [
+            ("1.检查环境", self._step_check_env),
+            ("2.构建商业包", self._step_build),
+            ("3.加密/混淆", self._step_protect),
+            ("4.生成Manifest", self._step_manifest),
+            ("5.签名Manifest", self._step_sign),
+            ("6.生成更新包", self._step_update_pkg),
+            ("7.检查发布包", self._step_check_pkg),
+            ("8.一键发布", self._step_onekey),
+        ]
+
+        action_frame = ctk.CTkFrame(main)
+        action_frame.grid(row=row, column=0, columnspan=6, pady=(0, 4), sticky="ew")
+        action_frame.grid_columnconfigure(tuple(range(8)), weight=1)
+
+        for i, (text, cmd) in enumerate(actions):
+            ctk.CTkButton(action_frame, text=text, command=cmd, width=90).grid(row=0, column=i, padx=2, pady=2, sticky="ew")
+
         log_frame = ctk.CTkFrame(self)
         log_frame.grid(row=2, column=0, padx=10, pady=(0, 8), sticky="nsew")
         log_frame.grid_rowconfigure(0, weight=1)
@@ -143,15 +173,31 @@ class ReleasePublisherUI(ctk.CTk):
         self.log_text = ctk.CTkTextbox(log_frame, state="normal", font=("Consolas", 11))
         self.log_text.grid(row=0, column=0, sticky="nsew")
 
-        # Redirect stdout
         self.log_handler = LogHandler(self.log_text)
         self._orig_stdout = sys.stdout
         sys.stdout = self.log_handler
 
     def _browse_path(self, key: str, var: ctk.StringVar):
-        path = tk.filedialog.askdirectory(title=f"\u9009\u62e9 {key}")
-        if path:
-            var.set(path)
+        if key == "private_key_path":
+            path = filedialog.askopenfilename(
+                title="选择 release_private.pem",
+                filetypes=[("PEM Key", "*.pem"), ("All Files", "*.*")]
+            )
+            if path:
+                var.set(path)
+        elif key == "obfuscator_path":
+            path = filedialog.askopenfilename(
+                title="选择混淆器 exe",
+                filetypes=[("Executable", "*.exe"), ("All Files", "*.*")]
+            )
+            if path:
+                var.set(path)
+        elif key == "base_update_url":
+            var.set("https://example.com/updates/internal/win-x64/1.6.1-test")
+        else:
+            path = filedialog.askdirectory(title=f"选择 {key}")
+            if path:
+                var.set(path)
 
     def _load_config_to_ui(self):
         self.channel_var.set(self.config.get("channel", "stable"))
@@ -162,6 +208,143 @@ class ReleasePublisherUI(ctk.CTk):
         for key, var in self.path_vars.items():
             if key in self.config and self.config[key]:
                 var.set(self.config[key])
+
+    def _auto_detect_paths(self):
+        self._log("开始自动搜索路径...")
+
+        self.path_vars["project_root"].set(PROJECT_ROOT)
+
+        dist_candidates = [
+            os.path.join(PROJECT_ROOT, "dist", "AutoDoorPro"),
+            os.path.join(PROJECT_ROOT, "dist"),
+        ]
+        import glob as glob_mod
+        release_dists = glob_mod.glob(os.path.join(PROJECT_ROOT, "release", "*", "dist"))
+        dist_candidates.extend(sorted(release_dists))
+
+        found_dist = None
+        for d in dist_candidates:
+            if os.path.isdir(d):
+                found_dist = d
+                break
+        if found_dist:
+            self.path_vars["dist_dir"].set(found_dist)
+            self._log(f"dist 目录: {found_dist}")
+        else:
+            default_dist = os.path.join(PROJECT_ROOT, "dist")
+            self.path_vars["dist_dir"].set(default_dist)
+            self._log(f"未找到 dist 目录，默认: {default_dist}")
+
+        release_dir = os.path.join(PROJECT_ROOT, "release")
+        self.path_vars["release_dir"].set(release_dir)
+        self._log(f"release 目录: {release_dir}")
+
+        key_candidates = [
+            os.path.join(os.environ.get("APPDATA", ""), "AutoDoorProPublisher", "keys", "release_private.pem"),
+            os.path.join(os.environ.get("USERPROFILE", ""), ".autodoor", "keys", "release_private.pem"),
+            os.path.join(PROJECT_ROOT, "keys", "release_private.pem"),
+        ]
+        found_key = None
+        for k in key_candidates:
+            if os.path.isfile(k):
+                found_key = k
+                break
+        if found_key:
+            self.path_vars["private_key_path"].set(found_key)
+            self._log(f"私钥路径: {found_key}")
+        else:
+            self._log("未找到 release_private.pem，请生成或选择私钥。")
+            self._log("推荐位置: %APPDATA%\\AutoDoorProPublisher\\keys\\release_private.pem")
+
+        pub_path = os.path.join(PROJECT_ROOT, "resources", "security", "release_public.pem")
+        if os.path.isfile(pub_path):
+            self._log(f"公钥已存在: {pub_path}")
+        else:
+            self._log("警告: 未找到 resources/security/release_public.pem")
+
+        obfus_candidates = [
+            os.path.join("D:\\Tools\\Obfuscator\\obfuscator.exe"),
+            os.path.join("D:\\Tools\\ConfuserEx\\Confuser.CLI.exe"),
+            os.path.join("D:\\Tools\\ConfuserEx\\ConfuserEx.exe"),
+            os.path.join("C:\\Tools\\Obfuscator\\obfuscator.exe"),
+            os.path.join("C:\\Tools\\ConfuserEx\\Confuser.CLI.exe"),
+            os.path.join("C:\\Program Files\\ConfuserEx\\Confuser.CLI.exe"),
+        ]
+        found_obfus = None
+        for o in obfus_candidates:
+            if os.path.isfile(o):
+                found_obfus = o
+                break
+        if found_obfus:
+            self.path_vars["obfuscator_path"].set(found_obfus)
+            self._log(f"混淆器路径: {found_obfus}")
+        else:
+            self._log("未找到混淆器。dev 模式可以跳过混淆；release 模式必须配置真实混淆器。")
+
+        self._auto_fill_update_url()
+        self._log("自动搜索路径完成。")
+
+    def _auto_fill_update_url(self):
+        version = self.version_var.get()
+        channel = self.channel_var.get()
+        platform = self.platform_var.get()
+        mode = self.mode_var.get()
+        if mode == "dev":
+            url = f"https://example.com/updates/internal/{platform}/{version}-test"
+        else:
+            url = f"https://your-domain.com/updates/{channel}/{platform}/{version}"
+        self.path_vars["base_update_url"].set(url)
+
+    def _fill_test_config(self):
+        self.version_var.set("1.6.1-test")
+        self.channel_var.set("internal")
+        self.platform_var.set("win-x64")
+        self.mode_var.set("dev")
+        self.mandatory_var.set(False)
+        self.min_version_var.set("1.6.0")
+        self.path_vars["base_update_url"].set("https://example.com/updates/internal/win-x64/1.6.1-test")
+        self.notes_text.delete("1.0", tk.END)
+        self.notes_text.insert("1.0", "发布演练测试版本，不作为正式销售版本")
+        self._auto_detect_paths()
+        self._log("测试配置已填充。")
+
+    def _generate_test_key(self):
+        appdata = os.environ.get("APPDATA", os.path.expanduser("~"))
+        keys_dir = os.path.join(appdata, "AutoDoorProPublisher", "keys")
+        private_key_path = os.path.join(keys_dir, "release_private.pem")
+        public_key_path = os.path.join(PROJECT_ROOT, "resources", "security", "release_public.pem")
+
+        if os.path.isfile(private_key_path):
+            self._log(f"私钥已存在: {private_key_path}")
+            self.path_vars["private_key_path"].set(private_key_path)
+            return
+
+        self._log("正在生成测试密钥对...")
+        try:
+            ok = generate_key_pair(private_key_path, public_key_path)
+            if ok:
+                self.path_vars["private_key_path"].set(private_key_path)
+                self._log(f"私钥已生成到: {private_key_path}")
+                self._log("私钥已生成到 APPDATA，不要提交 git")
+            else:
+                self._log("密钥生成失败，请检查依赖（cryptography 库）")
+        except Exception as e:
+            self._log(f"密钥生成失败: {e}")
+
+    def _stop_current_task(self):
+        if self._current_proc and self._current_proc.poll() is None:
+            self._log("正在停止当前任务...")
+            self._task_cancelled = True
+            try:
+                self._current_proc.terminate()
+                time.sleep(1)
+                if self._current_proc.poll() is None:
+                    self._current_proc.kill()
+            except Exception:
+                pass
+            self._log("任务已停止。")
+        else:
+            self._log("当前无运行中的任务。")
 
     def _gather_args(self) -> list:
         args = [
@@ -186,131 +369,135 @@ class ReleasePublisherUI(ctk.CTk):
             args.extend(["--notes-file", notes_path])
         return args
 
+    def _validate_before_run(self) -> bool:
+        mode = self.mode_var.get()
+        priv_key = self.path_vars["private_key_path"].get().strip()
+        obfus = self.path_vars["obfuscator_path"].get().strip()
+        base_url = self.path_vars["base_update_url"].get().strip()
+
+        if not priv_key:
+            messagebox.showerror("缺少私钥", "dev/release 模式都需要私钥签名 manifest，请选择或生成 release_private.pem")
+            return False
+
+        if not base_url:
+            url_hint = "https://example.com/updates/internal/win-x64/1.6.1-test" if mode == "dev" else "https://your-domain.com/updates/stable/win-x64/1.6.1"
+            messagebox.showerror("缺少更新服务器 URL", f"请填写更新服务器 URL。\n示例: {url_hint}")
+            return False
+
+        if mode == "release":
+            if not obfus:
+                messagebox.showerror("缺少混淆器", "release 模式必须配置真实混淆器，不能假混淆。")
+                return False
+
+        return True
+
     def _run_in_thread(self, target_fn):
         t = threading.Thread(target=target_fn, daemon=True)
         t.start()
 
-    def _log_pipeline(self, args: list):
-        self.log_text.insert(tk.END, f"\n{'='*60}\n")
-        self.log_text.insert(tk.END, f"[{datetime.now():%H:%M:%S}] \u6267\u884c\u547d\u4ee4:\n")
-        self.log_text.insert(tk.END, " ".join(args) + "\n")
-        self.log_text.insert(tk.END, f"{'='*60}\n")
+    def _log(self, msg: str):
+        self.log_text.insert(tk.END, f"[{datetime.now():%H:%M:%S}] {msg}\n")
         self.log_text.see(tk.END)
+
+    def _log_pipeline(self, args: list):
+        self._log(f"\n{'='*60}")
+        self._log(f"执行命令: {' '.join(args)}")
+        self._log(f"{'='*60}\n")
+
+    def _run_pipeline_with_timeout(self, args: list, timeout: int):
+        self._log_pipeline(args)
+        self._task_cancelled = False
+        try:
+            self._current_proc = subprocess.Popen(
+                args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+            )
+            start_time = time.time()
+            for line in iter(self._current_proc.stdout.readline, ""):
+                if self._task_cancelled:
+                    break
+                self.log_text.insert(tk.END, line)
+                self.log_text.see(tk.END)
+                elapsed = time.time() - start_time
+                if elapsed > timeout:
+                    self._log(f"任务超时（{timeout}秒），已终止")
+                    self._current_proc.terminate()
+                    time.sleep(1)
+                    if self._current_proc.poll() is None:
+                        self._current_proc.kill()
+                    break
+
+            self._current_proc.wait(timeout=5)
+            rc = self._current_proc.returncode
+            self._log(f"\n>>> 进程返回码: {rc}")
+            if rc == 0:
+                self._log(">>> 任务完成")
+            else:
+                self._log(">>> 任务失败")
+        except Exception as e:
+            self._log(f"执行异常: {e}")
+        finally:
+            self._current_proc = None
 
     def _run_pipeline(self):
+        if not self._validate_before_run():
+            return
         args = self._gather_args()
-        self._log_pipeline(args)
-        proc = subprocess.run(args, capture_output=True, text=True)
-        out = (proc.stdout or "") + (proc.stderr or "")
-        self.log_text.insert(tk.END, out)
-        self.log_text.insert(tk.END, f"\n>>> \u8fdb\u7a0b\u8fd4\u56de\u7801: {proc.returncode}\n")
-        self.log_text.see(tk.END)
-        if proc.returncode == 0:
-            messagebox.showinfo("\u53d1\u5e03\u6210\u529f", "\u53d1\u5e03\u6d41\u6c34\u7ebf\u6267\u884c\u5b8c\u6210")
-        else:
-            messagebox.showerror("\u53d1\u5e03\u5931\u8d25", f"\u53d1\u5e03\u5931\u8d25\uff0c\u8fd4\u56de\u7801: {proc.returncode}\n\u8bf7\u67e5\u770b\u65e5\u5fd7\u8be6\u60c5")
+        self._run_pipeline_with_timeout(args, TASK_TIMEOUTS["onekey"])
 
     def _step_check_env(self):
-        args = [
-            sys.executable, os.path.join(TOOLS_DIR, "release_pipeline.py"),
-            "--version", self.version_var.get(),
-            "--private-key", self.path_vars["private_key_path"].get(),
-            "--obfuscator-path", self.path_vars["obfuscator_path"].get(),
-            "--mode", self.mode_var.get(),
+        self._log("检查环境...")
+        self._log(f"项目根目录: {PROJECT_ROOT}")
+        self._log(f"Python: {sys.executable}")
+        paths_to_check = [
+            ("项目目录", self.path_vars["project_root"].get() or PROJECT_ROOT),
+            ("dist 目录", self.path_vars["dist_dir"].get()),
+            ("release 目录", self.path_vars["release_dir"].get()),
+            ("私钥", self.path_vars["private_key_path"].get()),
+            ("混淆器", self.path_vars["obfuscator_path"].get()),
         ]
-        self._log_pipeline(args)
-        def run():
-            proc = subprocess.run(args, capture_output=True, text=True)
-            self.log_text.insert(tk.END, (proc.stdout or "") + (proc.stderr or ""))
-            self.log_text.see(tk.END)
-        self._run_in_thread(run)
+        all_ok = True
+        for name, p in paths_to_check:
+            exists = os.path.exists(p) if p else False
+            self._log(f"  {name}: {'✓' if exists else '✗'} {p}")
+            if not exists and p:
+                all_ok = False
+        if all_ok:
+            self._log("环境检查通过。")
+        else:
+            self._log("环境检查有警告，请留意。")
 
     def _step_build(self):
-        args = [
-            sys.executable, os.path.join(TOOLS_DIR, "release_pipeline.py"),
-            "--version", self.version_var.get(),
-            "--mode", self.mode_var.get(),
-            "--project-root", self.path_vars["project_root"].get() or PROJECT_ROOT,
-        ]
-        self._log_pipeline(args)
-        def run():
-            proc = subprocess.run(args, capture_output=True, text=True)
-            self.log_text.insert(tk.END, (proc.stdout or "") + (proc.stderr or ""))
-            self.log_text.see(tk.END)
-        self._run_in_thread(run)
+        self._log("当前按钮暂未单独实现，请使用一键发布")
 
     def _step_protect(self):
+        obfus = self.path_vars["obfuscator_path"].get().strip()
+        if not obfus:
+            if self.mode_var.get() == "release":
+                self._log("release 模式必须配置混淆器路径")
+                return
+            self._log("dev 模式跳过混淆")
+            return
         args = [
             sys.executable, os.path.join(TOOLS_DIR, "release_pipeline.py"),
             "--version", self.version_var.get(),
             "--mode", self.mode_var.get(),
-            "--obfuscator-path", self.path_vars["obfuscator_path"].get(),
+            "--obfuscator-path", obfus,
             "--dist-dir", self.path_vars["dist_dir"].get(),
             "--release-dir", self.path_vars["release_dir"].get(),
         ]
-        self._log_pipeline(args)
-        def run():
-            proc = subprocess.run(args, capture_output=True, text=True)
-            self.log_text.insert(tk.END, (proc.stdout or "") + (proc.stderr or ""))
-            self.log_text.see(tk.END)
-        self._run_in_thread(run)
+        self._run_in_thread(lambda: self._run_pipeline_with_timeout(args, TASK_TIMEOUTS["protect"]))
 
     def _step_manifest(self):
-        args = [
-            sys.executable, os.path.join(TOOLS_DIR, "release_pipeline.py"),
-            "--version", self.version_var.get(),
-            "--channel", self.channel_var.get(),
-            "--platform", self.platform_var.get(),
-            "--mandatory", str(self.mandatory_var.get()).lower(),
-            "--min-supported-version", self.min_version_var.get(),
-        ]
-        self._log_pipeline(args)
-        def run():
-            proc = subprocess.run(args, capture_output=True, text=True)
-            self.log_text.insert(tk.END, (proc.stdout or "") + (proc.stderr or ""))
-            self.log_text.see(tk.END)
-        self._run_in_thread(run)
+        self._log("当前按钮暂未单独实现，请使用一键发布")
 
     def _step_sign(self):
-        args = [
-            sys.executable, os.path.join(TOOLS_DIR, "release_pipeline.py"),
-            "--version", self.version_var.get(),
-            "--private-key", self.path_vars["private_key_path"].get(),
-        ]
-        self._log_pipeline(args)
-        def run():
-            proc = subprocess.run(args, capture_output=True, text=True)
-            self.log_text.insert(tk.END, (proc.stdout or "") + (proc.stderr or ""))
-            self.log_text.see(tk.END)
-        self._run_in_thread(run)
+        self._log("当前按钮暂未单独实现，请使用一键发布")
 
     def _step_update_pkg(self):
-        args = [
-            sys.executable, os.path.join(TOOLS_DIR, "release_pipeline.py"),
-            "--version", self.version_var.get(),
-            "--platform", self.platform_var.get(),
-            "--dist-dir", self.path_vars["dist_dir"].get(),
-            "--release-dir", self.path_vars["release_dir"].get(),
-        ]
-        self._log_pipeline(args)
-        def run():
-            proc = subprocess.run(args, capture_output=True, text=True)
-            self.log_text.insert(tk.END, (proc.stdout or "") + (proc.stderr or ""))
-            self.log_text.see(tk.END)
-        self._run_in_thread(run)
+        self._log("当前按钮暂未单独实现，请使用一键发布")
 
     def _step_check_pkg(self):
-        args = [
-            sys.executable, os.path.join(TOOLS_DIR, "release_pipeline.py"),
-            "--version", self.version_var.get(),
-            "--release-dir", self.path_vars["release_dir"].get(),
-        ]
-        self._log_pipeline(args)
-        def run():
-            proc = subprocess.run(args, capture_output=True, text=True)
-            self.log_text.insert(tk.END, (proc.stdout or "") + (proc.stderr or ""))
-            self.log_text.see(tk.END)
-        self._run_in_thread(run)
+        self._log("当前按钮暂未单独实现，请使用一键发布")
 
     def _step_onekey(self):
         self._run_in_thread(self._run_pipeline)

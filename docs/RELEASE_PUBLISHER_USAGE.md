@@ -1,61 +1,98 @@
 # AutoDoor Pro 加密发布中心使用说明
 
-## 1. 加密发布中心在哪
-
-发布中心 UI：
+## 1. 发布中心位置
 
 ```text
 tools/release_publisher_ui.py
 ```
 
-启动命令：
+启动方式：
 
 ```bash
 python tools/release_publisher_ui.py
 ```
 
-双击启动：
+或双击：
 
 ```text
 start_release_publisher.bat
 ```
 
-## 2. 真正执行加密/混淆的脚本
+## 2. 打开后先点：自动搜索路径
+
+点击后会自动识别：
+
+- 项目路径（自动设为根目录）
+- dist 目录（按 dist/AutoDoorPro > dist > release/*/dist 顺序搜索）
+- release 目录（项目根目录/release）
+- 私钥路径（搜索 APPDATA > USERPROFILE > 项目目录）
+- 混淆器路径（搜索 D:/Tools 和 C:/Tools 常见位置）
+- 更新服务器 URL（根据版本号/通道/平台自动生成）
+
+## 3. 测试演练点：填充测试配置
+
+点击后自动填入：
+
+- version = 1.6.1-test
+- channel = internal
+- platform = win-x64
+- mode = dev
+- base_update_url = https://example.com/updates/internal/win-x64/1.6.1-test
+
+然后自动执行路径搜索。
+
+## 4. 没有私钥点：生成测试私钥
+
+私钥生成到：
 
 ```text
-tools/protect_csharp.ps1
+%APPDATA%\AutoDoorProPublisher\keys\release_private.pem
 ```
 
-## 3. 一键发布脚本
+公钥生成到：
 
 ```text
-build_release.bat
+resources/security/release_public.pem
 ```
 
-用法：
+私钥不会放到项目目录，禁止提交 git。
 
-```bat
-build_release.bat <version> <private_key_path> <obfuscator_path> <base_update_url>
-```
+## 5. 正式发布必须配置：真实混淆器路径
 
-示例：
+release 模式必须配置真实混淆器路径，否则不允许执行。
 
-```bat
-build_release.bat 1.6.1 "%APPDATA%\AutoDoorProPublisher\keys\release_private.pem" "D:\Tools\Obfuscator\obfuscator.exe" "https://your-domain.com/updates/stable/win-x64/1.6.1"
-```
+dev 模式可以跳过混淆。
 
-## 4. 当前加密状态
+## 6. 任务卡住可点：停止任务
 
-当前已经有发布中心和加密/混淆入口。
+所有长任务都有超时保护：
 
-但是：
+| 任务 | 超时 |
+|---|---|
+| 检查环境 | 120s |
+| 构建商业包 | 1800s |
+| 加密/混淆 | 600s |
+| 生成 Manifest | 120s |
+| 签名 Manifest | 120s |
+| 生成更新包 | 300s |
+| 检查发布包 | 120s |
+| 一键发布 | 2400s |
 
-* 真实 C# 混淆器还没接入
-* release 模式没有真实混淆器会失败
-* dev 模式可以跳过混淆做发布演练
-* 不允许把复制文件说成已加密
+超时或手动点击"停止任务"会终止当前进程。
 
-## 5. 私钥位置
+## 7. 发布流程
+
+1. 打开发布中心
+2. 点击"自动搜索路径"
+3. 确认版本号、通道、平台
+4. 选择模式（dev/release）
+5. 如有需要点击"填充测试配置"（dev 演练）
+6. 如无私钥点击"生成测试私钥"
+7. release 模式确保混淆器路径正确
+8. 填写更新服务器 URL
+9. 点击"一键发布"
+
+## 8. 私钥位置
 
 推荐私钥位置：
 
@@ -63,32 +100,12 @@ build_release.bat 1.6.1 "%APPDATA%\AutoDoorProPublisher\keys\release_private.pem
 %APPDATA%\AutoDoorProPublisher\keys\release_private.pem
 ```
 
-禁止放到项目目录。
+禁止放到项目目录，禁止提交 git。
 
-禁止提交 git。
-
-## 6. 公钥位置
+## 9. 公钥位置
 
 ```text
 resources/security/release_public.pem
 ```
 
 公钥可以提交。
-
-## 7. 发布流程
-
-1. 打开发布中心
-2. 填版本号
-3. 填私钥路径
-4. 填混淆器路径
-5. 填更新服务器 URL
-6. 点击一键发布
-7. 生成 update zip
-8. 生成 manifest.json
-9. 生成 manifest.sig
-10. 生成 latest.json
-11. 上传到 HTTPS 更新目录
-
-## 8. 下一步
-
-正式发布前必须接入真实 C# 混淆器。

@@ -93,6 +93,13 @@ def main():
 
     publisher_ui = read("tools/release_publisher_ui.py")
     checks.append(("publisher ui has base update url field", "base_update_url" in publisher_ui and "replace(\"_\", \"-\")" in publisher_ui))
+    checks.append(("publisher has auto detect paths", "_auto_detect_paths" in publisher_ui))
+    checks.append(("publisher has fill test config", "_fill_test_config" in publisher_ui))
+    checks.append(("publisher has stop task", "_stop_current_task" in publisher_ui))
+    checks.append(("publisher uses Popen", "subprocess.Popen" in publisher_ui))
+    checks.append(("publisher supports private key file chooser", "askopenfilename" in publisher_ui and "*.pem" in publisher_ui))
+    checks.append(("publisher supports obfuscator file chooser", "askopenfilename" in publisher_ui and "*.exe" in publisher_ui))
+    checks.append(("publisher can generate test key", "generate_key_pair" in publisher_ui))
 
     ok = True
     for name, result in checks:
